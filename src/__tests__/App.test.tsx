@@ -8,12 +8,15 @@ describe("Clinical Command Center privacy mode", () => {
     render(<App />);
 
     expect(screen.getByText("PharmaAide")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Triage Queue", level: 1 })).toBeTruthy();
     expect(screen.queryByText("Command Center")).not.toBeInTheDocument();
     expect(screen.queryByText("Privacy Off")).not.toBeInTheDocument();
     expect(screen.queryByText("Privacy Active")).not.toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "Privacy Mode" })).not.toBeChecked();
     expect(screen.getByText("Mary Silva")).toBeTruthy();
     expect(screen.getByText("Jonah Davis")).toBeTruthy();
+    expect(screen.queryByText("Initiate Outreach")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Initiate Outreach" })).toHaveLength(2);
   });
 
   it("masks patient names and shows Privacy Active after privacy mode is enabled", async () => {

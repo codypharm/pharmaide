@@ -1,3 +1,4 @@
+import { Play } from "lucide-react";
 import { useState } from "react";
 import "./styles.css";
 
@@ -56,7 +57,7 @@ function App() {
       <main className="workspace">
         <header className="topbar">
           <div>
-            <h1>Clinical Command Center</h1>
+            <h1>Triage Queue</h1>
           </div>
           <label className="privacy-switch">
             <span className="privacy-switch__label">Privacy Mode</span>
@@ -90,8 +91,13 @@ function App() {
                   <h3>{escalation.issue}</h3>
                   <p>{escalation.detail}</p>
                 </div>
-                <button className="primary-button" type="button">
-                  Initiate Outreach
+                <button
+                  aria-label="Initiate Outreach"
+                  className="outreach-button"
+                  data-tooltip="Initiate Outreach"
+                  type="button"
+                >
+                  <Play aria-hidden="true" size={18} strokeWidth={2.25} />
                 </button>
               </article>
             ))}

@@ -112,21 +112,55 @@ button {
   color: #111111;
 }
 
-.primary-button {
-  border: 1px solid #5548e8;
-  border-radius: 8px;
+.outreach-button {
+  position: relative;
+  inline-size: 36px;
+  block-size: 36px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #5548e8;
   cursor: pointer;
-}
-
-.primary-button {
-  background: #5548e8;
-  color: #ffffff;
-  padding: 8px 16px;
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
   font-weight: 600;
 }
 
-.primary-button:hover {
-  background: #463ad4;
+.outreach-button:hover {
+  background: transparent;
+  color: #463ad4;
+}
+
+.outreach-button:focus-visible {
+  outline: 2px solid #5548e8;
+  outline-offset: 2px;
+}
+
+.outreach-button::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: max-content;
+  max-width: 180px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: #111111;
+  color: #ffffff;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.outreach-button:hover::after,
+.outreach-button:focus-visible::after {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .privacy-switch {
