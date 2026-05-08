@@ -1,6 +1,6 @@
 import { Activity, Bell, FileText, Flame, Map, Search, ShieldCheck, UserPlus } from "lucide-react";
 import { useState } from "react";
-import { Outlet, NavLink } from "react-router-dom";
+import { Outlet, NavLink, Link } from "react-router-dom";
 
 function DashboardApp() {
   const [isPrivacyMode, setIsPrivacyMode] = useState(false);
@@ -10,20 +10,23 @@ function DashboardApp() {
       {/* Sidebar */}
       <aside className="w-64 bg-white border-r border-slate-200 flex flex-col z-40">
         <div className="p-6">
-          <div className="flex items-center gap-2 mb-1">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">
+          <Link to="/" className="flex items-center gap-2 mb-1 group cursor-pointer">
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold group-hover:bg-blue-700 transition-colors">
               <ShieldCheck size={18} />
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900">Command Center</h1>
-          </div>
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 group-hover:text-blue-600 transition-colors">PharmaAide</h1>
+          </Link>
           <p className="text-[11px] font-bold tracking-wider uppercase text-slate-400 pl-10">Clinical Operations</p>
         </div>
 
         <div className="px-4 mb-6">
-          <button className="w-full bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 py-2.5 rounded-xl flex items-center justify-center gap-2 font-semibold transition-colors shadow-sm">
+          <Link 
+            to="/dashboard/new-treatment"
+            className="w-full bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 py-2.5 rounded-xl flex items-center justify-center gap-2 font-semibold transition-colors shadow-sm"
+          >
             <UserPlus size={18} />
             New Treatment
-          </button>
+          </Link>
         </div>
 
         <nav className="flex flex-col gap-1 px-4 flex-1">
@@ -67,23 +70,41 @@ function DashboardApp() {
             Adherence
           </NavLink>
           <div className="mt-8 mb-2 px-4 text-[11px] font-bold tracking-wider text-slate-400 uppercase">System</div>
-          <a href="#knowledge" className="flex items-center gap-3 px-4 py-2.5 rounded-xl font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-all">
+          <NavLink
+            to="/dashboard/knowledge"
+            className={({ isActive }) => 
+              `flex items-center gap-3 px-4 py-2.5 rounded-xl font-medium transition-all ${
+                isActive 
+                  ? "bg-blue-600 !text-white [&>svg]:text-white shadow-md shadow-blue-200" 
+                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+              }`
+            }
+          >
             <FileText size={20} />
             Knowledge Base
-          </a>
-          <a href="#audits" className="flex items-center gap-3 px-4 py-2.5 rounded-xl font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-all">
+          </NavLink>
+          <NavLink
+            to="/dashboard/audits"
+            className={({ isActive }) => 
+              `flex items-center gap-3 px-4 py-2.5 rounded-xl font-medium transition-all ${
+                isActive 
+                  ? "bg-blue-600 !text-white [&>svg]:text-white shadow-md shadow-blue-200" 
+                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+              }`
+            }
+          >
             <ShieldCheck size={20} />
             System Audits
-          </a>
+          </NavLink>
         </nav>
 
-        <div className="p-6 border-t border-slate-100 flex items-center gap-3 mt-auto">
+        <Link to="/dashboard/profile" className="p-6 border-t border-slate-100 flex items-center gap-3 mt-auto hover:bg-slate-50 transition-all cursor-pointer">
           <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-700">PP</div>
           <div>
             <p className="text-sm font-bold text-slate-900">Dr. E. Thorne</p>
             <p className="text-[11px] font-bold tracking-wider uppercase text-slate-400">Pharmacist</p>
           </div>
-        </div>
+        </Link>
       </aside>
 
       {/* Workspace */}
@@ -123,7 +144,7 @@ function DashboardApp() {
           </div>
         </header>
 
-        <div className="flex-1 p-8 overflow-y-auto">
+        <div className="flex-1 overflow-hidden">
           <Outlet context={{ isPrivacyMode }} />
         </div>
       </main>
