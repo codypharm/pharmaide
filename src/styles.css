@@ -1,0 +1,248 @@
+:root {
+  font-family: "Public Sans", sans-serif;
+  color: #0b1c30;
+  background: #f8f9ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font: inherit;
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 256px 1fr;
+  background: #f8f9ff;
+}
+
+.sidebar {
+  background: #131b2e;
+  color: #dae2fd;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.sidebar__header {
+  padding: 8px;
+}
+
+.label-caps {
+  margin: 0 0 4px;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.sidebar__header p:last-child {
+  margin: 0;
+  color: #7c839b;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar__link {
+  padding: 8px 16px;
+  border-radius: 8px;
+  color: #bec6e0;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.sidebar__link--active {
+  background: #d5e3fd;
+  color: #57657b;
+}
+
+.workspace {
+  min-width: 0;
+  padding: 24px;
+}
+
+.topbar {
+  min-height: 64px;
+  margin: -24px -24px 24px;
+  padding: 16px 24px;
+  background: #ffffff;
+  border-bottom: 1px solid #c6c6cd;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.topbar h1 {
+  display: inline-block;
+  margin: 0 16px 0 0;
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 600;
+}
+
+.primary-button {
+  border: 1px solid #000000;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.primary-button {
+  background: #000000;
+  color: #ffffff;
+  padding: 8px 16px;
+}
+
+.privacy-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #0b1c30;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+}
+
+.privacy-switch__input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+}
+
+.privacy-switch__track {
+  inline-size: 44px;
+  block-size: 24px;
+  padding: 2px;
+  border: 1px solid #76777d;
+  border-radius: 9999px;
+  background: #eff4ff;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.privacy-switch__thumb {
+  display: block;
+  inline-size: 18px;
+  block-size: 18px;
+  border-radius: 9999px;
+  background: #515f74;
+  transition: transform 160ms ease, background 160ms ease;
+}
+
+.privacy-switch__input:checked + .privacy-switch__track {
+  border-color: #131b2e;
+  background: #131b2e;
+}
+
+.privacy-switch__input:checked + .privacy-switch__track .privacy-switch__thumb {
+  transform: translateX(20px);
+  background: #ffffff;
+}
+
+.privacy-switch__input:focus-visible + .privacy-switch__track {
+  outline: 2px solid #131b2e;
+  outline-offset: 2px;
+}
+
+.module {
+  background: #ffffff;
+  border: 1px solid #c6c6cd;
+  border-radius: 8px;
+  padding: 24px;
+}
+
+.module__header {
+  padding-bottom: 8px;
+  border-bottom: 1px solid #c6c6cd;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.module__header h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 600;
+}
+
+.status-pill {
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background: #ffdad6;
+  color: #93000a;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.escalation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.escalation {
+  padding: 8px;
+  border: 1px solid rgba(186, 26, 26, 0.2);
+  border-radius: 8px;
+  background: rgba(255, 218, 214, 0.3);
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.patient-ref,
+.patient-name,
+.escalation h3,
+.escalation p {
+  margin: 0;
+}
+
+.patient-ref,
+.patient-name {
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 500;
+}
+
+.patient-name {
+  margin-top: 4px;
+  color: #45464d;
+}
+
+.escalation h3 {
+  margin-top: 8px;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.escalation p:last-child {
+  margin-top: 4px;
+  color: #45464d;
+  font-size: 13px;
+  line-height: 18px;
+}
