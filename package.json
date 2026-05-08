@@ -10,9 +10,12 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@tailwindcss/vite": "^4.3.0",
     "lucide-react": "^1.14.0",
     "react": "19.2.6",
-    "react-dom": "19.2.6"
+    "react-dom": "19.2.6",
+    "react-router-dom": "^7.15.0",
+    "tailwindcss": "^4.3.0"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "6.9.1",
