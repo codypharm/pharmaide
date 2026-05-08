@@ -548,6 +548,175 @@ button {
   text-transform: uppercase;
 }
 
+.status-pill--neutral {
+  background: #f3f3f4;
+  color: #303036;
+}
+
+.surveillance-view {
+  height: 100%;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.surveillance-module {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.surveillance-table th:last-child,
+.surveillance-table td:last-child {
+  text-align: right;
+}
+
+.patient-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.patient-cell strong,
+.patient-cell span span {
+  display: block;
+}
+
+.patient-cell span span {
+  margin-top: 4px;
+  color: #6c6c72;
+}
+
+.patient-avatar {
+  inline-size: 32px;
+  block-size: 32px;
+  border: 1px solid #eeeeef;
+  border-radius: 9999px;
+  background: #f3f3f4;
+  color: #303036;
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 700;
+}
+
+.adherence-score,
+.adherence-bars {
+  display: flex;
+  align-items: center;
+}
+
+.adherence-score {
+  gap: 10px;
+}
+
+.adherence-bars {
+  gap: 4px;
+}
+
+.adherence-bar {
+  inline-size: 8px;
+  block-size: 28px;
+  border-radius: 4px;
+  background: #eeeeef;
+}
+
+.adherence-bar.is-filled {
+  background: #5548e8;
+}
+
+.risk-row--high-risk .adherence-bar.is-filled {
+  background: #ba1a1a;
+}
+
+.risk-chip {
+  display: inline-flex;
+  padding: 3px 8px;
+  border: 1px solid #eeeeef;
+  border-radius: 4px;
+  background: #f3f3f4;
+  color: #303036;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.risk-chip--high-risk {
+  border-color: #ba1a1a;
+  background: #ba1a1a;
+  color: #ffffff;
+}
+
+.risk-chip--elevated {
+  border-color: #f2b66d;
+  background: #fff4e5;
+  color: #8a4b00;
+}
+
+.risk-chip--stable {
+  background: #f3f3f4;
+  color: #6c6c72;
+}
+
+.icon-action {
+  inline-size: 32px;
+  block-size: 32px;
+  border: 1px solid #eeeeef;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #6c6c72;
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+}
+
+.icon-action:hover,
+.icon-action:focus-visible {
+  border-color: #d9d5fb;
+  color: #5548e8;
+}
+
+.table-footer {
+  margin-top: auto;
+  padding: 12px 16px 0;
+  border-top: 1px solid #eeeeef;
+  color: #6c6c72;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.pagination {
+  display: flex;
+  gap: 4px;
+}
+
+.pagination button {
+  min-inline-size: 28px;
+  block-size: 28px;
+  border: 1px solid #eeeeef;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #303036;
+  cursor: pointer;
+}
+
+.pagination button:first-child {
+  background: #f9f8ff;
+  color: #5548e8;
+  font-weight: 700;
+}
+
+.pagination button:disabled {
+  cursor: default;
+}
+
 .escalation-list {
   display: flex;
   flex-direction: column;

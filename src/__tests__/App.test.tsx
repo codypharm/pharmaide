@@ -81,4 +81,20 @@ describe("Clinical Command Center privacy mode", () => {
     expect(screen.getByText("Elias Mensah")).toBeTruthy();
     expect(screen.getByText("Sara Patel")).toBeTruthy();
   });
+
+  it("opens the patient surveillance roster from the sidebar", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("link", { name: "Patient Surveillance" }));
+
+    expect(screen.getByRole("heading", { name: "Patient Surveillance", level: 1 })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Patient Directory", level: 2 })).toBeTruthy();
+    expect(screen.getByText("Active surveillance roster. Last updated: 14:32 EST")).toBeTruthy();
+    expect(screen.getByText("P-8834")).toBeTruthy();
+    expect(screen.getByText("Thomas Jenkins")).toBeTruthy();
+    expect(screen.getByText("42%")).toBeTruthy();
+    expect(screen.getByText("High Risk")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Patient Surveillance" })).toHaveAttribute("aria-current", "page");
+  });
 });

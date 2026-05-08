@@ -1,11 +1,13 @@
-import { Activity, Filter, Flame, Play, Table2 } from "lucide-react";
+import { Activity, ChevronRight, Filter, Flame, Play, Table2 } from "lucide-react";
 import { useState } from "react";
 import "./styles.css";
 
+type Page = "triage" | "surveillance";
 type EscalationSeverity = "Critical" | "Warning";
 type EscalationFilter = "All" | EscalationSeverity;
 type InterventionPriority = "High" | "Medium" | "Low";
 type InterventionFilter = "All" | InterventionPriority;
+type PatientRisk = "High Risk" | "Elevated" | "Stable";
 
 type Escalation = {
   id: string;
@@ -21,6 +23,15 @@ type Intervention = {
   draftPreview: string;
   priority: InterventionPriority;
   draftedAt: string;
+};
+
+type PatientRecord = {
+  id: string;
+  name: string;
+  lastInteraction: string;
+  adherenceScore: number;
+  riskStatus: PatientRisk;
+  latestSignal: string;
 };
 
 const criticalEscalations: Escalation[] = [
@@ -71,6 +82,41 @@ const recentInterventions: Intervention[] = [
   },
 ];
 
+const patientRecords: PatientRecord[] = [
+  {
+    id: "P-8834",
+    name: "Thomas Jenkins",
+    lastInteraction: "Oct 12, 09:15 AM",
+    adherenceScore: 42,
+    riskStatus: "High Risk",
+    latestSignal: "Two missed Apixaban doses; irregular vitals reported.",
+  },
+  {
+    id: "P-7219",
+    name: "Ana Smith",
+    lastInteraction: "Oct 11, 14:30 PM",
+    adherenceScore: 78,
+    riskStatus: "Elevated",
+    latestSignal: "Delayed Metoprolol response window.",
+  },
+  {
+    id: "P-9021",
+    name: "Kai Lee",
+    lastInteraction: "Oct 10, 08:45 AM",
+    adherenceScore: 98,
+    riskStatus: "Stable",
+    latestSignal: "Medication confirmation received on schedule.",
+  },
+  {
+    id: "P-4451",
+    name: "Mara Wright",
+    lastInteraction: "Oct 09, 11:20 AM",
+    adherenceScore: 85,
+    riskStatus: "Stable",
+    latestSignal: "Refill reminder acknowledged.",
+  },
+];
+
 function maskPatientName(name: string) {
   return name
     .split(" ")
@@ -78,7 +124,99 @@ function maskPatientName(name: string) {
     .join(" ");
 }
 
+function getPatientInitials(name: string) {
+  return name
+    .split(" ")
+    .map((part) => part.charAt(0))
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+function PatientSurveillancePage({ isPrivacyMode }: { isPrivacyMode: boolean }) {
+  return (
+    <div className="surveillance-view">
+      <section className="module surveillance-module" aria-labelledby="patient-directory">
+        <div className="module__header">
+          <div>
+            <h2 id="patient-directory">Patient Directory</h2>
+            <p>Active surveillance roster. Last updated: 14:32 EST</p>
+          </div>
+          <span className="status-pill status-pill--neutral">124 Patients</span>
+        </div>
+
+        <div className="table-wrap">
+          <table className="interventions-table surveillance-table">
+            <thead>
+              <tr>
+                <th>Patient ID / Name</th>
+                <th>Last Interaction</th>
+                <th>Adherence Score</th>
+                <th>Risk Status</th>
+                <th>Latest Signal</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {patientRecords.map((patient) => (
+                <tr className={`risk-row risk-row--${patient.riskStatus.toLowerCase().replace(" ", "-")}`} key={patient.id}>
+                  <td>
+                    <div className="patient-cell">
+                      <span className="patient-avatar" aria-hidden="true">
+                        {getPatientInitials(patient.name)}
+                      </span>
+                      <span>
+                        <strong>{patient.id}</strong>
+                        <span>{isPrivacyMode ? maskPatientName(patient.name) : patient.name}</span>
+                      </span>
+                    </div>
+                  </td>
+                  <td>{patient.lastInteraction}</td>
+                  <td>
+                    <div className="adherence-score">
+                      <span className="adherence-bars" aria-hidden="true">
+                        {[20, 40, 60, 80, 100].map((threshold) => (
+                          <span
+                            className={patient.adherenceScore >= threshold ? "adherence-bar is-filled" : "adherence-bar"}
+                            key={threshold}
+                          />
+                        ))}
+                      </span>
+                      <strong>{patient.adherenceScore}%</strong>
+                    </div>
+                  </td>
+                  <td>
+                    <span className={`risk-chip risk-chip--${patient.riskStatus.toLowerCase().replace(" ", "-")}`}>
+                      {patient.riskStatus}
+                    </span>
+                  </td>
+                  <td>{patient.latestSignal}</td>
+                  <td>
+                    <button aria-label={`Open ${patient.id}`} className="icon-action" type="button">
+                      <ChevronRight aria-hidden="true" size={18} strokeWidth={2.1} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="table-footer">
+          <span>Showing 1-4 of 124 patients</span>
+          <div className="pagination" aria-label="Patient directory pagination">
+            <button disabled type="button">1</button>
+            <button type="button">2</button>
+            <button type="button">3</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function App() {
+  const [activePage, setActivePage] = useState<Page>("triage");
   const [isPrivacyMode, setIsPrivacyMode] = useState(false);
   const [escalationFilter, setEscalationFilter] = useState<EscalationFilter>("All");
   const [isEscalationFilterOpen, setIsEscalationFilterOpen] = useState(false);
@@ -90,6 +228,7 @@ function App() {
   const visibleInterventions = recentInterventions.filter((intervention) => {
     return interventionFilter === "All" || intervention.priority === interventionFilter;
   });
+  const pageTitle = activePage === "triage" ? "Triage Queue" : "Patient Surveillance";
 
   return (
     <div className="app-shell">
@@ -99,11 +238,21 @@ function App() {
           <p>Clinical Operations</p>
         </div>
         <nav className="sidebar__nav">
-          <a className="sidebar__link sidebar__link--active" href="#triage">
+          <a
+            aria-current={activePage === "triage" ? "page" : undefined}
+            className={`sidebar__link ${activePage === "triage" ? "sidebar__link--active" : ""}`}
+            href="#triage"
+            onClick={() => setActivePage("triage")}
+          >
             <Flame aria-hidden="true" size={18} strokeWidth={2.1} />
             Triage Queue
           </a>
-          <a className="sidebar__link" href="#surveillance">
+          <a
+            aria-current={activePage === "surveillance" ? "page" : undefined}
+            className={`sidebar__link ${activePage === "surveillance" ? "sidebar__link--active" : ""}`}
+            href="#surveillance"
+            onClick={() => setActivePage("surveillance")}
+          >
             <Activity aria-hidden="true" size={18} strokeWidth={2.1} />
             Patient Surveillance
           </a>
@@ -117,7 +266,7 @@ function App() {
       <main className="workspace">
         <header className="topbar">
           <div>
-            <h1>Triage Queue</h1>
+            <h1>{pageTitle}</h1>
           </div>
           <label className="privacy-switch">
             <span className="privacy-switch__label">Privacy Mode</span>
@@ -134,6 +283,7 @@ function App() {
           </label>
         </header>
 
+        {activePage === "triage" ? (
         <div className="dashboard-grid">
           <div className="alert-banner" role="status">
             System Alert: High volume of missed dose escalations detected. Triage priority adjusted automatically.
@@ -321,6 +471,9 @@ function App() {
             </div>
           </section>
         </div>
+        ) : (
+          <PatientSurveillancePage isPrivacyMode={isPrivacyMode} />
+        )}
       </main>
     </div>
   );
