@@ -97,4 +97,30 @@ describe("Clinical Command Center privacy mode", () => {
     expect(screen.getByText("High Risk")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Patient Surveillance" })).toHaveAttribute("aria-current", "page");
   });
+
+  it("opens adherence heatmaps and filters the matrix by risk", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("link", { name: "Adherence Heatmaps" }));
+
+    expect(screen.getByRole("heading", { name: "Adherence Heatmaps", level: 1 })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Population Adherence Heatmap", level: 2 })).toBeTruthy();
+    expect(screen.getByText("Taken")).toBeTruthy();
+    expect(screen.getByText("Missed")).toBeTruthy();
+    expect(screen.getAllByText("No Data").length).toBeGreaterThan(0);
+    expect(screen.getByRole("grid", { name: "Population Adherence Heatmap" })).toBeTruthy();
+    expect(screen.getAllByText("PT-4410-X")).toHaveLength(2);
+    expect(screen.queryByText("PT-8842-A")).not.toBeInTheDocument();
+    expect(screen.getByText("Critical Alerts")).toBeTruthy();
+    expect(screen.getByText("3 Actions")).toBeTruthy();
+    expect(screen.getByText("7 Days Missed")).toBeTruthy();
+    expect(screen.getByText("Showing 146 additional patient records below...")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Adherence Heatmaps" })).toHaveAttribute("aria-current", "page");
+
+    await user.selectOptions(screen.getByLabelText("Risk Stratification"), "All Patients");
+
+    expect(screen.getByText("PT-8842-A")).toBeTruthy();
+    expect(screen.getByText("PT-9102-C")).toBeTruthy();
+  });
 });
