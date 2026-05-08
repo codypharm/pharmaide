@@ -37,7 +37,7 @@ function App() {
     <div className="app-shell">
       <aside className="sidebar" aria-label="Primary navigation">
         <div className="sidebar__header">
-          <p className="label-caps">Command Center</p>
+          <p className="label-caps">PharmaAide</p>
           <p>Clinical Operations</p>
         </div>
         <nav className="sidebar__nav">

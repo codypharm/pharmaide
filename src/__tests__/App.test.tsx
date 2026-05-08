@@ -7,6 +7,8 @@ describe("Clinical Command Center privacy mode", () => {
   it("shows patient names and Privacy Off when the dashboard first loads", () => {
     render(<App />);
 
+    expect(screen.getByText("PharmaAide")).toBeTruthy();
+    expect(screen.queryByText("Command Center")).not.toBeInTheDocument();
     expect(screen.queryByText("Privacy Off")).not.toBeInTheDocument();
     expect(screen.queryByText("Privacy Active")).not.toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "Privacy Mode" })).not.toBeChecked();
