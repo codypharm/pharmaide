@@ -3,9 +3,31 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import App from "../App";
 
+async function openDashboard() {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.click(screen.getByRole("button", { name: "Enter Dashboard" }));
+
+  return user;
+}
+
 describe("Clinical Command Center privacy mode", () => {
-  it("shows patient names and Privacy Off when the dashboard first loads", () => {
+  it("shows the public landing page before entering the dashboard", () => {
     render(<App />);
+
+    expect(screen.getByRole("heading", { name: "The trusted AI for pharmacist-led adherence care", level: 1 })).toBeTruthy();
+    expect(screen.getByText("Clinical Medication Adherence Intelligence")).toBeTruthy();
+    expect(screen.getByText(/Add private, secure AI to medication follow-up/)).toBeTruthy();
+    expect(screen.getByText("From prescription to pharmacist review")).toBeTruthy();
+    expect(screen.getByText("Safety-first clinical guardrails")).toBeTruthy();
+    expect(screen.getByText("Loved by clinical teams, trusted by adherence programs")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Enter Dashboard" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Triage Queue", level: 1 })).not.toBeInTheDocument();
+  });
+
+  it("shows patient names and Privacy Off when the dashboard first loads", () => {
+    return openDashboard().then(() => {
 
     expect(screen.getByText("PharmaAide")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Triage Queue", level: 1 })).toBeTruthy();
@@ -25,11 +47,11 @@ describe("Clinical Command Center privacy mode", () => {
     expect(screen.getByText("Jonah Davis")).toBeTruthy();
     expect(screen.queryByText("Initiate Outreach")).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Initiate Outreach" })).toHaveLength(3);
+    });
   });
 
   it("masks patient names and shows Privacy Active after privacy mode is enabled", async () => {
-    const user = userEvent.setup();
-    render(<App />);
+    const user = await openDashboard();
 
     const privacySwitch = screen.getByRole("switch", { name: "Privacy Mode" });
 
@@ -45,8 +67,7 @@ describe("Clinical Command Center privacy mode", () => {
   });
 
   it("filters critical escalations by warning severity", async () => {
-    const user = userEvent.setup();
-    render(<App />);
+    const user = await openDashboard();
 
     await user.click(screen.getByRole("button", { name: "Filter critical escalations" }));
     await user.click(screen.getByRole("menuitemradio", { name: "Warning" }));
@@ -64,8 +85,7 @@ describe("Clinical Command Center privacy mode", () => {
   });
 
   it("filters recent interventions by priority", async () => {
-    const user = userEvent.setup();
-    render(<App />);
+    const user = await openDashboard();
 
     await user.click(screen.getByRole("button", { name: "Filter recent interventions" }));
     await user.click(screen.getByRole("menuitemradio", { name: "High" }));
@@ -83,8 +103,7 @@ describe("Clinical Command Center privacy mode", () => {
   });
 
   it("opens the patient surveillance roster from the sidebar", async () => {
-    const user = userEvent.setup();
-    render(<App />);
+    const user = await openDashboard();
 
     await user.click(screen.getByRole("link", { name: "Patient Surveillance" }));
 
@@ -99,8 +118,7 @@ describe("Clinical Command Center privacy mode", () => {
   });
 
   it("opens adherence heatmaps and filters the matrix by risk", async () => {
-    const user = userEvent.setup();
-    render(<App />);
+    const user = await openDashboard();
 
     await user.click(screen.getByRole("link", { name: "Adherence Heatmaps" }));
 
