@@ -1,12 +1,26 @@
-import { Play } from "lucide-react";
+import { Activity, Filter, Flame, Play, Table2 } from "lucide-react";
 import { useState } from "react";
 import "./styles.css";
+
+type EscalationSeverity = "Critical" | "Warning";
+type EscalationFilter = "All" | EscalationSeverity;
+type InterventionPriority = "High" | "Medium" | "Low";
+type InterventionFilter = "All" | InterventionPriority;
 
 type Escalation = {
   id: string;
   patientName: string;
   issue: string;
   detail: string;
+  severity: EscalationSeverity;
+};
+
+type Intervention = {
+  id: string;
+  patientName: string;
+  draftPreview: string;
+  priority: InterventionPriority;
+  draftedAt: string;
 };
 
 const criticalEscalations: Escalation[] = [
@@ -15,12 +29,45 @@ const criticalEscalations: Escalation[] = [
     patientName: "Mary Silva",
     issue: "Consecutive Missed Doses: Apixaban",
     detail: "Last reported vitals irregular. High stroke risk parameter.",
+    severity: "Critical",
   },
   {
     id: "102-C",
     patientName: "Jonah Davis",
     issue: "Severe Symptom Report: Dyspnea",
     detail: "Patient reported via WhatsApp 14 minutes ago. Current regimen includes Lisinopril.",
+    severity: "Critical",
+  },
+  {
+    id: "941-F",
+    patientName: "Amara Lewis",
+    issue: "Potential Interaction Flag",
+    detail: "New OTC medication reported. Mild interaction risk with existing statin.",
+    severity: "Warning",
+  },
+];
+
+const recentInterventions: Intervention[] = [
+  {
+    id: "442-B",
+    patientName: "Rina Thomas",
+    draftPreview: "We noticed you missed your morning dose of Metoprolol. It is important to take this as directed.",
+    priority: "Medium",
+    draftedAt: "Drafted 5m ago",
+  },
+  {
+    id: "891-K",
+    patientName: "Elias Mensah",
+    draftPreview: "Your recent blood glucose readings have been consistently high over the last 3 days.",
+    priority: "High",
+    draftedAt: "Drafted 12m ago",
+  },
+  {
+    id: "220-L",
+    patientName: "Sara Patel",
+    draftPreview: "Reminder: your Levothyroxine refill is due in 5 days. Reply YES to process.",
+    priority: "Low",
+    draftedAt: "Drafted 1h ago",
   },
 ];
 
@@ -33,6 +80,16 @@ function maskPatientName(name: string) {
 
 function App() {
   const [isPrivacyMode, setIsPrivacyMode] = useState(false);
+  const [escalationFilter, setEscalationFilter] = useState<EscalationFilter>("All");
+  const [isEscalationFilterOpen, setIsEscalationFilterOpen] = useState(false);
+  const [interventionFilter, setInterventionFilter] = useState<InterventionFilter>("All");
+  const [isInterventionFilterOpen, setIsInterventionFilterOpen] = useState(false);
+  const visibleEscalations = criticalEscalations.filter((escalation) => {
+    return escalationFilter === "All" || escalation.severity === escalationFilter;
+  });
+  const visibleInterventions = recentInterventions.filter((intervention) => {
+    return interventionFilter === "All" || intervention.priority === interventionFilter;
+  });
 
   return (
     <div className="app-shell">
@@ -43,12 +100,15 @@ function App() {
         </div>
         <nav className="sidebar__nav">
           <a className="sidebar__link sidebar__link--active" href="#triage">
+            <Flame aria-hidden="true" size={18} strokeWidth={2.1} />
             Triage Queue
           </a>
           <a className="sidebar__link" href="#surveillance">
+            <Activity aria-hidden="true" size={18} strokeWidth={2.1} />
             Patient Surveillance
           </a>
           <a className="sidebar__link" href="#heatmaps">
+            <Table2 aria-hidden="true" size={18} strokeWidth={2.1} />
             Adherence Heatmaps
           </a>
         </nav>
@@ -74,35 +134,193 @@ function App() {
           </label>
         </header>
 
-        <section className="module" aria-labelledby="critical-escalations">
-          <div className="module__header">
-            <h2 id="critical-escalations">Critical Escalations</h2>
-            <span className="status-pill">2 Action Required</span>
+        <div className="dashboard-grid">
+          <div className="alert-banner" role="status">
+            System Alert: High volume of missed dose escalations detected. Triage priority adjusted automatically.
           </div>
 
-          <div className="escalation-list">
-            {criticalEscalations.map((escalation) => (
-              <article className="escalation" key={escalation.id}>
-                <div>
-                  <p className="patient-ref">Pt. ID: {escalation.id}</p>
-                  <p className="patient-name">
-                    {isPrivacyMode ? maskPatientName(escalation.patientName) : escalation.patientName}
-                  </p>
-                  <h3>{escalation.issue}</h3>
-                  <p>{escalation.detail}</p>
+          <section className="module" aria-labelledby="critical-escalations">
+            <div className="module__header">
+              <div>
+                <h2 id="critical-escalations">Critical Escalations</h2>
+                <p>Patients requiring pharmacist intervention.</p>
+              </div>
+              <div className="module-actions">
+                <span className="status-pill">{visibleEscalations.length} Action Required</span>
+                <div className="filter-menu">
+                  <button
+                    aria-expanded={isEscalationFilterOpen}
+                    aria-haspopup="menu"
+                    aria-label="Filter critical escalations"
+                    className="filter-button"
+                    onClick={() => setIsEscalationFilterOpen((current) => !current)}
+                    type="button"
+                  >
+                    <Filter aria-hidden="true" size={16} strokeWidth={2.1} />
+                    Filter
+                  </button>
+                  {isEscalationFilterOpen ? (
+                    <div className="filter-options" role="menu" aria-label="Critical escalation filters">
+                      {(["All", "Critical", "Warning"] as EscalationFilter[]).map((filter) => (
+                        <button
+                          aria-checked={escalationFilter === filter}
+                          className="filter-option"
+                          key={filter}
+                          onClick={() => {
+                            setEscalationFilter(filter);
+                            setIsEscalationFilterOpen(false);
+                          }}
+                          role="menuitemradio"
+                          type="button"
+                        >
+                          {filter}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
-                <button
-                  aria-label="Initiate Outreach"
-                  className="outreach-button"
-                  data-tooltip="Initiate Outreach"
-                  type="button"
-                >
-                  <Play aria-hidden="true" size={18} strokeWidth={2.25} />
-                </button>
-              </article>
-            ))}
-          </div>
-        </section>
+              </div>
+            </div>
+
+            <div className="escalation-list">
+              {visibleEscalations.map((escalation) => (
+                <article className="escalation" key={escalation.id}>
+                  <div>
+                    <p className="patient-ref">Pt. ID: {escalation.id}</p>
+                    <p className="patient-name">
+                      {isPrivacyMode ? maskPatientName(escalation.patientName) : escalation.patientName}
+                    </p>
+                    <h3>{escalation.issue}</h3>
+                    <p>{escalation.detail}</p>
+                  </div>
+                  <button
+                    aria-label="Initiate Outreach"
+                    className="outreach-button"
+                    data-tooltip="Initiate Outreach"
+                    type="button"
+                  >
+                    <Play aria-hidden="true" size={18} strokeWidth={2.25} />
+                  </button>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="side-stack" aria-label="Operations summary">
+            <div className="module module--compact" aria-labelledby="system-health">
+              <div className="module__header">
+                <h2 id="system-health">System Health</h2>
+              </div>
+              <div className="metric-grid">
+                <div className="metric-card">
+                  <p className="label-caps">Active Agents</p>
+                  <strong>24</strong>
+                  <span>/ 25</span>
+                </div>
+                <div className="metric-card">
+                  <p className="label-caps">Queue Load</p>
+                  <strong>82%</strong>
+                  <div className="progress-track">
+                    <div className="progress-fill" />
+                  </div>
+                </div>
+              </div>
+              <div className="audit-row">
+                <span>Audit Status: Continuous</span>
+                <span className="pulse-dot" aria-hidden="true" />
+              </div>
+            </div>
+
+            <div className="module module--compact" aria-labelledby="quick-actions">
+              <div className="module__header">
+                <h2 id="quick-actions">Quick Triage Actions</h2>
+              </div>
+              <div className="quick-actions">
+                <button type="button">Force Sync Patient Records</button>
+                <button type="button">Generate Shift Handover</button>
+              </div>
+            </div>
+          </section>
+
+          <section className="module interventions-module" aria-labelledby="recent-interventions">
+            <div className="module__header">
+              <div>
+                <h2 id="recent-interventions">Recent Interventions</h2>
+                <p>AI-drafted communications pending pharmacist approval.</p>
+              </div>
+              <div className="module-actions">
+                <div className="filter-menu">
+                  <button
+                    aria-expanded={isInterventionFilterOpen}
+                    aria-haspopup="menu"
+                    aria-label="Filter recent interventions"
+                    className="filter-button"
+                    onClick={() => setIsInterventionFilterOpen((current) => !current)}
+                    type="button"
+                  >
+                    <Filter aria-hidden="true" size={16} strokeWidth={2.1} />
+                    Filter
+                  </button>
+                  {isInterventionFilterOpen ? (
+                    <div className="filter-options" role="menu" aria-label="Recent intervention filters">
+                      {(["All", "High", "Medium", "Low"] as InterventionFilter[]).map((filter) => (
+                        <button
+                          aria-checked={interventionFilter === filter}
+                          className="filter-option"
+                          key={filter}
+                          onClick={() => {
+                            setInterventionFilter(filter);
+                            setIsInterventionFilterOpen(false);
+                          }}
+                          role="menuitemradio"
+                          type="button"
+                        >
+                          {filter}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+            <div className="table-wrap">
+              <table className="interventions-table">
+                <thead>
+                  <tr>
+                    <th>Patient Reference</th>
+                    <th>AI Draft Preview</th>
+                    <th>Priority</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleInterventions.map((intervention) => (
+                    <tr key={intervention.id}>
+                      <td>
+                        <strong>Pt. ID: {intervention.id}</strong>
+                        <span>
+                          {isPrivacyMode ? maskPatientName(intervention.patientName) : intervention.patientName}
+                        </span>
+                      </td>
+                      <td>
+                        <p>{intervention.draftPreview}</p>
+                        <span className="draft-chip">{intervention.draftedAt}</span>
+                      </td>
+                      <td>
+                        <span className={`priority priority--${intervention.priority.toLowerCase()}`}>
+                          {intervention.priority}
+                        </span>
+                      </td>
+                      <td>
+                        <button className="secondary-action" type="button">Review & Send</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
       </main>
     </div>
   );
