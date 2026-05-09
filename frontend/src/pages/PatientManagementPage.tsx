@@ -187,11 +187,14 @@ export default function PatientManagementPage() {
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-3">
                       <p className="font-bold text-slate-900">Dizziness Reported</p>
-                      <span className="px-2 py-0.5 bg-red-600 text-white text-[9px] font-black uppercase tracking-tighter rounded-sm shadow-sm shadow-red-200">
+                      <span className="px-2 py-0.5 bg-red-600 text-white text-[10px] font-bold uppercase tracking-wider rounded-[4px] shadow-sm shadow-red-200/50">
                         High Severity
                       </span>
                     </div>
-                    <button className="text-[11px] font-bold text-red-600 hover:text-red-700 uppercase tracking-wider cursor-pointer">Acknowledge</button>
+                    <button className="flex items-center gap-1.5 px-3 py-1 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-colors cursor-pointer border border-red-100">
+                      <CheckCircle2 size={13} />
+                      Acknowledge
+                    </button>
                   </div>
                   <p className="text-sm text-slate-600 leading-relaxed">
                     AI Agent logged a patient report of "room spinning upon standing" at 08:45 AM. 

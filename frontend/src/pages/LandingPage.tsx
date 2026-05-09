@@ -22,7 +22,7 @@ export default function LandingPage() {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-[#f8f9ff] font-['Public_Sans'] text-slate-900 overflow-x-hidden selection:bg-blue-100 selection:text-blue-900">
+    <div className="min-h-screen bg-[#F5F5F6] font-['Public_Sans'] text-slate-900 overflow-x-hidden selection:bg-blue-100 selection:text-blue-900">
       {/* Background Mesh Gradient */}
       <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
         <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-blue-100/30 rounded-full blur-[120px]" />
@@ -54,13 +54,13 @@ export default function LandingPage() {
         <div className="flex items-center gap-4">
           <button 
             onClick={() => navigate('/dashboard/surveillance')}
-            className="px-6 py-2.5 text-[13px] font-bold text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
+            className="px-6 py-2.5 text-[13px] font-bold text-slate-500 hover:text-slate-900 transition-colors cursor-pointer"
           >
             Clinical Login
           </button>
           <button 
             onClick={() => navigate('/dashboard/triage')}
-            className="px-7 py-3 bg-blue-600 text-white rounded-2xl text-[13px] font-bold shadow-2xl shadow-blue-900/20 hover:bg-blue-700 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer border border-white/10"
+            className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-[13px] font-bold hover:bg-blue-700 transition-all cursor-pointer"
           >
             Launch Command Center
           </button>
@@ -80,15 +80,15 @@ export default function LandingPage() {
             <p className="text-xl text-slate-500 leading-relaxed mb-12 max-w-lg font-medium">
               Bridging the clinical gap with agentic AI grounded in precision. Automate adherence, triage side effects, and empower pharmacists.
             </p>
-            <div className="flex items-center gap-5">
+            <div className="flex items-center gap-4">
               <button 
                 onClick={() => navigate('/dashboard/triage')}
-                className="px-10 py-5 bg-blue-600 text-white rounded-[24px] font-bold shadow-[0_20px_50px_rgba(37,99,235,0.2)] hover:bg-blue-700 transition-all flex items-center gap-3 hover:translate-y-[-4px] active:translate-y-0"
+                className="px-8 py-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all flex items-center gap-2 active:scale-95 cursor-pointer"
               >
                 Get Started
-                <ArrowRight size={20} />
+                <ArrowRight size={18} />
               </button>
-              <button className="px-10 py-5 bg-white border border-slate-200 text-slate-900 rounded-[24px] font-bold hover:bg-slate-50 transition-all flex items-center gap-2 hover:shadow-lg">
+              <button className="px-8 py-4 bg-white border border-slate-200 text-slate-900 rounded-xl font-bold hover:bg-slate-50 transition-all active:scale-95 cursor-pointer">
                 View Documentation
               </button>
             </div>

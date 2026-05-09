@@ -28,6 +28,7 @@ export default function NewTreatmentPage() {
   const [patientSearch, setPatientSearch] = useState("");
   const [selectedPatient, setSelectedPatient] = useState<any>(null);
   const [isCreatingPatient, setIsCreatingPatient] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
 
   const MOCK_EXISTING_PATIENTS = [
     { id: "P-8834", name: "Thomas Miller", dob: "05/12/1952", mrn: "882-12-4401" },
@@ -195,55 +196,67 @@ export default function NewTreatmentPage() {
                   </div>
                 </div>
                 
-                <div className="flex p-1 bg-slate-100 rounded-xl w-fit">
+                <div className="flex gap-4">
                   <button 
                     onClick={() => setMethod("vision")}
-                    className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${method === "vision" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                    className={`flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer ${method === "vision" ? "text-blue-600 border-b-2 border-blue-600 rounded-none" : "text-slate-400 hover:text-slate-600"}`}
                   >
                     <Upload size={14} />
-                    Vision Upload
+                    Vision
                   </button>
                   <button 
                     onClick={() => setMethod("manual")}
-                    className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${method === "manual" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                    className={`flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer ${method === "manual" ? "text-blue-600 border-b-2 border-blue-600 rounded-none" : "text-slate-400 hover:text-slate-600"}`}
                   >
                     <Type size={14} />
-                    Manual Entry
+                    Manual
                   </button>
                   <button 
                     onClick={() => setMethod("structured")}
-                    className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${method === "structured" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                    className={`flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer ${method === "structured" ? "text-blue-600 border-b-2 border-blue-600 rounded-none" : "text-slate-400 hover:text-slate-600"}`}
                   >
                     <ClipboardList size={14} />
-                    Structured Form
+                    Form
                   </button>
                 </div>
               </div>
 
               <div className="flex-1 bg-slate-50 p-8 flex flex-col relative overflow-hidden">
                 {method === "vision" && (
-                  <div className="bg-white shadow-2xl w-full max-w-[500px] mx-auto h-full p-10 flex flex-col gap-8 relative border border-slate-100">
-                    <div className="flex justify-between items-start border-b border-slate-100 pb-6">
-                      <div className="flex flex-col gap-1">
-                        <p className="font-bold text-slate-900">Dr. Sarah Jenkins</p>
-                        <p className="text-xs text-slate-400">City General Hospital</p>
-                      </div>
-                      <p className="text-xs font-mono text-slate-400">DEA: AB1234567</p>
+                  <div className="flex-1 flex flex-col gap-6">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-bold text-slate-900 text-lg">Prescription Image Ingestion</h3>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">High-Precision OCR</span>
                     </div>
-                    <div className="flex flex-col gap-4">
-                      <div className="flex flex-col gap-1">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Patient:</p>
-                        <p className="font-bold text-slate-900">John Doe (DOB: 04/12/1980)</p>
+                    
+                    <div 
+                      className={`flex-1 border-2 border-dashed rounded-[32px] flex flex-col items-center justify-center p-12 transition-all group cursor-pointer ${
+                        dragActive ? 'border-blue-500 bg-blue-50/50' : 'border-slate-200 bg-white hover:border-blue-400 hover:bg-slate-50/50'
+                      }`}
+                      onDragEnter={() => setDragActive(true)}
+                      onDragLeave={() => setDragActive(false)}
+                      onDrop={(e) => { e.preventDefault(); setDragActive(false); }}
+                      onDragOver={(e) => e.preventDefault()}
+                    >
+                      <div className="w-20 h-20 bg-slate-50 text-slate-400 rounded-3xl flex items-center justify-center mb-6 group-hover:bg-blue-100 group-hover:text-blue-600 transition-all shadow-inner">
+                        <Upload size={32} />
                       </div>
-                      <div className="flex flex-col mt-4">
-                        <p className="text-2xl font-serif italic text-slate-900 mb-4">Rx:</p>
-                        <h3 className="text-3xl font-bold text-slate-900 mb-2">Amoxicillin 500mg</h3>
-                        <p className="text-slate-700 leading-relaxed">Sig: Take 1 capsule by mouth three times daily for 10 days.</p>
-                        <p className="text-slate-700 mt-2">Disp: 30 (thirty) caps</p>
+                      <div className="text-center space-y-2">
+                        <p className="text-lg font-bold text-slate-900">Drag & drop prescription image</p>
+                        <p className="text-sm text-slate-500 font-medium max-w-xs mx-auto">Supported formats: JPEG, PNG, PDF (Scanned). Max file size 10MB.</p>
+                      </div>
+                      <div className="mt-8">
+                        <button className="px-6 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-[11px] font-bold uppercase tracking-widest hover:bg-slate-50 transition-all cursor-pointer">
+                          Browse Files
+                        </button>
                       </div>
                     </div>
-                    <div className="mt-auto border-t border-slate-100 pt-6">
-                      <p className="text-xs text-slate-400 italic">Signature on file.</p>
+
+                    <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 flex items-start gap-3">
+                      <AlertCircle size={16} className="text-blue-600 shrink-0 mt-0.5" />
+                      <p className="text-[11px] text-blue-700 font-semibold leading-relaxed">
+                        For maximum extraction accuracy, ensure the document is well-lit and all clinical sign-offs (DEA, Signature) are clearly visible.
+                      </p>
                     </div>
                   </div>
                 )}
@@ -257,12 +270,8 @@ export default function NewTreatmentPage() {
                     <textarea 
                       placeholder="Paste prescription text, clinical notes, or regimen details here..."
                       className="flex-1 w-full p-8 bg-white border border-slate-200 rounded-3xl text-slate-700 focus:outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-500 transition-all resize-none shadow-inner font-mono text-base leading-relaxed"
-                      defaultValue={`Patient: John Doe (04/12/1980)
-Rx: Amoxicillin 500mg
-Sig: 1 cap TID x 10 days
-Indication: Bacterial infection prophylaxis`}
                     />
-                    <button className="py-4 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-md shadow-blue-100 cursor-pointer text-lg">
+                    <button className="py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition-all cursor-pointer text-[11px] uppercase tracking-wider">
                       Extract Clinical Entities
                     </button>
                   </div>

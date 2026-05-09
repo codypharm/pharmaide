@@ -1,4 +1,4 @@
-import { Activity, Bell, FileText, Flame, Map, Search, ShieldCheck, UserPlus } from "lucide-react";
+import { Activity, Bell, FileText, Flame, Map, Search, ShieldCheck, Plus, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { Outlet, NavLink, Link } from "react-router-dom";
 
@@ -9,101 +9,103 @@ function DashboardApp() {
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans text-slate-900">
       {/* Sidebar */}
       <aside className="w-64 bg-white border-r border-slate-200 flex flex-col z-40">
-        <div className="p-6">
-          <Link to="/" className="flex items-center gap-2 mb-1 group cursor-pointer">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold group-hover:bg-blue-700 transition-colors">
-              <ShieldCheck size={18} />
+        <div className="p-8 pb-4">
+          <Link to="/" className="flex items-center gap-2 group cursor-pointer">
+            <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-sm group-hover:bg-blue-700 transition-colors">
+              <ShieldCheck size={20} />
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900 group-hover:text-blue-600 transition-colors">PharmaAide</h1>
-          </Link>
-          <p className="text-[11px] font-bold tracking-wider uppercase text-slate-400 pl-10">Clinical Operations</p>
-        </div>
-
-        <div className="px-4 mb-6">
-          <Link 
-            to="/dashboard/new-treatment"
-            className="w-full bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 py-2.5 rounded-xl flex items-center justify-center gap-2 font-semibold transition-colors shadow-sm"
-          >
-            <UserPlus size={18} />
-            New Treatment
+            <h1 className="text-xl font-bold tracking-tighter text-slate-900 group-hover:text-blue-600 transition-colors">PharmaAide</h1>
           </Link>
         </div>
 
-        <nav className="flex flex-col gap-1 px-4 flex-1">
+        <nav className="flex flex-col gap-0.5 px-3 flex-1 mt-6">
           <NavLink
             to="/dashboard/triage"
             className={({ isActive }) => 
-              `flex items-center gap-3 px-4 py-2.5 rounded-xl font-medium transition-all ${
+              `flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
                 isActive 
-                  ? "bg-blue-600 !text-white [&>svg]:text-white shadow-md shadow-blue-200" 
+                  ? "bg-slate-100 text-slate-900" 
                   : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
               }`
             }
           >
-            <Flame size={20} />
+            <Flame size={18} />
             Triage Queue
           </NavLink>
           <NavLink
             to="/dashboard/surveillance"
             className={({ isActive }) => 
-              `flex items-center gap-3 px-4 py-2.5 rounded-xl font-medium transition-all ${
+              `flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
                 isActive 
-                  ? "bg-blue-600 !text-white [&>svg]:text-white shadow-md shadow-blue-200" 
+                  ? "bg-slate-100 text-slate-900" 
                   : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
               }`
             }
           >
-            <Activity size={20} />
-            Patient Surveillance
+            <Activity size={18} />
+            Surveillance
           </NavLink>
           <NavLink
             to="/dashboard/heatmaps"
             className={({ isActive }) => 
-              `flex items-center gap-3 px-4 py-2.5 rounded-xl font-medium transition-all ${
+              `flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
                 isActive 
-                  ? "bg-blue-600 !text-white [&>svg]:text-white shadow-md shadow-blue-200" 
+                  ? "bg-slate-100 text-slate-900" 
                   : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
               }`
             }
           >
-            <Map size={20} />
+            <Map size={18} />
             Adherence
           </NavLink>
-          <div className="mt-8 mb-2 px-4 text-[11px] font-bold tracking-wider text-slate-400 uppercase">System</div>
+          
+          <div className="h-px bg-slate-100 my-4 mx-4" />
+
           <NavLink
             to="/dashboard/knowledge"
             className={({ isActive }) => 
-              `flex items-center gap-3 px-4 py-2.5 rounded-xl font-medium transition-all ${
+              `flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
                 isActive 
-                  ? "bg-blue-600 !text-white [&>svg]:text-white shadow-md shadow-blue-200" 
+                  ? "bg-slate-100 text-slate-900" 
                   : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
               }`
             }
           >
-            <FileText size={20} />
-            Knowledge Base
+            <FileText size={18} />
+            Clinical Assets
           </NavLink>
           <NavLink
             to="/dashboard/audits"
             className={({ isActive }) => 
-              `flex items-center gap-3 px-4 py-2.5 rounded-xl font-medium transition-all ${
+              `flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
                 isActive 
-                  ? "bg-blue-600 !text-white [&>svg]:text-white shadow-md shadow-blue-200" 
+                  ? "bg-slate-100 text-slate-900" 
                   : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
               }`
             }
           >
-            <ShieldCheck size={20} />
-            System Audits
+            <ShieldCheck size={18} />
+            System Audit
           </NavLink>
+
+          <div className="mt-8 px-4">
+            <Link 
+              to="/dashboard/new-treatment"
+              className="w-full bg-blue-600 hover:bg-blue-700 !text-white py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm font-bold transition-all shadow-sm shadow-blue-200"
+            >
+              <Plus size={18} />
+              New Treatment
+            </Link>
+          </div>
         </nav>
 
-        <Link to="/dashboard/profile" className="p-6 border-t border-slate-100 flex items-center gap-3 mt-auto hover:bg-slate-50 transition-all cursor-pointer">
-          <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-700">PP</div>
-          <div>
-            <p className="text-sm font-bold text-slate-900">Dr. E. Thorne</p>
-            <p className="text-[11px] font-bold tracking-wider uppercase text-slate-400">Pharmacist</p>
+        <Link to="/dashboard/profile" className="p-4 m-4 bg-slate-50 rounded-2xl flex items-center gap-3 hover:bg-slate-100 transition-all cursor-pointer border border-slate-100">
+          <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center font-bold text-slate-700 shadow-sm">PP</div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-bold text-slate-900 truncate">Dr. E. Thorne</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Pharmacist</p>
           </div>
+          <ChevronRight size={14} className="text-slate-300" />
         </Link>
       </aside>
 
