@@ -18,7 +18,6 @@ interface Medication {
   dosage: string;
   frequency: string;
   duration: string;
-  objective: string;
 }
 
 type SubmitState =
@@ -35,7 +34,7 @@ export default function NewTreatmentPage() {
   // but disabled — see the tab buttons below for the V1.1 affordance.
   const [method, setMethod] = useState<IngestionMethod>("structured");
   const [medications, setMedications] = useState<Medication[]>([
-    { id: "1", name: "Amoxicillin", dosage: "500 mg", frequency: "Times Daily (TID)", duration: "10 Days", objective: "" }
+    { id: "1", name: "Amoxicillin", dosage: "500 mg", frequency: "Times Daily (TID)", duration: "10 Days" }
   ]);
   // Sprint 2 always creates a new patient — search-existing flow ships
   // when GET /patients?search= lands. The search input renders disabled.
@@ -55,7 +54,6 @@ export default function NewTreatmentPage() {
       dosage: "",
       frequency: "Once Daily (QD)",
       duration: "",
-      objective: ""
     };
     setMedications([...medications, newMed]);
   };
@@ -90,7 +88,9 @@ export default function NewTreatmentPage() {
           dosage: m.dosage.trim(),
           frequency: m.frequency.trim(),
           duration: m.duration.trim(),
-          objective: m.objective.trim() || null,
+          // Per-med objective intentionally omitted — the treatment-level
+          // clinical_objective is the single source the agent reads.
+          objective: null,
         })),
         ingestion_method: "structured",
       });
@@ -107,7 +107,7 @@ export default function NewTreatmentPage() {
       setPatientPhone("");
       setClinicalObjective("");
       setMedications([
-        { id: crypto.randomUUID(), name: "", dosage: "", frequency: "Once Daily (QD)", duration: "", objective: "" },
+        { id: crypto.randomUUID(), name: "", dosage: "", frequency: "Once Daily (QD)", duration: "" },
       ]);
     } catch (err) {
       if (err instanceof ConflictError) {
@@ -519,14 +519,20 @@ export default function NewTreatmentPage() {
                 )}
 
                 <div className="flex flex-col gap-1.5 mt-4">
-                  <label htmlFor="clinical-objective" className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Clinical Objective / Aim of Follow-up</label>
+                  <label htmlFor="clinical-objective" className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    Treatment Objective <span className="text-slate-400 normal-case font-medium tracking-normal">— what the agent should focus on</span>
+                  </label>
                   <textarea
                     id="clinical-objective"
+                    required
                     value={clinicalObjective}
                     onChange={(e) => setClinicalObjective(e.target.value)}
-                    placeholder="e.g., Monitor for ACE-inhibitor induced dry cough..."
+                    placeholder="e.g. Monitor for ACE-inhibitor cough and dizziness on standing. Confirm the patient takes the morning dose with food."
                     className="w-full pl-4 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm min-h-[80px] focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all resize-none"
                   />
+                  <p className="text-[11px] text-slate-500 px-1">
+                    Used to focus the agent's check-in questions throughout the treatment cycle.
+                  </p>
                 </div>
 
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-start gap-3">
