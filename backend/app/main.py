@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.errors import RequestIdMiddleware
+from app.errors import RequestIdMiddleware, global_exception_handler
 from app.logging_setup import configure_logging
 
 VERSION = "0.1.0"
@@ -18,6 +18,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.add_exception_handler(Exception, global_exception_handler)
 
 
 @app.get("/health")
