@@ -13,15 +13,12 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+# Side-effect import: ensures every ORM model is registered on
+# Base.metadata before autogenerate inspects it.
+import app.db.models  # noqa: F401
 from alembic import context
 from app.config import get_settings
 from app.db.base import Base
-
-# Side-effect imports: ensure every ORM model is imported so its table
-# is registered on Base.metadata before autogenerate inspects it.
-# Models land in commit 2; this import is a forward declaration that the
-# `# noqa` keeps lint-clean once the module exists.
-import app.db.models  # noqa: F401  pylint: disable=unused-import
 
 config = context.config
 
