@@ -25,10 +25,13 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Override sqlalchemy.url with the value from app settings. This is the
-# single source of truth — alembic.ini's hardcoded URL is intentionally
-# left as a placeholder so accidental misuse fails loudly.
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+# Prefer a URL set programmatically on the config (e.g. by the test
+# fixture pointing at a testcontainers Postgres) over the app settings.
+# alembic.ini ships with a "driver://..." placeholder so unset paths
+# fall through to settings; tests overwrite via cfg.set_main_option.
+existing_url = config.get_main_option("sqlalchemy.url", "") or ""
+if not existing_url or existing_url.startswith("driver://"):
+    config.set_main_option("sqlalchemy.url", get_settings().database_url)
 
 target_metadata = Base.metadata
 
