@@ -1,0 +1,53 @@
+[project]
+name = "pharmaide-backend"
+version = "0.1.0"
+description = "PharmaAide HITL medication adherence backend (FastAPI + LangGraph)."
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.118",
+    "uvicorn[standard]>=0.38",
+    "pydantic>=2.11",
+    "pydantic-settings>=2.7",
+    "langgraph>=0.2.65",
+    "langgraph-checkpoint-sqlite>=2.0.6",
+    "structlog>=25.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4",
+    "pytest-asyncio>=0.25",
+    "httpx>=0.28",
+    "ruff>=0.9",
+    "mypy>=1.14",
+    "pre-commit>=4.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "W",   # pycodestyle / pyflakes
+    "I",             # isort
+    "UP",            # pyupgrade
+    "B",             # bugbear
+    "SIM",           # simplify
+    "RUF",           # ruff-native
+]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+plugins = ["pydantic.mypy"]
+files = ["app", "tests"]
+
+[[tool.mypy.overrides]]
+module = "langgraph.*"
+ignore_missing_imports = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-ra"
