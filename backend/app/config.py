@@ -1,3 +1,9 @@
+"""Centralised env-driven configuration for the backend.
+
+Keeps every PHARMAIDE_* environment knob in one place so that wiring (logging,
+checkpointer paths, debug gates) reads the same values everywhere.
+"""
+
 from functools import lru_cache
 from typing import Literal
 
@@ -5,13 +11,21 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    # extra="ignore": silently drop unknown env vars instead of raising. Cloud
+    # Run injects platform vars (PORT, K_SERVICE, etc.) that are not ours.
     model_config = SettingsConfigDict(env_prefix="PHARMAIDE_", env_file=".env", extra="ignore")
 
     checkpoint_db_path: str = "./pharmaide.db"
+
+    # Defaults to False so a forgotten env var in any deployed environment
+    # leaves the dev-only /debug/graph route unmounted, not exposed.
     debug_routes_enabled: bool = False
+
     log_mode: Literal["console", "json"] = "console"
 
 
+# lru_cache so Settings is parsed once per process. Cheap insurance against
+# re-reading the .env file on every Depends(get_settings) call.
 @lru_cache
 def get_settings() -> Settings:
     return Settings()

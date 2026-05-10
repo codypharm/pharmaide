@@ -1,7 +1,14 @@
+"""Error-catching primitives shared across the backend.
+
+Three composable pieces so every layer (functions, graph runs, request
+handlers) emits correlated, queryable failure context to the structured log
+without leaking internals to the response body.
+"""
+
 import functools
 import inspect
 from collections.abc import Awaitable, Callable, Mapping
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 from uuid import uuid4
 
 import structlog
@@ -14,13 +21,14 @@ REQUEST_ID_HEADER = "X-Request-ID"
 
 
 class AsyncInvokable(Protocol):
-    """Minimal interface a LangGraph compiled graph (or test stub) satisfies."""
+    """Minimal interface a LangGraph compiled graph (or test stub) satisfies.
 
-    async def ainvoke(
-        self,
-        input_state: Mapping[str, object],
-        config: Mapping[str, object] | None = ...,
-    ) -> object: ...
+    Typed loosely (Any) on input/output because real LangGraph CompiledStateGraph
+    has a heavily overloaded ainvoke whose signature varies by stream_mode and
+    version. We don't introspect the result inside run_graph; callers cast.
+    """
+
+    async def ainvoke(self, input: Any, config: Any = ...) -> Any: ...
 
 
 async def run_graph(
@@ -28,7 +36,7 @@ async def run_graph(
     *,
     thread_id: str,
     input_state: Mapping[str, object],
-) -> object:
+) -> Any:
     """Invoke a LangGraph thread with structured logging around the call.
 
     Binds thread_id to structlog contextvars for the duration so that any
@@ -39,7 +47,7 @@ async def run_graph(
         try:
             result = await graph.ainvoke(
                 input_state,
-                config={"configurable": {"thread_id": thread_id}},
+                {"configurable": {"thread_id": thread_id}},
             )
         except Exception:
             log.error("graph_failed", thread_id=thread_id, exc_info=True)
@@ -80,11 +88,22 @@ def logged[**P, R](fn: Callable[P, R]) -> Callable[P, R]:
 
 
 class RequestIdMiddleware(BaseHTTPMiddleware):
+    """Tags every request with a UUID and propagates it two ways.
+
+    structlog.contextvars binding is what makes log lines emitted *inside*
+    the handler carry request_id automatically. request.state is the fallback
+    path for FastAPI exception handlers, which run in an inner task whose
+    contextvars don't reliably inherit from the middleware's outer context.
+    Both paths are needed; neither alone covers every code path.
+    """
+
     async def dispatch(
         self,
         request: Request,
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
+        # Honour an inbound X-Request-ID if the caller provided one — this
+        # lets a frontend or upstream proxy correlate its logs with ours.
         request_id = request.headers.get(REQUEST_ID_HEADER) or uuid4().hex
         request.state.request_id = request_id
         with structlog.contextvars.bound_contextvars(request_id=request_id):
@@ -101,6 +120,9 @@ async def global_exception_handler(request: Request, exc: Exception) -> Response
     to the structured log, not the wire.
     """
     log = structlog.get_logger(__name__)
+    # Read from request.state, not contextvars: this handler runs in the
+    # inner task spawned by FastAPI's ExceptionMiddleware, which doesn't
+    # inherit our middleware's bound_contextvars reliably.
     request_id = getattr(request.state, "request_id", "")
     log.error(
         "unhandled_exception",
