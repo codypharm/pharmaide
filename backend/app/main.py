@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from app.api.treatments import router as treatments_router
 from app.config import Settings, get_settings
 from app.errors import RequestIdMiddleware, global_exception_handler, run_graph
 from app.graph import open_counter_graph
@@ -49,6 +50,8 @@ def create_app(settings: Settings) -> FastAPI:
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok", "version": VERSION}
+
+    app.include_router(treatments_router, tags=["treatments"])
 
     # Mount-time gating, not request-time. When the flag is False the route
     # literally does not exist — no 403, no soft denial, no OpenAPI entry.

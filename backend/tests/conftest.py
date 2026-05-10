@@ -14,10 +14,15 @@ from pathlib import Path
 
 import pytest
 from alembic.config import Config
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from testcontainers.postgres import PostgresContainer
 
 from alembic import command
+from app.config import Settings
+from app.db.engine import get_session
+from app.main import create_app
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
 
@@ -71,3 +76,31 @@ async def db_session(db_engine: object) -> AsyncIterator[AsyncSession]:
             await session.close()
             if transaction.is_active:
                 await transaction.rollback()
+
+
+@pytest.fixture
+def test_app(db_session: AsyncSession) -> FastAPI:
+    """FastAPI app with get_session overridden to yield the test's db_session.
+
+    Routes called via this app share the same transaction as the test,
+    so the test can read back what the route inserted (and the rollback
+    at teardown unwinds everything).
+    """
+    settings = Settings(_env_file=None, debug_routes_enabled=False, log_mode="json")
+    app = create_app(settings)
+
+    async def _override() -> AsyncIterator[AsyncSession]:
+        # Use a savepoint so service-level flushes can be rolled back on
+        # error without breaking the outer test transaction.
+        async with db_session.begin_nested():
+            yield db_session
+
+    app.dependency_overrides[get_session] = _override
+    return app
+
+
+@pytest.fixture
+async def app_client(test_app: FastAPI) -> AsyncIterator[AsyncClient]:
+    transport = ASGITransport(app=test_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
