@@ -1,14 +1,16 @@
 import { useState } from "react";
-import { 
-  FileText, Search, ZoomIn, ZoomOut, RotateCcw, 
-  CheckCircle2, AlertCircle, Calendar, MessageSquare, 
-  ChevronRight, Play, X, Download, ShieldCheck, 
-  PlusIcon, Upload, Type, ClipboardList, Trash2,
-  Edit3
+import {
+  FileText, Search, ZoomIn, ZoomOut,
+  CheckCircle2, AlertCircle, MessageSquare,
+  Play, X, ShieldCheck,
+  Upload, Type, ClipboardList, Trash2,
+  Edit3, Loader2, Lock
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { ApiError, ConflictError, ValidationError } from "../api/client";
+import { createTreatment } from "../api/treatments";
 
-type IngestionMethod = "vision" | "manual" | "structured";
+type IngestionMethod = "structured" | "manual" | "vision";
 
 interface Medication {
   id: string;
@@ -19,30 +21,36 @@ interface Medication {
   objective: string;
 }
 
+type SubmitState =
+  | { kind: "idle" }
+  | { kind: "submitting" }
+  | { kind: "success"; treatmentId: string; patientId: string }
+  | { kind: "error"; title: string; detail: string; requestId: string | null };
+
+type FieldErrors = Partial<Record<"name" | "dob" | "mrn" | "phone", string>>;
+
 export default function NewTreatmentPage() {
   const navigate = useNavigate();
-  const [method, setMethod] = useState<IngestionMethod>("vision");
+  // Sprint 2: only the structured tab is wired. Vision/Manual stay visible
+  // but disabled — see the tab buttons below for the V1.1 affordance.
+  const [method, setMethod] = useState<IngestionMethod>("structured");
   const [medications, setMedications] = useState<Medication[]>([
     { id: "1", name: "Amoxicillin", dosage: "500 mg", frequency: "Times Daily (TID)", duration: "10 Days", objective: "" }
   ]);
-  const [patientSearch, setPatientSearch] = useState("");
-  const [selectedPatient, setSelectedPatient] = useState<any>(null);
-  const [isCreatingPatient, setIsCreatingPatient] = useState(false);
+  // Sprint 2 always creates a new patient — search-existing flow ships
+  // when GET /patients?search= lands. The search input renders disabled.
+  const [patientName, setPatientName] = useState("");
+  const [patientDob, setPatientDob] = useState("");
+  const [patientMrn, setPatientMrn] = useState("");
+  const [patientPhone, setPatientPhone] = useState("");
+  const [clinicalObjective, setClinicalObjective] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [submitState, setSubmitState] = useState<SubmitState>({ kind: "idle" });
   const [dragActive, setDragActive] = useState(false);
-
-  const MOCK_EXISTING_PATIENTS = [
-    { id: "P-8834", name: "Thomas Miller", dob: "05/12/1952", mrn: "882-12-4401" },
-    { id: "P-7219", name: "Eleanor Vance", dob: "10/12/1955", mrn: "993-45-8812" },
-  ];
-
-  const filteredPatients = MOCK_EXISTING_PATIENTS.filter(p => 
-    p.name.toLowerCase().includes(patientSearch.toLowerCase()) || 
-    p.id.toLowerCase().includes(patientSearch.toLowerCase())
-  );
 
   const addMedication = () => {
     const newMed: Medication = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: crypto.randomUUID(),
       name: "",
       dosage: "",
       frequency: "Once Daily (QD)",
@@ -55,6 +63,92 @@ export default function NewTreatmentPage() {
   const removeMedication = (id: string) => {
     if (medications.length > 1) {
       setMedications(medications.filter(m => m.id !== id));
+    }
+  };
+
+  const updateMedication = (id: string, patch: Partial<Medication>) => {
+    setMedications(meds => meds.map(m => (m.id === id ? { ...m, ...patch } : m)));
+  };
+
+  const handleSubmit = async () => {
+    setFieldErrors({});
+    setSubmitState({ kind: "submitting" });
+
+    try {
+      const result = await createTreatment({
+        patient: {
+          name: patientName.trim(),
+          dob: patientDob,
+          mrn: patientMrn.trim(),
+          phone: patientPhone.trim(),
+        },
+        treatment: {
+          clinical_objective: clinicalObjective.trim() || null,
+        },
+        medications: medications.map(m => ({
+          name: m.name.trim(),
+          dosage: m.dosage.trim(),
+          frequency: m.frequency.trim(),
+          duration: m.duration.trim(),
+          objective: m.objective.trim() || null,
+        })),
+        ingestion_method: "structured",
+      });
+
+      setSubmitState({
+        kind: "success",
+        treatmentId: result.treatment_id,
+        patientId: result.patient_id,
+      });
+      // Reset form so the pharmacist can register the next patient.
+      setPatientName("");
+      setPatientDob("");
+      setPatientMrn("");
+      setPatientPhone("");
+      setClinicalObjective("");
+      setMedications([
+        { id: crypto.randomUUID(), name: "", dosage: "", frequency: "Once Daily (QD)", duration: "", objective: "" },
+      ]);
+    } catch (err) {
+      if (err instanceof ConflictError) {
+        setFieldErrors({ mrn: "This MRN already exists. Please verify or use a different identifier." });
+        setSubmitState({
+          kind: "error",
+          title: "Patient already registered",
+          detail: "An existing patient has this MRN. Update the field and try again.",
+          requestId: err.requestId,
+        });
+      } else if (err instanceof ValidationError) {
+        const next: FieldErrors = {};
+        for (const e of err.fieldErrors) {
+          // loc is ["body", "patient", <field>] or ["body", <field>] etc.
+          const field = e.loc[e.loc.length - 1];
+          if (field === "name" || field === "dob" || field === "mrn" || field === "phone") {
+            next[field] = e.msg;
+          }
+        }
+        setFieldErrors(next);
+        setSubmitState({
+          kind: "error",
+          title: "Validation failed",
+          detail: "Please correct the highlighted fields and try again.",
+          requestId: err.requestId,
+        });
+      } else if (err instanceof ApiError) {
+        setSubmitState({
+          kind: "error",
+          title: "Server error",
+          detail: `Reference ID: ${err.requestId ?? "unknown"}. Please retry; if it keeps failing, share the reference ID with the team.`,
+          requestId: err.requestId,
+        });
+      } else {
+        setSubmitState({
+          kind: "error",
+          title: "Network error",
+          detail: "Could not reach the server. Check your connection and try again.",
+          requestId: null,
+        });
+      }
     }
   };
 
@@ -71,7 +165,7 @@ export default function NewTreatmentPage() {
               <p className="text-sm text-slate-500">Upload prescription for automated clinical extraction and regimen scheduling.</p>
             </div>
           </div>
-          <button 
+          <button
             onClick={() => navigate(-1)}
             className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-colors shadow-sm flex items-center gap-2 cursor-pointer"
           >
@@ -80,106 +174,116 @@ export default function NewTreatmentPage() {
           </button>
         </div>
 
+        {submitState.kind === "success" && (
+          <div role="status" className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-start gap-3">
+            <CheckCircle2 size={20} className="text-emerald-600 mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <p className="font-bold text-emerald-900 text-sm">Treatment created</p>
+              <p className="text-xs text-emerald-700 mt-0.5 font-mono">
+                Treatment ID: {submitState.treatmentId} · Patient ID: {submitState.patientId}
+              </p>
+            </div>
+            <button
+              onClick={() => setSubmitState({ kind: "idle" })}
+              className="text-emerald-700 hover:text-emerald-900"
+              aria-label="Dismiss"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
+
+        {submitState.kind === "error" && (
+          <div role="alert" className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
+            <AlertCircle size={20} className="text-red-600 mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <p className="font-bold text-red-900 text-sm">{submitState.title}</p>
+              <p className="text-xs text-red-700 mt-0.5">{submitState.detail}</p>
+            </div>
+            <button
+              onClick={() => setSubmitState({ kind: "idle" })}
+              className="text-red-700 hover:text-red-900"
+              aria-label="Dismiss"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
+
         {/* Patient Selection Card */}
         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden p-6 flex flex-col gap-6">
           <div className="flex items-center justify-between">
-            <h3 className="font-bold text-slate-900 uppercase tracking-wider text-[11px]">Patient Selection</h3>
-            {selectedPatient && !isCreatingPatient && (
-              <button 
-                onClick={() => { setSelectedPatient(null); setPatientSearch(""); }}
-                className="text-xs font-bold text-blue-600 hover:underline cursor-pointer"
-              >
-                Change Patient
-              </button>
-            )}
+            <h3 className="font-bold text-slate-900 uppercase tracking-wider text-[11px]">Patient Registration</h3>
           </div>
 
-          {!selectedPatient && !isCreatingPatient ? (
-            <div className="flex flex-col gap-4">
-              <div className="relative">
-                <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input 
-                  value={patientSearch}
-                  onChange={(e) => setPatientSearch(e.target.value)}
-                  placeholder="Search existing patients by Name or ID..."
-                  className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-base focus:ring-4 focus:ring-blue-100 focus:border-blue-500 transition-all shadow-inner"
+          {/* Search-existing affordance: visually present, disabled until
+              GET /patients?search= ships in a follow-up slice. */}
+          <div className="flex flex-col gap-2">
+            <div className="relative opacity-60">
+              <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                disabled
+                placeholder="Search existing patients by Name or ID..."
+                className="w-full pl-12 pr-12 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-base shadow-inner cursor-not-allowed"
+                aria-describedby="search-disabled-note"
+              />
+              <Lock size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" />
+            </div>
+            <p id="search-disabled-note" className="text-[11px] text-slate-500 px-1">
+              Search not yet available — registering below creates a new patient profile.
+            </p>
+          </div>
+
+          <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 space-y-6">
+            <h4 className="font-bold text-slate-900">New Patient Registration</h4>
+            <div className="grid grid-cols-2 gap-6">
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="patient-name" className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Full Name</label>
+                <input
+                  id="patient-name"
+                  value={patientName}
+                  onChange={(e) => setPatientName(e.target.value)}
+                  placeholder="e.g. Eleanor Vance"
+                  className={`px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none ${fieldErrors.name ? "border-red-400" : "border-slate-200"}`}
                 />
+                {fieldErrors.name && <span className="text-[11px] text-red-600">{fieldErrors.name}</span>}
               </div>
-              
-              {patientSearch.length > 0 && (
-                <div className="border border-slate-100 rounded-xl overflow-hidden divide-y divide-slate-50 shadow-lg bg-white z-10">
-                  {filteredPatients.map(p => (
-                    <button 
-                      key={p.id}
-                      onClick={() => setSelectedPatient(p)}
-                      className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors text-left cursor-pointer"
-                    >
-                      <div>
-                        <p className="font-bold text-slate-900">{p.name}</p>
-                        <p className="text-xs text-slate-500">ID: {p.id} • DOB: {p.dob}</p>
-                      </div>
-                      <ChevronRight size={16} className="text-slate-300" />
-                    </button>
-                  ))}
-                  {filteredPatients.length === 0 && (
-                    <div className="p-8 text-center bg-slate-50/50">
-                      <p className="text-sm text-slate-500 mb-4">No patients found matching "{patientSearch}"</p>
-                      <button 
-                        onClick={() => setIsCreatingPatient(true)}
-                        className="px-6 py-2 bg-slate-900 text-white rounded-xl font-bold flex items-center gap-2 mx-auto hover:bg-slate-800 transition-all shadow-md shadow-slate-200 cursor-pointer"
-                      >
-                        <PlusIcon size={16} />
-                        Create New Patient Profile
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          ) : isCreatingPatient ? (
-            <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 space-y-6">
-              <div className="flex items-center justify-between">
-                <h4 className="font-bold text-slate-900">New Patient Registration</h4>
-                <button onClick={() => setIsCreatingPatient(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={18} /></button>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="patient-dob" className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Date of Birth</label>
+                <input
+                  id="patient-dob"
+                  type="date"
+                  value={patientDob}
+                  onChange={(e) => setPatientDob(e.target.value)}
+                  className={`px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none ${fieldErrors.dob ? "border-red-400" : "border-slate-200"}`}
+                />
+                {fieldErrors.dob && <span className="text-[11px] text-red-600">{fieldErrors.dob}</span>}
               </div>
-              <div className="grid grid-cols-3 gap-6">
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Full Name</label>
-                  <input placeholder="e.g. John Doe" className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none" />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Date of Birth</label>
-                  <input type="date" className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none" />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">MRN Number</label>
-                  <input placeholder="e.g. 123-45-678" className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none" />
-                </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="patient-mrn" className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">MRN Number</label>
+                <input
+                  id="patient-mrn"
+                  value={patientMrn}
+                  onChange={(e) => setPatientMrn(e.target.value)}
+                  placeholder="e.g. 882-12-4401"
+                  className={`px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none ${fieldErrors.mrn ? "border-red-400" : "border-slate-200"}`}
+                />
+                {fieldErrors.mrn && <span className="text-[11px] text-red-600">{fieldErrors.mrn}</span>}
               </div>
-              <button 
-                onClick={() => { setSelectedPatient({ name: "New Patient", id: "PENDING", dob: "N/A" }); setIsCreatingPatient(false); }}
-                className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all cursor-pointer"
-              >
-                Register & Continue
-              </button>
-            </div>
-          ) : (
-            <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-6 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-lg">
-                  {selectedPatient.name[0]}
-                </div>
-                <div>
-                  <p className="font-bold text-slate-900 text-lg">{selectedPatient.name}</p>
-                  <p className="text-sm text-slate-500">MRN: {selectedPatient.mrn || "Pending Assignment"} • ID: {selectedPatient.id}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 size={20} className="text-emerald-500" />
-                <span className="text-xs font-bold text-emerald-600 uppercase tracking-widest">Patient Identity Verified</span>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="patient-phone" className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Phone Number (E.164)</label>
+                <input
+                  id="patient-phone"
+                  type="tel"
+                  value={patientPhone}
+                  onChange={(e) => setPatientPhone(e.target.value)}
+                  placeholder="+1 800 555 1212"
+                  className={`px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none ${fieldErrors.phone ? "border-red-400" : "border-slate-200"}`}
+                />
+                {fieldErrors.phone && <span className="text-[11px] text-red-600">{fieldErrors.phone}</span>}
               </div>
             </div>
-          )}
+          </div>
         </div>
 
         <div className="grid grid-cols-12 gap-6 items-start">
@@ -197,21 +301,30 @@ export default function NewTreatmentPage() {
                 </div>
                 
                 <div className="flex gap-4">
-                  <button 
-                    onClick={() => setMethod("vision")}
-                    className={`flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer ${method === "vision" ? "text-blue-600 border-b-2 border-blue-600 rounded-none" : "text-slate-400 hover:text-slate-600"}`}
+                  {/* Vision and Manual stay visible but disabled until V1.1
+                      ships LLM extraction (Sprint 3+). Structured is the
+                      only mode that posts to the backend. */}
+                  <button
+                    disabled
+                    title="Coming in V1.1"
+                    aria-disabled="true"
+                    className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded-lg text-slate-300 cursor-not-allowed"
                   >
                     <Upload size={14} />
                     Vision
+                    <Lock size={12} />
                   </button>
-                  <button 
-                    onClick={() => setMethod("manual")}
-                    className={`flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer ${method === "manual" ? "text-blue-600 border-b-2 border-blue-600 rounded-none" : "text-slate-400 hover:text-slate-600"}`}
+                  <button
+                    disabled
+                    title="Coming in V1.1"
+                    aria-disabled="true"
+                    className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded-lg text-slate-300 cursor-not-allowed"
                   >
                     <Type size={14} />
                     Manual
+                    <Lock size={12} />
                   </button>
-                  <button 
+                  <button
                     onClick={() => setMethod("structured")}
                     className={`flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer ${method === "structured" ? "text-blue-600 border-b-2 border-blue-600 rounded-none" : "text-slate-400 hover:text-slate-600"}`}
                   >
@@ -291,7 +404,7 @@ export default function NewTreatmentPage() {
                     </div>
                     
                     <div className="space-y-6">
-                      {medications.map((med, index) => (
+                      {medications.map((med) => (
                         <div key={med.id} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm relative group">
                           {medications.length > 1 && (
                             <button 
@@ -304,23 +417,29 @@ export default function NewTreatmentPage() {
                           <div className="grid grid-cols-2 gap-6">
                             <div className="flex flex-col gap-1.5">
                               <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Medication Name</label>
-                              <input 
+                              <input
                                 placeholder="e.g. Amoxicillin"
                                 className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all"
-                                defaultValue={med.name}
+                                value={med.name}
+                                onChange={(e) => updateMedication(med.id, { name: e.target.value })}
                               />
                             </div>
                             <div className="flex flex-col gap-1.5">
                               <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Dosage Strength</label>
-                              <input 
+                              <input
                                 placeholder="e.g. 500mg"
                                 className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all"
-                                defaultValue={med.dosage}
+                                value={med.dosage}
+                                onChange={(e) => updateMedication(med.id, { dosage: e.target.value })}
                               />
                             </div>
                             <div className="flex flex-col gap-1.5">
                               <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Frequency</label>
-                              <select className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all appearance-none cursor-pointer" defaultValue={med.frequency}>
+                              <select
+                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all appearance-none cursor-pointer"
+                                value={med.frequency}
+                                onChange={(e) => updateMedication(med.id, { frequency: e.target.value })}
+                              >
                                 <option>Once Daily (QD)</option>
                                 <option>Twice Daily (BID)</option>
                                 <option>Times Daily (TID)</option>
@@ -329,10 +448,11 @@ export default function NewTreatmentPage() {
                             </div>
                             <div className="flex flex-col gap-1.5">
                               <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Duration</label>
-                              <input 
+                              <input
                                 placeholder="e.g. 10 days"
                                 className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all"
-                                defaultValue={med.duration}
+                                value={med.duration}
+                                onChange={(e) => updateMedication(med.id, { duration: e.target.value })}
                               />
                             </div>
                           </div>
@@ -399,9 +519,12 @@ export default function NewTreatmentPage() {
                 )}
 
                 <div className="flex flex-col gap-1.5 mt-4">
-                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Clinical Objective / Aim of Follow-up</label>
-                  <textarea 
-                    placeholder="e.g., Monitor for ACE-inhibitor induced dry cough..." 
+                  <label htmlFor="clinical-objective" className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Clinical Objective / Aim of Follow-up</label>
+                  <textarea
+                    id="clinical-objective"
+                    value={clinicalObjective}
+                    onChange={(e) => setClinicalObjective(e.target.value)}
+                    placeholder="e.g., Monitor for ACE-inhibitor induced dry cough..."
                     className="w-full pl-4 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm min-h-[80px] focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all resize-none"
                   />
                 </div>
@@ -414,11 +537,22 @@ export default function NewTreatmentPage() {
                 </div>
               </div>
 
-              <button 
-                className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-slate-800 transition-all shadow-md shadow-slate-200 mt-2 cursor-pointer"
+              <button
+                onClick={handleSubmit}
+                disabled={submitState.kind === "submitting"}
+                className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-slate-800 transition-all shadow-md shadow-slate-200 mt-2 cursor-pointer disabled:opacity-60 disabled:cursor-wait"
               >
-                <Play size={18} />
-                Approve {medications.length} Medication{medications.length !== 1 ? 's' : ''}
+                {submitState.kind === "submitting" ? (
+                  <>
+                    <Loader2 size={18} className="animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    <Play size={18} />
+                    Approve {medications.length} Medication{medications.length !== 1 ? 's' : ''}
+                  </>
+                )}
               </button>
             </div>
           </div>
