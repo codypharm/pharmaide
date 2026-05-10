@@ -17,6 +17,10 @@ class Settings(BaseSettings):
 
     checkpoint_db_path: str = "./pharmaide.db"
 
+    # Default points at the local docker-compose Postgres. Override via
+    # PHARMAIDE_DATABASE_URL in CI or any deployed environment.
+    database_url: str = "postgresql+asyncpg://pharmaide:pharmaide@localhost:5432/pharmaide"
+
     # Defaults to False so a forgotten env var in any deployed environment
     # leaves the dev-only /debug/graph route unmounted, not exposed.
     debug_routes_enabled: bool = False

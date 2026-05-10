@@ -1,0 +1,24 @@
+# Local dev Postgres for the backend. NOT for production.
+# Tests use testcontainers — they spin up their own ephemeral Postgres
+# and don't talk to this one.
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: pharmaide-postgres
+    environment:
+      POSTGRES_USER: pharmaide
+      POSTGRES_PASSWORD: pharmaide
+      POSTGRES_DB: pharmaide
+    ports:
+      - "5432:5432"
+    volumes:
+      - pharmaide-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pharmaide"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  pharmaide-postgres-data:
