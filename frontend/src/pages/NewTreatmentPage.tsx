@@ -68,6 +68,12 @@ export default function NewTreatmentPage() {
     setMedications(meds => meds.map(m => (m.id === id ? { ...m, ...patch } : m)));
   };
 
+  const scrollToBanner = () => {
+    // Banner lives at the top of the form. Without this, the pharmacist
+    // submits from the bottom button and never sees the response.
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const handleSubmit = async () => {
     setFieldErrors({});
     setSubmitState({ kind: "submitting" });
@@ -100,6 +106,7 @@ export default function NewTreatmentPage() {
         treatmentId: result.treatment_id,
         patientId: result.patient_id,
       });
+      scrollToBanner();
       // Reset form so the pharmacist can register the next patient.
       setPatientName("");
       setPatientDob("");
@@ -149,6 +156,7 @@ export default function NewTreatmentPage() {
           requestId: null,
         });
       }
+      scrollToBanner();
     }
   };
 
@@ -486,13 +494,13 @@ export default function NewTreatmentPage() {
           {/* Clinical Extraction Column */}
           <div className="col-span-5 flex flex-col gap-4">
             <div className="bg-white border border-slate-200 rounded-2xl p-4 flex items-start gap-4 shadow-sm">
-              <div className="w-10 h-10 bg-slate-50 text-emerald-600 rounded-xl flex items-center justify-center shrink-0 border border-slate-100">
-                <CheckCircle2 size={20} />
+              <div className="w-10 h-10 bg-slate-50 text-slate-500 rounded-xl flex items-center justify-center shrink-0 border border-slate-100">
+                <ClipboardList size={20} />
               </div>
               <div className="flex-1">
-                <p className="font-bold text-slate-900 text-sm">Extraction Complete</p>
+                <p className="font-bold text-slate-900 text-sm">Regimen Summary</p>
                 <p className="text-xs text-slate-500 mt-1">
-                  AI has processed the document. Review and verify the clinical entities below before proceeding.
+                  Review the medications and treatment objective below, then submit to create the patient record.
                 </p>
               </div>
             </div>
@@ -500,18 +508,14 @@ export default function NewTreatmentPage() {
             <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col gap-6">
               <div className="flex items-center justify-between">
                 <h3 className="font-bold text-slate-900 uppercase tracking-wider text-[11px]">Clinical Extraction Overview</h3>
-                <span className="text-[10px] text-slate-400 font-medium">{medications.length} drug{medications.length !== 1 ? 's' : ''} detected</span>
+                <span className="text-[10px] text-slate-400 font-medium">{medications.length} medicine{medications.length !== 1 ? 's' : ''} detected</span>
               </div>
 
               <div className="space-y-4 max-h-[450px] overflow-y-auto pr-2">
                 {medications.map((med, i) => (
-                  <div key={med.id} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3 relative group transition-all hover:bg-white hover:border-blue-200 cursor-pointer">
+                  <div key={med.id} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3 relative group transition-all hover:bg-white hover:border-blue-200">
                     <div className="flex justify-between items-center border-b border-slate-100 pb-2 mb-2">
                       <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Medication #{i+1}</span>
-                      <div className="flex items-center gap-1.5">
-                        <ShieldCheck size={12} className="text-emerald-500" />
-                        <span className="text-[9px] font-bold text-emerald-600 uppercase">Verified</span>
-                      </div>
                     </div>
                     <div className="flex flex-col gap-1">
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Name & Strength</p>
@@ -555,8 +559,8 @@ export default function NewTreatmentPage() {
 
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-start gap-3">
                   <AlertCircle size={16} className="text-slate-400 mt-0.5 shrink-0" />
-                  <p className="text-xs text-slate-600 leading-relaxed font-medium">
-                    Cross-referencing RxNorm... Potential allergy flag detected for Penicillin class.
+                  <p className="text-xs text-slate-500 leading-relaxed font-medium italic">
+                    RxNorm grounding and allergy / interaction checks will run when the agent activates this treatment (Sprint 3).
                   </p>
                 </div>
               </div>
@@ -582,52 +586,32 @@ export default function NewTreatmentPage() {
           </div>
         </div>
 
-        {/* Review & Schedule Cadence Section */}
+        {/* Schedule preview — populated by Sprint 3 once the schedule
+            generator and "Start Cycle" action ship. Today this is an
+            honest placeholder, not mock data dressed as real data. */}
         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mb-8">
           <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
             <div>
-              <h3 className="font-bold text-slate-900">Review & Schedule Cadence</h3>
-              <p className="text-xs text-slate-500 mt-0.5">Proposed automated communication schedule based on regimen.</p>
+              <h3 className="font-bold text-slate-900">Schedule Preview</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Generated when the pharmacist clicks "Start Cycle" on an active treatment (coming next sprint).
+              </p>
             </div>
             <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
-              <ShieldCheck size={14} className="text-emerald-500" />
-              HIPAA Compliant Scheduling
+              <ShieldCheck size={14} className="text-slate-300" />
+              Awaiting activation
             </div>
           </div>
-          
-          <table className="w-full text-left">
-            <thead>
-              <tr className="bg-slate-50/20 border-b border-slate-100">
-                <th className="px-6 py-4 text-[11px] font-bold tracking-wider text-slate-400 uppercase">Day</th>
-                <th className="px-6 py-4 text-[11px] font-bold tracking-wider text-slate-400 uppercase">Scheduled Time</th>
-                <th className="px-6 py-4 text-[11px] font-bold tracking-wider text-slate-400 uppercase">Message Type</th>
-                <th className="px-6 py-4 text-[11px] font-bold tracking-wider text-slate-400 uppercase">Content Preview</th>
-                <th className="px-6 py-4 text-[11px] font-bold tracking-wider text-slate-400 uppercase">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {[
-                { day: "Day 01", time: "09:00 AM", type: "Adherence Check", content: "Good morning! Just a reminder to take your first dose of Amoxicillin...", status: "Pending" },
-                { day: "Day 01", time: "02:00 PM", type: "Side Effect Screen", content: "Hi Eleanor, checking in to see if you're experiencing any nausea or stomach discomfort...", status: "Pending" },
-                { day: "Day 02", time: "09:00 AM", type: "Adherence Check", content: "Good morning! Ready for Day 2? Please confirm once you've taken your dose.", status: "Pending" },
-              ].map((row, i) => (
-                <tr key={i} className="hover:bg-slate-50/50 transition-colors group cursor-pointer">
-                  <td className="px-6 py-4 text-sm font-bold text-slate-900">{row.day}</td>
-                  <td className="px-6 py-4 text-sm text-slate-600 font-mono">{row.time}</td>
-                  <td className="px-6 py-4 text-sm">
-                    <span className="flex items-center gap-2 font-medium text-slate-700">
-                      <MessageSquare size={14} className="text-blue-500" />
-                      {row.type}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-slate-500 italic max-w-md truncate">"{row.content}"</td>
-                  <td className="px-6 py-4">
-                    <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-[10px] font-bold uppercase rounded tracking-wider">{row.status}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+
+          <div className="p-12 flex flex-col items-center justify-center text-center bg-slate-50/30">
+            <div className="w-12 h-12 bg-white text-slate-300 rounded-2xl flex items-center justify-center mb-4 border border-slate-100">
+              <MessageSquare size={20} />
+            </div>
+            <p className="text-sm font-bold text-slate-700">No schedule yet</p>
+            <p className="text-xs text-slate-500 font-medium max-w-md mt-2">
+              The agent's WhatsApp check-in cadence is derived from each medication's frequency × duration once you submit and start the cycle. It will appear here.
+            </p>
+          </div>
         </div>
       </div>
     </div>
