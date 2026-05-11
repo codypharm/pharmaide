@@ -75,3 +75,29 @@ export type TreatmentDetail = {
 export function getTreatment(id: string): Promise<TreatmentDetail> {
   return getJson<TreatmentDetail>(`/treatments/${id}`);
 }
+
+// GET /treatments — paginated list. Mirrors backend TreatmentList.
+
+export type TreatmentListItem = {
+  patient: PatientView;
+  treatment: TreatmentView;
+  medication_count: number;
+  first_medication_name: string | null;
+};
+
+export type TreatmentList = {
+  items: TreatmentListItem[];
+};
+
+export type ListTreatmentsParams = {
+  limit?: number;
+  offset?: number;
+};
+
+export function listTreatments(params: ListTreatmentsParams = {}): Promise<TreatmentList> {
+  const query = new URLSearchParams();
+  if (params.limit !== undefined) query.set("limit", String(params.limit));
+  if (params.offset !== undefined) query.set("offset", String(params.offset));
+  const qs = query.toString();
+  return getJson<TreatmentList>(qs ? `/treatments?${qs}` : "/treatments");
+}
