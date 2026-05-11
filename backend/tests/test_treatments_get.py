@@ -44,6 +44,9 @@ async def test_get_returns_full_lineage_after_create(app_client: AsyncClient) ->
     assert detail["patient"]["phone"] == "+18005551212"
     assert detail["treatment"]["clinical_objective"] == "Monitor for cough"
     assert detail["treatment"]["status"] == "pending"
+    # created_at is needed by the Treatment Detail page header.
+    assert isinstance(detail["treatment"]["created_at"], str)
+    assert detail["treatment"]["created_at"].endswith("Z") or "+" in detail["treatment"]["created_at"]
     assert len(detail["medications"]) == 1
     assert detail["medications"][0]["name"] == "Lisinopril"
     assert detail["medications"][0]["ordinal"] == 0

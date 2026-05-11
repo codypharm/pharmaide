@@ -6,7 +6,7 @@ e.g. when audit_log gains an actor_id column, the wire shape doesn't
 need to change.
 """
 
-from datetime import date
+from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
@@ -65,6 +65,7 @@ class TreatmentView(BaseModel):
     patient_id: UUID
     status: str
     clinical_objective: str | None
+    created_at: datetime
 
     model_config = {"from_attributes": True}
 
