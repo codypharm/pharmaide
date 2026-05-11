@@ -455,6 +455,19 @@ export default function NewTreatmentPage() {
                         </div>
                       ))}
                     </div>
+
+                    {/* Anchored at the bottom of the list so the
+                        pharmacist can add the next medication right
+                        where they just finished typing — no scroll-up
+                        to the section header. */}
+                    <button
+                      type="button"
+                      onClick={addMedication}
+                      className="w-full py-3 border-2 border-dashed border-slate-200 hover:border-blue-400 hover:bg-blue-50/40 text-slate-500 hover:text-blue-700 rounded-2xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                      <Plus size={14} />
+                      Add another medication
+                    </button>
                   </div>
                 )}
               </div>
