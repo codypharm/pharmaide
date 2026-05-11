@@ -1,4 +1,4 @@
-import { Activity, Bell, FileText, Flame, Map, Search, ShieldCheck, Plus, ChevronRight } from "lucide-react";
+import { Activity, Bell, ClipboardList, FileText, Flame, Map, Search, ShieldCheck, Plus, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { Outlet, NavLink, Link } from "react-router-dom";
 
@@ -34,16 +34,29 @@ function DashboardApp() {
           </NavLink>
           <NavLink
             to="/dashboard/surveillance"
-            className={({ isActive }) => 
+            className={({ isActive }) =>
               `flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                isActive 
-                  ? "bg-slate-100 text-slate-900" 
+                isActive
+                  ? "bg-slate-100 text-slate-900"
                   : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
               }`
             }
           >
             <Activity size={18} />
             Surveillance
+          </NavLink>
+          <NavLink
+            to="/dashboard/ingestions"
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                isActive
+                  ? "bg-slate-100 text-slate-900"
+                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+              }`
+            }
+          >
+            <ClipboardList size={18} />
+            Treatments
           </NavLink>
           <NavLink
             to="/dashboard/heatmaps"

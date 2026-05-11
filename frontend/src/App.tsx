@@ -8,6 +8,7 @@ import AdherenceHeatmapsPage from "./pages/AdherenceHeatmapsPage";
 import KnowledgeBasePage from "./pages/KnowledgeBasePage";
 import SystemAuditsPage from "./pages/SystemAuditsPage";
 import NewTreatmentPage from "./pages/NewTreatmentPage";
+import IngestionsPage from "./pages/IngestionsPage";
 import TreatmentDetailPage from "./pages/TreatmentDetailPage";
 import PharmacistProfilePage from "./pages/PharmacistProfilePage";
 import "./styles.css";
@@ -25,6 +26,7 @@ function App() {
           <Route path="knowledge" element={<KnowledgeBasePage />} />
           <Route path="audits" element={<SystemAuditsPage />} />
           <Route path="new-treatment" element={<NewTreatmentPage />} />
+          <Route path="ingestions" element={<IngestionsPage />} />
           <Route path="treatments/:id" element={<TreatmentDetailPage />} />
           <Route path="profile" element={<PharmacistProfilePage />} />
         </Route>
