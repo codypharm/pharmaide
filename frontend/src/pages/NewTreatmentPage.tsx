@@ -7,6 +7,7 @@ import {
   Edit3, Loader2, Lock
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { ApiError, ConflictError, ValidationError } from "../api/client";
 import { createTreatment } from "../api/treatments";
 
@@ -19,12 +20,6 @@ interface Medication {
   frequency: string;
   duration: string;
 }
-
-type SubmitState =
-  | { kind: "idle" }
-  | { kind: "submitting" }
-  | { kind: "success"; treatmentId: string; patientId: string }
-  | { kind: "error"; title: string; detail: string; requestId: string | null };
 
 type FieldErrors = Partial<Record<"name" | "dob" | "mrn" | "phone", string>>;
 
@@ -44,7 +39,8 @@ export default function NewTreatmentPage() {
   const [patientPhone, setPatientPhone] = useState("");
   const [clinicalObjective, setClinicalObjective] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
-  const [submitState, setSubmitState] = useState<SubmitState>({ kind: "idle" });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [dragActive, setDragActive] = useState(false);
 
   const addMedication = () => {
@@ -52,7 +48,7 @@ export default function NewTreatmentPage() {
       id: crypto.randomUUID(),
       name: "",
       dosage: "",
-      frequency: "Once Daily (QD)",
+      frequency: "",
       duration: "",
     };
     setMedications([...medications, newMed]);
@@ -68,15 +64,10 @@ export default function NewTreatmentPage() {
     setMedications(meds => meds.map(m => (m.id === id ? { ...m, ...patch } : m)));
   };
 
-  const scrollToBanner = () => {
-    // Banner lives at the top of the form. Without this, the pharmacist
-    // submits from the bottom button and never sees the response.
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
   const handleSubmit = async () => {
+    setShowConfirm(false);
     setFieldErrors({});
-    setSubmitState({ kind: "submitting" });
+    setIsSubmitting(true);
 
     try {
       const result = await createTreatment({
@@ -101,12 +92,10 @@ export default function NewTreatmentPage() {
         ingestion_method: "structured",
       });
 
-      setSubmitState({
-        kind: "success",
-        treatmentId: result.treatment_id,
-        patientId: result.patient_id,
+      toast.success("Treatment created", {
+        description: `Treatment ID: ${result.treatment_id.slice(0, 8)}… · Patient ID: ${result.patient_id.slice(0, 8)}…`,
+        duration: 6000,
       });
-      scrollToBanner();
       // Reset form so the pharmacist can register the next patient.
       setPatientName("");
       setPatientDob("");
@@ -114,16 +103,13 @@ export default function NewTreatmentPage() {
       setPatientPhone("");
       setClinicalObjective("");
       setMedications([
-        { id: crypto.randomUUID(), name: "", dosage: "", frequency: "Once Daily (QD)", duration: "" },
+        { id: crypto.randomUUID(), name: "", dosage: "", frequency: "", duration: "" },
       ]);
     } catch (err) {
       if (err instanceof ConflictError) {
         setFieldErrors({ mrn: "This MRN already exists. Please verify or use a different identifier." });
-        setSubmitState({
-          kind: "error",
-          title: "Patient already registered",
-          detail: "An existing patient has this MRN. Update the field and try again.",
-          requestId: err.requestId,
+        toast.error("Patient already registered", {
+          description: "An existing patient has this MRN. Update the field and try again.",
         });
       } else if (err instanceof ValidationError) {
         const next: FieldErrors = {};
@@ -135,28 +121,20 @@ export default function NewTreatmentPage() {
           }
         }
         setFieldErrors(next);
-        setSubmitState({
-          kind: "error",
-          title: "Validation failed",
-          detail: "Please correct the highlighted fields and try again.",
-          requestId: err.requestId,
+        toast.error("Validation failed", {
+          description: "Please correct the highlighted fields and try again.",
         });
       } else if (err instanceof ApiError) {
-        setSubmitState({
-          kind: "error",
-          title: "Server error",
-          detail: `Reference ID: ${err.requestId ?? "unknown"}. Please retry; if it keeps failing, share the reference ID with the team.`,
-          requestId: err.requestId,
+        toast.error("Server error", {
+          description: `Reference ID: ${err.requestId ?? "unknown"}. Please retry; if it keeps failing, share the reference ID with the team.`,
         });
       } else {
-        setSubmitState({
-          kind: "error",
-          title: "Network error",
-          detail: "Could not reach the server. Check your connection and try again.",
-          requestId: null,
+        toast.error("Network error", {
+          description: "Could not reach the server. Check your connection and try again.",
         });
       }
-      scrollToBanner();
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -200,41 +178,9 @@ export default function NewTreatmentPage() {
           <option value="Once Monthly" />
         </datalist>
 
-        {submitState.kind === "success" && (
-          <div role="status" className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-start gap-3">
-            <CheckCircle2 size={20} className="text-emerald-600 mt-0.5 shrink-0" />
-            <div className="flex-1">
-              <p className="font-bold text-emerald-900 text-sm">Treatment created</p>
-              <p className="text-xs text-emerald-700 mt-0.5 font-mono">
-                Treatment ID: {submitState.treatmentId} · Patient ID: {submitState.patientId}
-              </p>
-            </div>
-            <button
-              onClick={() => setSubmitState({ kind: "idle" })}
-              className="text-emerald-700 hover:text-emerald-900"
-              aria-label="Dismiss"
-            >
-              <X size={16} />
-            </button>
-          </div>
-        )}
-
-        {submitState.kind === "error" && (
-          <div role="alert" className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
-            <AlertCircle size={20} className="text-red-600 mt-0.5 shrink-0" />
-            <div className="flex-1">
-              <p className="font-bold text-red-900 text-sm">{submitState.title}</p>
-              <p className="text-xs text-red-700 mt-0.5">{submitState.detail}</p>
-            </div>
-            <button
-              onClick={() => setSubmitState({ kind: "idle" })}
-              className="text-red-700 hover:text-red-900"
-              aria-label="Dismiss"
-            >
-              <X size={16} />
-            </button>
-          </div>
-        )}
+        {/* Submit feedback now lives in toasts mounted from App.tsx.
+            Inline field-level errors below stay (they belong next to the
+            input they describe). */}
 
         {/* Patient Selection Card */}
         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden p-6 flex flex-col gap-6">
@@ -508,7 +454,7 @@ export default function NewTreatmentPage() {
             <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col gap-6">
               <div className="flex items-center justify-between">
                 <h3 className="font-bold text-slate-900 uppercase tracking-wider text-[11px]">Clinical Extraction Overview</h3>
-                <span className="text-[10px] text-slate-400 font-medium">{medications.length} medicine{medications.length !== 1 ? 's' : ''} detected</span>
+                <span className="text-[10px] text-slate-400 font-medium">{medications.filter(m => m.name.trim()).length} medicine{medications.filter(m => m.name.trim()).length !== 1 ? 's' : ''} detected</span>
               </div>
 
               <div className="space-y-4 max-h-[450px] overflow-y-auto pr-2">
@@ -566,11 +512,11 @@ export default function NewTreatmentPage() {
               </div>
 
               <button
-                onClick={handleSubmit}
-                disabled={submitState.kind === "submitting"}
+                onClick={() => setShowConfirm(true)}
+                disabled={isSubmitting}
                 className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-slate-800 transition-all shadow-md shadow-slate-200 mt-2 cursor-pointer disabled:opacity-60 disabled:cursor-wait"
               >
-                {submitState.kind === "submitting" ? (
+                {isSubmitting ? (
                   <>
                     <Loader2 size={18} className="animate-spin" />
                     Submitting...
@@ -578,7 +524,7 @@ export default function NewTreatmentPage() {
                 ) : (
                   <>
                     <Play size={18} />
-                    Approve {medications.length} Medication{medications.length !== 1 ? 's' : ''}
+                    Review &amp; Approve {medications.filter(m => m.name.trim()).length} Medication{medications.filter(m => m.name.trim()).length !== 1 ? 's' : ''}
                   </>
                 )}
               </button>
@@ -612,6 +558,132 @@ export default function NewTreatmentPage() {
               The agent's WhatsApp check-in cadence is derived from each medication's frequency × duration once you submit and start the cycle. It will appear here.
             </p>
           </div>
+        </div>
+      </div>
+
+      {showConfirm && (
+        <ConfirmTreatmentModal
+          patient={{ name: patientName, dob: patientDob, mrn: patientMrn, phone: patientPhone }}
+          objective={clinicalObjective}
+          medications={medications.filter(m => m.name.trim())}
+          onCancel={() => setShowConfirm(false)}
+          onConfirm={handleSubmit}
+          submitting={isSubmitting}
+        />
+      )}
+    </div>
+  );
+}
+
+interface ConfirmTreatmentModalProps {
+  patient: { name: string; dob: string; mrn: string; phone: string };
+  objective: string;
+  medications: Medication[];
+  onCancel: () => void;
+  onConfirm: () => void;
+  submitting: boolean;
+}
+
+function ConfirmTreatmentModal({
+  patient, objective, medications, onCancel, onConfirm, submitting,
+}: ConfirmTreatmentModalProps) {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="confirm-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/50 backdrop-blur-sm"
+      onClick={onCancel}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-2xl w-full max-h-[90vh] flex flex-col"
+      >
+        <div className="p-6 border-b border-slate-100 flex items-start justify-between">
+          <div>
+            <h2 id="confirm-title" className="font-bold text-slate-900 text-lg">Confirm treatment</h2>
+            <p className="text-xs text-slate-500 mt-1">
+              Review the entered data. Once confirmed, the patient and treatment records are created in the database.
+            </p>
+          </div>
+          <button
+            onClick={onCancel}
+            className="text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+            aria-label="Close confirmation"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="p-6 overflow-y-auto flex flex-col gap-6">
+          <section>
+            <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Patient</h3>
+            <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 grid grid-cols-2 gap-y-2 gap-x-6 text-sm">
+              <div><span className="text-slate-500">Name:</span> <span className="font-bold text-slate-900">{patient.name || "—"}</span></div>
+              <div><span className="text-slate-500">DOB:</span> <span className="font-mono text-slate-900">{patient.dob || "—"}</span></div>
+              <div><span className="text-slate-500">MRN:</span> <span className="font-mono text-slate-900">{patient.mrn || "—"}</span></div>
+              <div><span className="text-slate-500">Phone:</span> <span className="font-mono text-slate-900">{patient.phone || "—"}</span></div>
+            </div>
+          </section>
+
+          <section>
+            <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Treatment Objective</h3>
+            <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 text-sm text-slate-700 italic">
+              {objective.trim() ? `"${objective.trim()}"` : <span className="text-slate-400 not-italic">No objective entered.</span>}
+            </div>
+          </section>
+
+          <section>
+            <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">
+              Medications ({medications.length})
+            </h3>
+            {medications.length === 0 ? (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
+                No medications entered. Add at least one before confirming.
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {medications.map((m, i) => (
+                  <div key={m.id} className="bg-slate-50 border border-slate-100 rounded-xl p-4 text-sm">
+                    <div className="flex items-baseline justify-between mb-1">
+                      <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">#{i + 1}</span>
+                      <span className="font-bold text-slate-900">{m.name} {m.dosage}</span>
+                    </div>
+                    <div className="text-xs text-slate-600 text-right">
+                      {m.frequency || "—"} · {m.duration || "—"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+
+        <div className="p-6 border-t border-slate-100 flex items-center justify-between gap-3">
+          <button
+            onClick={onCancel}
+            disabled={submitting}
+            className="px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all disabled:opacity-50 cursor-pointer"
+          >
+            Cancel &amp; edit
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={submitting || medications.length === 0}
+            className="px-6 py-2.5 bg-slate-900 text-white rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-slate-800 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+          >
+            {submitting ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                Submitting…
+              </>
+            ) : (
+              <>
+                <CheckCircle2 size={16} />
+                Confirm &amp; create
+              </>
+            )}
+          </button>
         </div>
       </div>
     </div>

@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { Toaster } from "sonner";
 import DashboardApp from "./DashboardApp";
 import LandingPage from "./pages/LandingPage";
 import TriageQueuePage from "./pages/TriageQueuePage";
@@ -13,6 +14,7 @@ import "./styles.css";
 function App() {
   return (
     <BrowserRouter>
+      <Toaster position="top-right" richColors closeButton expand />
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/dashboard" element={<DashboardApp />}>
