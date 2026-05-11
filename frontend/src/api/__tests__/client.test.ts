@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, ConflictError, postJson } from "../client";
+import { ApiError, ConflictError, NotFoundError, getJson, postJson } from "../client";
 
 function mockFetch(response: {
   status: number;
@@ -57,7 +57,35 @@ describe("postJson", () => {
       expect((err as ConflictError).requestId).toBe("req_test_123");
     }
   });
+});
 
+describe("getJson", () => {
+  it("returns the parsed body on 2xx", async () => {
+    mockFetch({ status: 200, body: { id: "t1", status: "pending" } });
+    const result = await getJson("/treatments/t1");
+    expect(result).toEqual({ id: "t1", status: "pending" });
+  });
+
+  it("throws NotFoundError on 404 with the error code", async () => {
+    mockFetch({ status: 404, body: { detail: { error: "treatment_not_found" } } });
+
+    await expect(getJson("/treatments/missing")).rejects.toThrow(NotFoundError);
+    try {
+      await getJson("/treatments/missing");
+    } catch (err) {
+      expect(err).toBeInstanceOf(NotFoundError);
+      expect((err as NotFoundError).errorCode).toBe("treatment_not_found");
+      expect((err as NotFoundError).requestId).toBe("req_test_123");
+    }
+  });
+
+  it("throws ApiError on 500", async () => {
+    mockFetch({ status: 500, body: { error: "internal_error" } });
+    await expect(getJson("/treatments/x")).rejects.toThrow(ApiError);
+  });
+});
+
+describe("postJson 500", () => {
   it("throws ApiError on 500 with request_id breadcrumb", async () => {
     mockFetch({
       status: 500,

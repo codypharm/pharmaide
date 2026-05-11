@@ -6,7 +6,7 @@ const DEFAULT_BASE_URL = "http://localhost:8000";
 
 function baseUrl(): string {
   // Vite exposes import.meta.env at build time. Fall back to the local
-  // backend so first-clone dev works without a .env file.
+  // backend so first-clone dev works without a .env file
   return import.meta.env.VITE_API_BASE_URL ?? DEFAULT_BASE_URL;
 }
 
@@ -21,7 +21,12 @@ export class ApiError extends Error {
   requestId: string | null;
   body: unknown;
 
-  constructor(status: number, requestId: string | null, body: unknown, message: string) {
+  constructor(
+    status: number,
+    requestId: string | null,
+    body: unknown,
+    message: string,
+  ) {
     super(message);
     this.status = status;
     this.requestId = requestId;
@@ -43,6 +48,15 @@ export class ConflictError extends ApiError {
 
   constructor(requestId: string | null, body: unknown, errorCode: string) {
     super(409, requestId, body, errorCode);
+    this.errorCode = errorCode;
+  }
+}
+
+export class NotFoundError extends ApiError {
+  errorCode: string;
+
+  constructor(requestId: string | null, body: unknown, errorCode: string) {
+    super(404, requestId, body, errorCode);
     this.errorCode = errorCode;
   }
 }
@@ -81,7 +95,31 @@ export async function postJson<TRequest, TResponse>(
   );
 }
 
-function isPydanticErrorBody(body: unknown): body is { detail: ValidationFieldError[] } {
+export async function getJson<TResponse>(path: string): Promise<TResponse> {
+  const response = await fetch(`${baseUrl()}${path}`, { method: "GET" });
+  const requestId = response.headers.get("X-Request-ID");
+  const text = await response.text();
+  const parsed: unknown = text ? JSON.parse(text) : null;
+
+  if (response.ok) {
+    return parsed as TResponse;
+  }
+
+  if (response.status === 404 && isErrorEnvelope(parsed)) {
+    throw new NotFoundError(requestId, parsed, parsed.detail.error);
+  }
+
+  throw new ApiError(
+    response.status,
+    requestId,
+    parsed,
+    `Request failed: ${response.status}`,
+  );
+}
+
+function isPydanticErrorBody(
+  body: unknown,
+): body is { detail: ValidationFieldError[] } {
   return (
     typeof body === "object" &&
     body !== null &&

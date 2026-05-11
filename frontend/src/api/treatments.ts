@@ -1,7 +1,7 @@
 // Typed wrapper around POST /treatments. Mirrors backend
 // app/api/schemas.py — see the locked Sprint 2 plan for the contract.
 
-import { postJson } from "./client";
+import { getJson, postJson } from "./client";
 
 export type IngestionMethod = "structured" | "manual" | "vision";
 
@@ -36,4 +36,42 @@ export function createTreatment(
   payload: TreatmentCreatePayload,
 ): Promise<CreateTreatmentResponse> {
   return postJson<TreatmentCreatePayload, CreateTreatmentResponse>("/treatments", payload);
+}
+
+// GET /treatments/:id — mirrors backend TreatmentDetail.
+
+export type PatientView = {
+  id: string;
+  name: string;
+  dob: string;
+  mrn: string;
+  phone: string;
+};
+
+export type TreatmentView = {
+  id: string;
+  patient_id: string;
+  status: string;
+  clinical_objective: string | null;
+  created_at: string; // ISO 8601
+};
+
+export type MedicationView = {
+  id: string;
+  name: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  objective: string | null;
+  ordinal: number;
+};
+
+export type TreatmentDetail = {
+  patient: PatientView;
+  treatment: TreatmentView;
+  medications: MedicationView[];
+};
+
+export function getTreatment(id: string): Promise<TreatmentDetail> {
+  return getJson<TreatmentDetail>(`/treatments/${id}`);
 }
