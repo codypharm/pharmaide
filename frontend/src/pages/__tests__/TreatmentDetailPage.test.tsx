@@ -1,5 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import TreatmentDetailPage from "../TreatmentDetailPage";
@@ -35,11 +35,15 @@ const SAMPLE: TreatmentDetail = {
   ],
 };
 
-function renderAt(treatmentId: string) {
+function renderAt(treatmentId: string, { isPrivacyMode = false }: { isPrivacyMode?: boolean } = {}) {
+  // TreatmentDetailPage reads isPrivacyMode via useOutletContext, so it must
+  // be rendered as a nested route under a parent that supplies the context.
   return render(
     <MemoryRouter initialEntries={[`/dashboard/treatments/${treatmentId}`]}>
       <Routes>
-        <Route path="/dashboard/treatments/:id" element={<TreatmentDetailPage />} />
+        <Route element={<Outlet context={{ isPrivacyMode }} />}>
+          <Route path="/dashboard/treatments/:id" element={<TreatmentDetailPage />} />
+        </Route>
       </Routes>
     </MemoryRouter>,
   );
@@ -82,6 +86,19 @@ describe("TreatmentDetailPage", () => {
     renderAt(SAMPLE.treatment.id);
 
     await waitFor(() => expect(screen.getByText(/treatment not found/i)).toBeTruthy());
+  });
+
+  it("blurs all PHI fields when privacy mode is on", async () => {
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(SAMPLE);
+
+    renderAt(SAMPLE.treatment.id, { isPrivacyMode: true });
+
+    const name = await screen.findByText("Eleanor Vance");
+    const mrn = screen.getByText("PHA-AB12CD34");
+    const phone = screen.getByText("+18005551212");
+    expect(name.className).toMatch(/blur-sm/);
+    expect(mrn.className).toMatch(/blur-sm/);
+    expect(phone.className).toMatch(/blur-sm/);
   });
 
   it("shows a generic error state with the request id on other failures", async () => {

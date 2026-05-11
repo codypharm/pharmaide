@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useOutletContext, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   ClipboardList,
@@ -11,6 +11,10 @@ import {
 
 import { ApiError, NotFoundError } from "../api/client";
 import { getTreatment, type TreatmentDetail } from "../api/treatments";
+
+type OutletContext = {
+  isPrivacyMode: boolean;
+};
 
 type FetchState =
   | { kind: "loading" }
@@ -30,6 +34,7 @@ function formatCreatedAt(iso: string): string {
 
 export default function TreatmentDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const { isPrivacyMode } = useOutletContext<OutletContext>();
   const [state, setState] = useState<FetchState>({ kind: "loading" });
 
   useEffect(() => {
@@ -64,7 +69,7 @@ export default function TreatmentDetailPage() {
         {state.kind === "error" && <ErrorCard requestId={state.requestId} />}
         {state.kind === "ok" && (
           <>
-            <PatientCard data={state.data} />
+            <PatientCard data={state.data} isPrivacyMode={isPrivacyMode} />
             <TreatmentCard data={state.data} />
             <MedicationsCard data={state.data} />
           </>
@@ -169,26 +174,41 @@ function Section({
   );
 }
 
-function Field({ label, value }: { label: string; value: string }) {
+function Field({
+  label,
+  value,
+  valueClassName = "",
+}: {
+  label: string;
+  value: string;
+  valueClassName?: string;
+}) {
   return (
     <div>
       <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
         {label}
       </div>
-      <div className="text-sm text-slate-900 tabular-nums">{value}</div>
+      <div className={`text-sm text-slate-900 tabular-nums ${valueClassName}`}>{value}</div>
     </div>
   );
 }
 
-function PatientCard({ data }: { data: TreatmentDetail }) {
+function PatientCard({
+  data,
+  isPrivacyMode,
+}: {
+  data: TreatmentDetail;
+  isPrivacyMode: boolean;
+}) {
   const p = data.patient;
+  const phi = isPrivacyMode ? "blur-sm select-none" : "";
   return (
     <Section title="Patient" icon={<User size={16} />}>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-        <Field label="Name" value={p.name} />
-        <Field label="MRN" value={p.mrn} />
-        <Field label="Date of Birth" value={p.dob} />
-        <Field label="Phone" value={p.phone} />
+        <Field label="Name" value={p.name} valueClassName={phi} />
+        <Field label="MRN" value={p.mrn} valueClassName={phi} />
+        <Field label="Date of Birth" value={p.dob} valueClassName={phi} />
+        <Field label="Phone" value={p.phone} valueClassName={phi} />
       </div>
     </Section>
   );
