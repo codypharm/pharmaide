@@ -2,8 +2,11 @@
 
 Schema is Postgres-shaped (UUID, JSONB, TIMESTAMPTZ) because the
 production target is CockroachDB Serverless, which is wire-compatible.
-Server-side defaults (gen_random_uuid, now()) keep id/timestamp logic
-out of Python so concurrent inserts can't race on it.
+Server-side defaults (gen_random_uuid, clock_timestamp) keep id/timestamp
+logic out of Python so concurrent inserts can't race on it. clock_timestamp
+(not now/transaction_timestamp) gives statement-level resolution so rows
+written inside the same transaction get distinct created_at values — a
+must-have for audit-trail / triage-feed ordering.
 
 Forward-hook columns (langgraph_thread_id, rxnorm_id, audit_log.actor_id)
 are nullable in this slice and get populated by later sprints.
@@ -37,7 +40,7 @@ class Patient(Base):
     # the routing consumer exists.
     phone: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=text("now()")
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
     )
 
     treatments: Mapped[list["Treatment"]] = relationship(
@@ -63,7 +66,7 @@ class Treatment(Base):
     # Populated by Sprint 3 when the LangGraph thread is materialised.
     langgraph_thread_id: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=text("now()")
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
     )
 
     patient: Mapped[Patient] = relationship(back_populates="treatments")
@@ -96,7 +99,7 @@ class Medication(Base):
     # Populated by Sprint 3 via RxNorm API after pharmacist approval.
     rxnorm_id: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=text("now()")
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
     )
 
     treatment: Mapped[Treatment] = relationship(back_populates="medications")
@@ -117,7 +120,7 @@ class AuditLogEntry(Base):
     # Per HIPAA "minimum necessary," PHI stays out of this column.
     payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=text("now()")
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
     )
 
     __table_args__ = (Index("idx_audit_log_resource", "resource_type", "resource_id"),)
