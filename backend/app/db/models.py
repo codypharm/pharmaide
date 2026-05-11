@@ -31,6 +31,10 @@ class Patient(Base):
     # until multi-tenant lands.
     mrn: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     # Stored E.164 normalised by the wire-layer Pydantic validator.
+    # NOT unique — duplicates currently allowed. WhatsApp routing in
+    # Sprint 5 will decide the policy: UNIQUE(phone), UNIQUE(phone,
+    # status='active'), or warn-but-allow with a lookup. Defer until
+    # the routing consumer exists.
     phone: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
