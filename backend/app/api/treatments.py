@@ -8,16 +8,22 @@ here — the service owns the transaction; this module owns HTTP semantics
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas import (
     CreateTreatmentRequest,
     CreateTreatmentResponse,
     TreatmentDetail,
+    TreatmentList,
 )
 from app.db.engine import get_session
-from app.services.treatments import MRNConflict, create_treatment, get_treatment
+from app.services.treatments import (
+    MRNConflict,
+    create_treatment,
+    get_treatment,
+    list_treatments,
+)
 
 # FastAPI's modern dependency form. Prevents the lint trap where
 # Depends() looks like a side-effecting default value.
@@ -38,6 +44,18 @@ async def post_treatment(
         return await create_treatment(session, body)
     except MRNConflict as exc:
         raise HTTPException(status_code=409, detail={"error": "mrn_already_exists"}) from exc
+
+
+@router.get(
+    "/treatments",
+    response_model=TreatmentList,
+)
+async def list_treatments_route(
+    session: SessionDep,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> TreatmentList:
+    return await list_treatments(session, limit=limit, offset=offset)
 
 
 @router.get(

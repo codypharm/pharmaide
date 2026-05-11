@@ -19,6 +19,8 @@ from app.api.schemas import (
     MedicationView,
     PatientView,
     TreatmentDetail,
+    TreatmentList,
+    TreatmentListItem,
     TreatmentView,
 )
 from app.db.models import AuditLogEntry, Medication, Patient, Treatment
@@ -112,3 +114,29 @@ async def get_treatment(session: AsyncSession, treatment_id: UUID) -> TreatmentD
         treatment=TreatmentView.model_validate(treatment),
         medications=[MedicationView.model_validate(m) for m in treatment.medications],
     )
+
+
+async def list_treatments(
+    session: AsyncSession, limit: int, offset: int
+) -> TreatmentList:
+    # selectinload pre-fetches patient + medications in batched queries so
+    # the list-row mapping below stays sync — no N+1, no awaits in the loop.
+    result = await session.execute(
+        select(Treatment)
+        .order_by(Treatment.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+        .options(selectinload(Treatment.patient), selectinload(Treatment.medications))
+    )
+    treatments = result.scalars().all()
+    items = [
+        TreatmentListItem(
+            patient=PatientView.model_validate(t.patient),
+            treatment=TreatmentView.model_validate(t),
+            medication_count=len(t.medications),
+            # Medications are ordered by ordinal; first row is the lead drug.
+            first_medication_name=t.medications[0].name if t.medications else None,
+        )
+        for t in treatments
+    ]
+    return TreatmentList(items=items)

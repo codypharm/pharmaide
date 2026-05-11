@@ -86,3 +86,20 @@ class TreatmentDetail(BaseModel):
     patient: PatientView
     treatment: TreatmentView
     medications: list[MedicationView]
+
+
+class TreatmentListItem(BaseModel):
+    """Lean row for the GET /treatments list view.
+
+    Trades the full medications array for count + first-name preview so
+    a feed/queue UI can render without per-row roundtrips.
+    """
+
+    patient: PatientView
+    treatment: TreatmentView
+    medication_count: int
+    first_medication_name: str | None
+
+
+class TreatmentList(BaseModel):
+    items: list[TreatmentListItem]
