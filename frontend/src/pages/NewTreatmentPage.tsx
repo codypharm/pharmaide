@@ -34,7 +34,7 @@ export default function NewTreatmentPage() {
   // but disabled — see the tab buttons below for the V1.1 affordance.
   const [method, setMethod] = useState<IngestionMethod>("structured");
   const [medications, setMedications] = useState<Medication[]>([
-    { id: "1", name: "Amoxicillin", dosage: "500 mg", frequency: "Times Daily (TID)", duration: "10 Days" }
+    { id: crypto.randomUUID(), name: "", dosage: "", frequency: "", duration: "" }
   ]);
   // Sprint 2 always creates a new patient — search-existing flow ships
   // when GET /patients?search= lands. The search input renders disabled.
@@ -173,6 +173,24 @@ export default function NewTreatmentPage() {
             Clear Form
           </button>
         </div>
+
+        {/* Shared suggestion list for every medication's frequency input.
+            Pharmacists can pick a common sig or type any custom value —
+            Sprint 3's schedule generator parses whatever lands here. */}
+        <datalist id="frequency-suggestions">
+          <option value="Once Daily (QD)" />
+          <option value="Twice Daily (BID)" />
+          <option value="Three Times Daily (TID)" />
+          <option value="Four Times Daily (QID)" />
+          <option value="Every 4 Hours (Q4H)" />
+          <option value="Every 6 Hours (Q6H)" />
+          <option value="Every 8 Hours (Q8H)" />
+          <option value="Every 12 Hours (Q12H)" />
+          <option value="At Bedtime (QHS)" />
+          <option value="As Needed (PRN)" />
+          <option value="Once Weekly" />
+          <option value="Once Monthly" />
+        </datalist>
 
         {submitState.kind === "success" && (
           <div role="status" className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-start gap-3">
@@ -435,16 +453,16 @@ export default function NewTreatmentPage() {
                             </div>
                             <div className="flex flex-col gap-1.5">
                               <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Frequency</label>
-                              <select
-                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all appearance-none cursor-pointer"
+                              {/* input + datalist: typeahead with common sigs,
+                                  but accepts any freetext for prescriptions
+                                  that don't fit a canonical pattern. */}
+                              <input
+                                list="frequency-suggestions"
+                                placeholder="e.g. Twice Daily (BID), Every 8 Hours, PRN"
+                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all"
                                 value={med.frequency}
                                 onChange={(e) => updateMedication(med.id, { frequency: e.target.value })}
-                              >
-                                <option>Once Daily (QD)</option>
-                                <option>Twice Daily (BID)</option>
-                                <option>Times Daily (TID)</option>
-                                <option>Every 8 Hours</option>
-                              </select>
+                              />
                             </div>
                             <div className="flex flex-col gap-1.5">
                               <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Duration</label>
