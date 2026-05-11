@@ -107,7 +107,11 @@ export default function NewTreatmentPage() {
 
       toast.success("Treatment created", {
         description: `Treatment ID: ${result.treatment_id.slice(0, 8)}… · Patient ID: ${result.patient_id.slice(0, 8)}…`,
-        duration: 6000,
+        duration: 8000,
+        action: {
+          label: "View",
+          onClick: () => navigate(`/dashboard/treatments/${result.treatment_id}`),
+        },
       });
       // Reset form so the pharmacist can register the next patient.
       setPatientName("");
