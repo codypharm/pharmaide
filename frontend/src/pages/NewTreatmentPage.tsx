@@ -4,7 +4,7 @@ import {
   CheckCircle2, AlertCircle, MessageSquare,
   Play, X, ShieldCheck,
   Upload, Type, ClipboardList, Trash2,
-  Edit3, Loader2, Lock
+  Edit3, Loader2, Lock, Sparkles
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -12,6 +12,19 @@ import { ApiError, ConflictError, ValidationError } from "../api/client";
 import { createTreatment } from "../api/treatments";
 
 type IngestionMethod = "structured" | "manual" | "vision";
+
+// Crockford-style alphabet: no I, O, 0, 1 to avoid hand-transcription
+// errors when a pharmacist reads the MRN aloud or writes it down.
+const MRN_ALPHABET = "ABCDEFGHJKLMNPQRSTVWXYZ23456789";
+
+function generateMrn(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(8));
+  let suffix = "";
+  for (const b of bytes) {
+    suffix += MRN_ALPHABET[b % MRN_ALPHABET.length];
+  }
+  return `PHA-${suffix}`;
+}
 
 interface Medication {
   id: string;
@@ -232,12 +245,23 @@ export default function NewTreatmentPage() {
                 {fieldErrors.dob && <span className="text-[11px] text-red-600">{fieldErrors.dob}</span>}
               </div>
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="patient-mrn" className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">MRN Number</label>
+                <div className="flex items-center justify-between">
+                  <label htmlFor="patient-mrn" className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">MRN Number</label>
+                  <button
+                    type="button"
+                    onClick={() => setPatientMrn(generateMrn())}
+                    className="flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-700 uppercase tracking-wider cursor-pointer"
+                    title="Mint a new MRN if your institution doesn't issue one"
+                  >
+                    <Sparkles size={12} />
+                    Auto-generate
+                  </button>
+                </div>
                 <input
                   id="patient-mrn"
                   value={patientMrn}
                   onChange={(e) => setPatientMrn(e.target.value)}
-                  placeholder="e.g. 882-12-4401"
+                  placeholder="e.g. 882-12-4401 or click Auto-generate"
                   className={`px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none ${fieldErrors.mrn ? "border-red-400" : "border-slate-200"}`}
                 />
                 {fieldErrors.mrn && <span className="text-[11px] text-red-600">{fieldErrors.mrn}</span>}
