@@ -84,27 +84,36 @@ async def analyze_treatment(
     try:
         await asyncio.wait_for(_run_analysis_graph(), timeout=timeout_seconds)
     except TimeoutError:
-        async with session_factory() as session, session.begin():
-            analysis = await session.get(TreatmentAnalysis, analysis_id)
-            if analysis is None:
-                return
+        await mark_analysis_failed(session_factory, analysis_id, "analysis_timeout")
 
-            analysis.status = "failed"
-            analysis.error_text = "analysis_timeout"
-            analysis.completed_at = func.clock_timestamp()
-            session.add(
-                AuditLogEntry(
-                    event_type="analysis_failed",
-                    resource_type="treatment",
-                    resource_id=analysis.treatment_id,
-                    payload={
-                        "treatment_id": str(analysis.treatment_id),
-                        "analysis_id": str(analysis.id),
-                        "error": "analysis_timeout",
-                    },
-                )
+
+async def mark_analysis_failed(
+    session_factory: async_sessionmaker[AsyncSession],
+    analysis_id: UUID,
+    error_text: str,
+) -> None:
+    """Stamp a reserved analysis row failed without exposing PHI in audit data."""
+    async with session_factory() as session, session.begin():
+        analysis = await session.get(TreatmentAnalysis, analysis_id)
+        if analysis is None:
+            return
+
+        analysis.status = "failed"
+        analysis.error_text = error_text
+        analysis.completed_at = func.clock_timestamp()
+        session.add(
+            AuditLogEntry(
+                event_type="analysis_failed",
+                resource_type="treatment",
+                resource_id=analysis.treatment_id,
+                payload={
+                    "treatment_id": str(analysis.treatment_id),
+                    "analysis_id": str(analysis.id),
+                    "error": error_text,
+                },
             )
-            await session.flush()
+        )
+        await session.flush()
 
 
 async def get_latest_analysis(

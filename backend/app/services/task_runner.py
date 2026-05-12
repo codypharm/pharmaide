@@ -11,18 +11,49 @@ from collections.abc import Callable, Coroutine
 from typing import Any
 
 _live_tasks: set[asyncio.Task[Any]] = set()
+_user_tasks: dict[str, set[asyncio.Future[Any]]] = {}
 
 
-def schedule[T](coro_fn: Callable[..., Coroutine[Any, Any, T]], *args: object) -> asyncio.Task[T]:
+class RateLimitExceeded(Exception):
+    """Raised when one user already owns the configured number of live tasks."""
+
+    def __init__(self, user_id: str) -> None:
+        super().__init__(user_id)
+        self.user_id = user_id
+
+
+def _forget_user_task(user_id: str, task: asyncio.Future[Any]) -> None:
+    tasks = _user_tasks.get(user_id)
+    if tasks is None:
+        return
+    tasks.discard(task)
+    if not tasks:
+        _user_tasks.pop(user_id, None)
+
+
+def schedule[T](
+    coro_fn: Callable[..., Coroutine[Any, Any, T]],
+    *args: object,
+    user_id: str | None = None,
+    max_concurrent_per_user: int | None = None,
+) -> asyncio.Task[T]:
     """Start a coroutine in the background and keep it alive until completion.
 
     The module-level set is intentional: the event loop only keeps weak task
     references, so a fire-and-forget task can otherwise be garbage-collected
     before it finishes.
     """
+    if user_id is not None and max_concurrent_per_user is not None:
+        user_tasks = _user_tasks.setdefault(user_id, set())
+        if len(user_tasks) >= max_concurrent_per_user:
+            raise RateLimitExceeded(user_id)
+
     task: asyncio.Task[T] = asyncio.create_task(coro_fn(*args))
     _live_tasks.add(task)
     task.add_done_callback(_live_tasks.discard)
+    if user_id is not None and max_concurrent_per_user is not None:
+        user_tasks.add(task)
+        task.add_done_callback(lambda done_task: _forget_user_task(user_id, done_task))
     return task
 
 

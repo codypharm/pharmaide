@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     # capacity indefinitely. Route-level test overrides use the same bounds.
     analysis_timeout_seconds: int = Field(default=60, gt=0, le=300)
 
+    # Temporary pre-auth guard. Once GCIP lands, the route will use the real
+    # actor id instead of the X-Pharmaide-User-Id development header.
+    max_concurrent_analyses_per_user: int = Field(default=3, gt=0, le=50)
+
 
 # lru_cache so Settings is parsed once per process. Cheap insurance against
 # re-reading the .env file on every Depends(get_settings) call.

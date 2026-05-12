@@ -53,3 +53,52 @@ async def test_drain_waits_for_in_flight_tasks() -> None:
     await drain_task
 
     assert completed is True
+
+
+async def test_schedule_rejects_fourth_task_for_same_user() -> None:
+    """One pharmacist should not be able to flood the local analysis runner."""
+    release = asyncio.Event()
+
+    async def wait_for_release() -> None:
+        await release.wait()
+
+    try:
+        for _ in range(3):
+            task_runner.schedule(
+                wait_for_release,
+                user_id="pharmacist-1",
+                max_concurrent_per_user=3,
+            )
+
+        with pytest.raises(task_runner.RateLimitExceeded):
+            task_runner.schedule(
+                wait_for_release,
+                user_id="pharmacist-1",
+                max_concurrent_per_user=3,
+            )
+    finally:
+        release.set()
+
+
+async def test_schedule_counts_different_users_separately() -> None:
+    release = asyncio.Event()
+
+    async def wait_for_release() -> None:
+        await release.wait()
+
+    try:
+        for _ in range(3):
+            task_runner.schedule(
+                wait_for_release,
+                user_id="pharmacist-1",
+                max_concurrent_per_user=3,
+            )
+
+        task = task_runner.schedule(
+            wait_for_release,
+            user_id="pharmacist-2",
+            max_concurrent_per_user=3,
+        )
+        assert not task.done()
+    finally:
+        release.set()

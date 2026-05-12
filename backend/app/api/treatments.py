@@ -8,7 +8,7 @@ here — the service owns the transaction; this module owns HTTP semantics
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -28,6 +28,7 @@ from app.services.analysis import (
     analyze_treatment,
     create_pending_analysis,
     get_latest_analysis,
+    mark_analysis_failed,
 )
 from app.services.treatments import (
     MRNConflict,
@@ -93,6 +94,7 @@ async def post_treatment_analysis(
     session_factory: SessionFactoryDep,
     settings: SettingsDep,
     timeout: Annotated[int | None, Query(gt=0, le=300)] = None,
+    user_id: Annotated[str, Header(alias="X-Pharmaide-User-Id", min_length=1)] = "anonymous",
 ) -> AnalyzeTreatmentResponse:
     try:
         # Commit the pending row before scheduling. Otherwise the background
@@ -104,7 +106,22 @@ async def post_treatment_analysis(
     except AnalysisInProgress as exc:
         raise HTTPException(status_code=409, detail={"error": "analysis_in_progress"}) from exc
     timeout_seconds = timeout if timeout is not None else settings.analysis_timeout_seconds
-    task_runner.schedule(analyze_treatment, session_factory, analysis_id, timeout_seconds)
+    try:
+        task_runner.schedule(
+            analyze_treatment,
+            session_factory,
+            analysis_id,
+            timeout_seconds,
+            user_id=user_id,
+            max_concurrent_per_user=settings.max_concurrent_analyses_per_user,
+        )
+    except task_runner.RateLimitExceeded as exc:
+        await mark_analysis_failed(session_factory, analysis_id, "analysis_rate_limited")
+        raise HTTPException(
+            status_code=429,
+            detail={"error": "analysis_rate_limited"},
+            headers={"Retry-After": "30"},
+        ) from exc
     return AnalyzeTreatmentResponse(analysis_id=analysis_id)
 
 

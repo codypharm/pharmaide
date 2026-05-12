@@ -39,7 +39,7 @@ async def test_post_treatment_analyze_starts_analysis(
 ) -> None:
     scheduled: list[tuple[object, tuple[object, ...]]] = []
 
-    def capture_schedule(coro_fn: object, *args: object) -> None:
+    def capture_schedule(coro_fn: object, *args: object, **_kwargs: object) -> None:
         scheduled.append((coro_fn, args))
 
     monkeypatch.setattr(task_runner, "schedule", capture_schedule)
@@ -68,7 +68,7 @@ async def test_post_treatment_analyze_passes_timeout_override(
 ) -> None:
     scheduled: list[tuple[object, tuple[object, ...]]] = []
 
-    def capture_schedule(coro_fn: object, *args: object) -> None:
+    def capture_schedule(coro_fn: object, *args: object, **_kwargs: object) -> None:
         scheduled.append((coro_fn, args))
 
     monkeypatch.setattr(task_runner, "schedule", capture_schedule)
@@ -82,6 +82,29 @@ async def test_post_treatment_analyze_passes_timeout_override(
     assert response.status_code == 202, response.text
     assert len(scheduled) == 1
     assert scheduled[0][1][2] == 12
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_treatment_analyze_returns_429_when_user_is_rate_limited(
+    app_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def reject_schedule(*_args: object, **_kwargs: object) -> None:
+        raise task_runner.RateLimitExceeded("pharmacist-1")
+
+    monkeypatch.setattr(task_runner, "schedule", reject_schedule)
+
+    create_response = await app_client.post("/treatments", json=_treatment_body("ANALYZE-005"))
+    assert create_response.status_code == 201
+    treatment_id = UUID(create_response.json()["treatment_id"])
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/analyze",
+        headers={"X-Pharmaide-User-Id": "pharmacist-1"},
+    )
+
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "30"
+    assert response.json() == {"detail": {"error": "analysis_rate_limited"}}
 
 
 @pytest.mark.usefixtures("postgres_container")
@@ -121,7 +144,7 @@ async def test_post_treatment_analyze_background_task_starts_analysis(
 async def test_post_treatment_analyze_rejects_duplicate_active_analysis(
     app_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(task_runner, "schedule", lambda *_args: None)
+    monkeypatch.setattr(task_runner, "schedule", lambda *_args, **_kwargs: None)
 
     create_response = await app_client.post("/treatments", json=_treatment_body("ANALYZE-002"))
     assert create_response.status_code == 201
