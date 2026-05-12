@@ -76,6 +76,8 @@ class AnalysisResult(AnalysisEnvelope):
     schedule: Schedule | None
     reasoning: ClinicalReasoning | None
     degraded: bool
+    partial_results: bool = False
+    completed_stages: list[str] = Field(default_factory=list)
 
 
 class MedicationState(TypedDict):
@@ -100,3 +102,4 @@ class AnalysisState(TypedDict, total=False):
     reasoning: ClinicalReasoning | None
     degraded: bool
     needs_llm_parse: NotRequired[bool]
+    completed_stages: NotRequired[list[str]]

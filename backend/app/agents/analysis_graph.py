@@ -1,6 +1,6 @@
 """LangGraph composition for Sprint 3 treatment analysis."""
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from datetime import datetime
 
@@ -21,6 +21,16 @@ from app.agents.nodes.schedule import generate_schedule
 from app.agents.nodes.summarize import summarize_treatment
 
 AnalysisGraph = CompiledStateGraph[AnalysisState, None, AnalysisState, AnalysisState]
+AnalysisNode = Callable[[AnalysisState], Awaitable[AnalysisState]]
+
+
+class AnalysisGraphFailure(Exception):
+    """Raised when a graph node fails after earlier nodes produced usable state."""
+
+    def __init__(self, *, state: AnalysisState, stage: str) -> None:
+        self.state = state
+        self.stage = stage
+        super().__init__(f"analysis graph failed during {stage}")
 
 
 def build_analysis_graph(
@@ -41,25 +51,40 @@ def build_analysis_graph(
     # RxNorm and schedule generation need runtime resources that should be
     # reused for the whole graph run, not recreated inside each node call.
     async def ground(state: AnalysisState) -> AnalysisState:
-        return await ground_medications(state, rxnorm_client=rxnorm_client)
+        return await _run_stage(
+            state,
+            "ground_medications",
+            lambda current: ground_medications(current, rxnorm_client=rxnorm_client),
+        )
+
+    async def interactions(state: AnalysisState) -> AnalysisState:
+        return await _run_stage(state, "check_interactions", check_interactions)
 
     async def schedule(state: AnalysisState) -> AnalysisState:
-        return await generate_schedule(state, start_dt=start_dt)
+        return await _run_stage(
+            state,
+            "generate_schedule",
+            lambda current: generate_schedule(current, start_dt=start_dt),
+        )
 
     # Tests pass typed PydanticAI test agents here; production can omit them and
     # let summarize_treatment build the real OpenAI-backed agents lazily.
     async def summarize(state: AnalysisState) -> AnalysisState:
-        return await summarize_treatment(
+        return await _run_stage(
             state,
-            agent=summary_agent,
-            schedule_agent=schedule_agent,
+            "summarize_treatment",
+            lambda current: summarize_treatment(
+                current,
+                agent=summary_agent,
+                schedule_agent=schedule_agent,
+            ),
         )
 
     builder: StateGraph[AnalysisState, None, AnalysisState, AnalysisState] = StateGraph(
         AnalysisState
     )
     builder.add_node("ground", ground)
-    builder.add_node("interactions", check_interactions)
+    builder.add_node("interactions", interactions)
     builder.add_node("schedule", schedule)
     builder.add_node("summarize", summarize)
     builder.add_edge(START, "ground")
@@ -68,6 +93,31 @@ def build_analysis_graph(
     builder.add_edge("schedule", "summarize")
     builder.add_edge("summarize", END)
     return builder.compile(checkpointer=checkpointer)
+
+
+async def _run_stage(
+    state: AnalysisState,
+    stage: str,
+    node: AnalysisNode,
+) -> AnalysisState:
+    """Record successful stages while preserving the last usable state on failure."""
+    try:
+        result = await node(state)
+    except AnalysisGraphFailure:
+        raise
+    except Exception as exc:
+        raise AnalysisGraphFailure(state=state, stage=stage) from exc
+    return _with_completed_stage(result, stage)
+
+
+def _with_completed_stage(state: AnalysisState, stage: str) -> AnalysisState:
+    """Append stage progress without mutating a node's returned state in place."""
+    result = state.copy()
+    completed = list(result.get("completed_stages", []))
+    if stage not in completed:
+        completed.append(stage)
+    result["completed_stages"] = completed
+    return result
 
 
 @asynccontextmanager

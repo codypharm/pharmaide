@@ -62,6 +62,12 @@ async def test_analysis_graph_runs_grounding_ddi_schedule_and_summary(
     assert len(state["schedule"].reminders) == 5
     assert state["reasoning"] is not None
     assert state["reasoning"].summary == "Analysis completed for pharmacist review."
+    assert state["completed_stages"] == [
+        "ground_medications",
+        "check_interactions",
+        "generate_schedule",
+        "summarize_treatment",
+    ]
 
 
 def _state() -> AnalysisState:

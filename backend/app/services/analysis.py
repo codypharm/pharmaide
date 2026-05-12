@@ -20,7 +20,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
 
-from app.agents.analysis_graph import open_analysis_graph
+from app.agents.analysis_graph import AnalysisGraphFailure, open_analysis_graph
 from app.agents.analysis_schemas import (
     AnalysisResult,
     AnalysisState,
@@ -149,6 +149,14 @@ async def analyze_treatment(
     except TimeoutError:
         await mark_analysis_failed(session_factory, analysis_id, "analysis_timeout")
         return
+    except AnalysisGraphFailure as exc:
+        await mark_analysis_failed(
+            session_factory,
+            analysis_id,
+            "analysis_failed",
+            partial_state=exc.state,
+        )
+        raise
     except Exception:
         await mark_analysis_failed(session_factory, analysis_id, "analysis_failed")
         raise
@@ -286,13 +294,19 @@ async def _mark_analysis_completed(
         )
 
 
-def _result_from_state(state: AnalysisState) -> AnalysisResult:
+def _result_from_state(
+    state: AnalysisState,
+    *,
+    partial_results: bool = False,
+) -> AnalysisResult:
     return AnalysisResult(
         groundings=state.get("groundings", []),
         ddi_warnings=state.get("ddi_warnings", []),
         schedule=state.get("schedule"),
         reasoning=state.get("reasoning"),
         degraded=state.get("degraded", False),
+        partial_results=partial_results,
+        completed_stages=state.get("completed_stages", []),
     )
 
 
@@ -300,6 +314,8 @@ async def mark_analysis_failed(
     session_factory: async_sessionmaker[AsyncSession],
     analysis_id: UUID,
     error_text: str,
+    *,
+    partial_state: AnalysisState | None = None,
 ) -> None:
     """Stamp a reserved analysis row failed without exposing PHI in audit data."""
     async with session_factory() as session, session.begin():
@@ -311,6 +327,11 @@ async def mark_analysis_failed(
 
         analysis.status = "failed"
         analysis.error_text = error_text
+        if partial_state is not None:
+            analysis.result = _result_from_state(
+                partial_state,
+                partial_results=True,
+            ).model_dump(mode="json")
         analysis.completed_at = func.clock_timestamp()
         session.add(
             AuditLogEntry(

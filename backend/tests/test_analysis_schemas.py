@@ -60,6 +60,8 @@ def test_analysis_result_composes_groundings_ddis_schedule_and_reasoning() -> No
     assert payload["schedule"]["reminders"][0]["human_label"] == "Day 1, 08:00"
     assert payload["reasoning"]["summary"] == "Grounded one medication."
     assert payload["degraded"] is False
+    assert payload["partial_results"] is False
+    assert payload["completed_stages"] == []
 
 
 def test_ddi_warning_rejects_unknown_severity() -> None:

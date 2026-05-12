@@ -15,6 +15,8 @@ from pydantic_ai.models.test import TestModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.agents import analysis_graph as analysis_graph_module
+from app.agents.analysis_graph import AnalysisGraphFailure
 from app.agents.analysis_schemas import AnalysisState
 from app.agents.nodes.summarize import build_summary_agent
 from app.db.models import AuditLogEntry, Medication, Patient, Treatment, TreatmentAnalysis
@@ -23,6 +25,7 @@ from app.services.analysis import (
     analyze_treatment,
     create_pending_analysis,
 )
+from app.services.rxnorm import clear_rxnorm_cache
 
 
 async def _create_treatment(db_session: AsyncSession) -> Treatment:
@@ -229,6 +232,51 @@ async def test_analyze_treatment_runs_graph_and_persists_completed_result(
         )
     ).scalars()
     assert [audit.event_type for audit in audits] == ["analysis_started", "analysis_completed"]
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_analyze_treatment_persists_partial_result_after_graph_failure(
+    db_session: AsyncSession,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clear_rxnorm_cache()
+    treatment = await _create_treatment(db_session)
+    medication = await _add_medication(
+        db_session,
+        treatment,
+        name="Lisinopril",
+        frequency="BID",
+        ordinal=0,
+    )
+    analysis_id = await create_pending_analysis(db_session, treatment.id)
+    session_factory = async_sessionmaker(db_session.bind, expire_on_commit=False)
+
+    async def failing_interactions(state: AnalysisState) -> AnalysisState:
+        raise RuntimeError("ddi provider crashed")
+
+    monkeypatch.setattr(analysis_graph_module, "check_interactions", failing_interactions)
+
+    with pytest.raises(AnalysisGraphFailure):
+        await analyze_treatment(
+            session_factory,
+            analysis_id,
+            checkpoint_db_path=str(tmp_path / "analysis.db"),
+            rxnorm_base_url="https://rxnav.test/REST",
+            rxnorm_transport=httpx.MockTransport(_rxnorm_handler),
+        )
+
+    analysis = await db_session.get(TreatmentAnalysis, analysis_id)
+    assert analysis is not None
+    assert analysis.status == "failed"
+    assert analysis.error_text == "analysis_failed"
+    assert analysis.result is not None
+    result = cast("dict[str, Any]", analysis.result)
+    groundings = cast("list[dict[str, Any]]", result["groundings"])
+    assert result["partial_results"] is True
+    assert result["completed_stages"] == ["ground_medications"]
+    assert groundings[0]["medication_id"] == str(medication.id)
+    assert groundings[0]["rxcui"] == "29046"
 
 
 @pytest.mark.usefixtures("postgres_container")
