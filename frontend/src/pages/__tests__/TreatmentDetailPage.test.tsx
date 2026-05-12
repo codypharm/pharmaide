@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -110,5 +111,30 @@ describe("TreatmentDetailPage", () => {
 
     await waitFor(() => expect(screen.getByText(/could not load/i)).toBeTruthy());
     expect(screen.getByText(/req_500/)).toBeTruthy();
+  });
+
+  it("lets the pharmacist start analysis from the Reasoning tab", async () => {
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(SAMPLE);
+    vi.spyOn(treatmentsApi, "getAnalysis").mockResolvedValue(null);
+    const trigger = vi
+      .spyOn(treatmentsApi, "triggerAnalysis")
+      .mockResolvedValue({ analysis_id: "analysis-1" });
+    const user = userEvent.setup();
+
+    renderAt(SAMPLE.treatment.id);
+
+    await screen.findByText("Eleanor Vance");
+    const reasoningTab = screen.getByRole("tab", { name: /reasoning/i });
+    expect(reasoningTab).toHaveClass("cursor-pointer");
+    expect(reasoningTab).toHaveAttribute("aria-selected", "false");
+
+    await user.click(reasoningTab);
+
+    expect(reasoningTab).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText(/no analysis has been run/i)).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: /run analysis/i }));
+
+    expect(trigger).toHaveBeenCalledWith(SAMPLE.treatment.id);
   });
 });

@@ -7,10 +7,13 @@ import {
   User,
   Loader2,
   AlertCircle,
+  Brain,
+  Play,
 } from "lucide-react";
 
 import { ApiError, NotFoundError } from "../api/client";
-import { getTreatment, type TreatmentDetail } from "../api/treatments";
+import { getTreatment, triggerAnalysis, type TreatmentDetail } from "../api/treatments";
+import { useAnalysisStatus } from "../hooks/useAnalysisStatus";
 
 type OutletContext = {
   isPrivacyMode: boolean;
@@ -36,6 +39,7 @@ export default function TreatmentDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { isPrivacyMode } = useOutletContext<OutletContext>();
   const [state, setState] = useState<FetchState>({ kind: "loading" });
+  const [activeTab, setActiveTab] = useState<"overview" | "reasoning">("overview");
 
   useEffect(() => {
     if (!id) return;
@@ -69,12 +73,64 @@ export default function TreatmentDetailPage() {
         {state.kind === "error" && <ErrorCard requestId={state.requestId} />}
         {state.kind === "ok" && (
           <>
-            <PatientCard data={state.data} isPrivacyMode={isPrivacyMode} />
-            <TreatmentCard data={state.data} />
-            <MedicationsCard data={state.data} />
+            <TreatmentTabs activeTab={activeTab} onChange={setActiveTab} />
+            {activeTab === "overview" ? (
+              <>
+                <PatientCard data={state.data} isPrivacyMode={isPrivacyMode} />
+                <TreatmentCard data={state.data} />
+                <MedicationsCard data={state.data} />
+              </>
+            ) : (
+              <ReasoningTab treatmentId={state.data.treatment.id} />
+            )}
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+function TreatmentTabs({
+  activeTab,
+  onChange,
+}: {
+  activeTab: "overview" | "reasoning";
+  onChange: (tab: "overview" | "reasoning") => void;
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label="Treatment detail sections"
+      className="inline-flex w-fit gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1"
+    >
+      <button
+        role="tab"
+        aria-selected={activeTab === "overview"}
+        type="button"
+        onClick={() => onChange("overview")}
+        className={`inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm font-bold transition-colors ${
+          activeTab === "overview"
+            ? "border-slate-300 bg-white text-slate-950"
+            : "border-transparent text-slate-500 hover:bg-white hover:text-slate-800"
+        }`}
+      >
+        <ClipboardList size={15} />
+        Overview
+      </button>
+      <button
+        role="tab"
+        aria-selected={activeTab === "reasoning"}
+        type="button"
+        onClick={() => onChange("reasoning")}
+        className={`inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm font-bold transition-colors ${
+          activeTab === "reasoning"
+            ? "border-slate-300 bg-white text-slate-950"
+            : "border-transparent text-slate-500 hover:bg-white hover:text-slate-800"
+        }`}
+      >
+        <Brain size={15} />
+        Reasoning
+      </button>
     </div>
   );
 }
@@ -149,6 +205,77 @@ function ErrorCard({ requestId }: { requestId: string | null }) {
         </p>
       </div>
     </div>
+  );
+}
+
+function ReasoningTab({ treatmentId }: { treatmentId: string }) {
+  const analysis = useAnalysisStatus(treatmentId);
+  const [isStarting, setIsStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
+
+  async function handleStartAnalysis(): Promise<void> {
+    setIsStarting(true);
+    setStartError(null);
+    try {
+      await triggerAnalysis(treatmentId);
+      await analysis.refresh();
+    } catch {
+      setStartError("Could not start analysis.");
+    } finally {
+      setIsStarting(false);
+    }
+  }
+
+  if (analysis.status === "loading") {
+    return <LoadingCard />;
+  }
+
+  if (analysis.error) {
+    return (
+      <Section title="Reasoning" icon={<Brain size={16} />}>
+        <div className="flex items-start gap-3 text-sm text-red-700">
+          <AlertCircle size={18} className="mt-0.5" />
+          <span>Could not load analysis status.</span>
+        </div>
+      </Section>
+    );
+  }
+
+  if (analysis.data === null) {
+    return (
+      <Section title="Reasoning" icon={<Brain size={16} />}>
+        <div className="flex items-center justify-between gap-6">
+          <div>
+            <p className="text-sm font-bold text-slate-900">
+              No analysis has been run for this treatment.
+            </p>
+            {startError && <p className="mt-2 text-sm text-red-700">{startError}</p>}
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleStartAnalysis()}
+            disabled={isStarting}
+            className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+          >
+            {isStarting ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
+            Run Analysis
+          </button>
+        </div>
+      </Section>
+    );
+  }
+
+  return (
+    <Section title="Reasoning" icon={<Brain size={16} />}>
+      <div className="flex items-center justify-between">
+        <Field label="Analysis Status" value={analysis.data.status} />
+        {analysis.data.result?.partial_results && (
+          <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold uppercase tracking-wider text-amber-800">
+            Partial Analysis
+          </span>
+        )}
+      </div>
+    </Section>
   );
 }
 
