@@ -27,6 +27,8 @@ class Settings(BaseSettings):
 
     log_mode: Literal["console", "json"] = "console"
 
+    rxnorm_base_url: str = "https://rxnav.nlm.nih.gov/REST"
+
 
 # lru_cache so Settings is parsed once per process. Cheap insurance against
 # re-reading the .env file on every Depends(get_settings) call.
