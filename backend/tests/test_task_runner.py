@@ -1,7 +1,10 @@
 """In-process task runner."""
 
 import asyncio
+import os
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -116,3 +119,31 @@ async def test_schedule_counts_different_users_separately() -> None:
         assert not task.done()
     finally:
         release.set()
+
+
+def test_cleanup_checkpoints_deletes_only_stale_checkpoint_files(tmp_path: Path) -> None:
+    checkpoint = tmp_path / "analysis.db"
+    stale_checkpoint = checkpoint
+    stale_wal = tmp_path / "analysis.db-wal"
+    fresh_shm = tmp_path / "analysis.db-shm"
+    unrelated = tmp_path / "other.db"
+
+    for path in (stale_checkpoint, stale_wal, fresh_shm, unrelated):
+        path.write_bytes(b"x" * 1024)
+
+    old = (datetime.now(UTC) - timedelta(days=8)).timestamp()
+    fresh = datetime.now(UTC).timestamp()
+    for path in (stale_checkpoint, stale_wal, unrelated):
+        path.touch()
+        os.utime(path, (old, old))
+
+    os.utime(fresh_shm, (fresh, fresh))
+
+    result = task_runner.cleanup_checkpoints(str(checkpoint), max_age_days=7)
+
+    assert result.deleted_count == 2
+    assert result.freed_mb > 0
+    assert not stale_checkpoint.exists()
+    assert not stale_wal.exists()
+    assert fresh_shm.exists()
+    assert unrelated.exists()

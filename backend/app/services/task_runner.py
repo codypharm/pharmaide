@@ -7,7 +7,10 @@ implementation while callers keep the same `schedule(coro_fn, *args)` shape.
 """
 
 import asyncio
+import time
 from collections.abc import Callable, Coroutine
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 _live_tasks: set[asyncio.Task[Any]] = set()
@@ -20,6 +23,12 @@ class RateLimitExceeded(Exception):
     def __init__(self, user_id: str) -> None:
         super().__init__(user_id)
         self.user_id = user_id
+
+
+@dataclass(frozen=True)
+class CheckpointCleanupResult:
+    deleted_count: int
+    freed_mb: float
 
 
 def _forget_user_task(user_id: str, task: asyncio.Future[Any]) -> None:
@@ -66,3 +75,36 @@ async def drain() -> None:
     """
     while _live_tasks:
         await asyncio.gather(*_live_tasks, return_exceptions=True)
+
+
+def cleanup_checkpoints(
+    checkpoint_db_path: str,
+    *,
+    max_age_days: int = 7,
+) -> CheckpointCleanupResult:
+    """Delete stale SQLite checkpoint files for the configured graph store."""
+    checkpoint = Path(checkpoint_db_path)
+    cutoff = time.time() - (max_age_days * 86_400)
+    deleted_count = 0
+    freed_bytes = 0
+
+    for path in _checkpoint_file_candidates(checkpoint):
+        if not path.is_file() or path.stat().st_mtime >= cutoff:
+            continue
+        size = path.stat().st_size
+        path.unlink()
+        deleted_count += 1
+        freed_bytes += size
+
+    return CheckpointCleanupResult(
+        deleted_count=deleted_count,
+        freed_mb=round(freed_bytes / 1_000_000, 3),
+    )
+
+
+def _checkpoint_file_candidates(checkpoint: Path) -> tuple[Path, Path, Path]:
+    return (
+        checkpoint,
+        checkpoint.with_name(f"{checkpoint.name}-wal"),
+        checkpoint.with_name(f"{checkpoint.name}-shm"),
+    )
