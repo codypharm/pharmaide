@@ -73,6 +73,9 @@ class Treatment(Base):
     medications: Mapped[list["Medication"]] = relationship(
         back_populates="treatment", cascade="all, delete-orphan", order_by="Medication.ordinal"
     )
+    analyses: Mapped[list["TreatmentAnalysis"]] = relationship(
+        back_populates="treatment", cascade="all, delete-orphan"
+    )
 
 
 class Medication(Base):
@@ -103,6 +106,39 @@ class Medication(Base):
     )
 
     treatment: Mapped[Treatment] = relationship(back_populates="medications")
+
+
+class TreatmentAnalysis(Base):
+    __tablename__ = "treatment_analyses"
+
+    id: Mapped[UUID] = mapped_column(
+        Uuid, primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    treatment_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey("treatments.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    result: Mapped[dict[str, object] | None] = mapped_column(JSONB)
+    error_text: Mapped[str | None] = mapped_column(Text)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+    )
+
+    treatment: Mapped[Treatment] = relationship(back_populates="analyses")
+
+    __table_args__ = (
+        Index("idx_treatment_analyses_treatment_created", "treatment_id", created_at.desc()),
+        Index(
+            "uq_treatment_analyses_active_treatment",
+            "treatment_id",
+            unique=True,
+            postgresql_where=text("status IN ('pending', 'running')"),
+        ),
+    )
 
 
 class AuditLogEntry(Base):
