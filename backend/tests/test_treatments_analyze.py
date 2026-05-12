@@ -1,5 +1,6 @@
 """POST /treatments/{id}/analyze endpoint."""
 
+import json
 from uuid import UUID, uuid4
 
 import pytest
@@ -8,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 import app.api.treatments as treatments_api
+from app.agents.analysis_schemas import AnalysisState
 from app.db.models import AuditLogEntry, TreatmentAnalysis
 from app.services import task_runner
 
@@ -167,6 +169,63 @@ async def test_post_treatment_analyze_background_task_starts_analysis(
         "treatment_id": str(treatment_id),
         "analysis_id": str(analysis_id),
     }
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_treatment_analyze_audits_successful_run_without_phi(
+    app_client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def fake_graph(*_args: object, **_kwargs: object) -> AnalysisState:
+        return {
+            "groundings": [],
+            "ddi_warnings": [],
+            "degraded": False,
+            "completed_stages": ["ground_medications", "check_interactions"],
+        }
+
+    monkeypatch.setattr("app.services.analysis._run_analysis_graph", fake_graph)
+
+    create_response = await app_client.post("/treatments", json=_treatment_body("ANALYZE-007"))
+    assert create_response.status_code == 201
+    treatment_id = UUID(create_response.json()["treatment_id"])
+
+    response = await app_client.post(f"/treatments/{treatment_id}/analyze")
+    assert response.status_code == 202, response.text
+    analysis_id = UUID(response.json()["analysis_id"])
+
+    await task_runner.drain()
+
+    audits = (
+        await db_session.execute(
+            select(AuditLogEntry)
+            .where(
+                AuditLogEntry.resource_id == treatment_id,
+                AuditLogEntry.event_type.in_(("analysis_started", "analysis_completed")),
+            )
+            .order_by(AuditLogEntry.created_at)
+        )
+    ).scalars().all()
+    assert [audit.event_type for audit in audits] == ["analysis_started", "analysis_completed"]
+    assert all(audit.resource_type == "treatment" for audit in audits)
+
+    started_payload = audits[0].payload
+    completed_payload = audits[1].payload
+    assert started_payload == {
+        "treatment_id": str(treatment_id),
+        "analysis_id": str(analysis_id),
+    }
+    assert completed_payload == {
+        "treatment_id": str(treatment_id),
+        "analysis_id": str(analysis_id),
+        "grounding_count": 0,
+        "ddi_warning_count": 0,
+        "degraded": False,
+    }
+
+    serialised_payloads = json.dumps([audit.payload for audit in audits])
+    assert "Eleanor Vance" not in serialised_payloads
+    assert "+18005551212" not in serialised_payloads
+    assert "ANALYZE-007" not in serialised_payloads
 
 
 @pytest.mark.usefixtures("postgres_container")
