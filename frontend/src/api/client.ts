@@ -95,14 +95,38 @@ export async function postJson<TRequest, TResponse>(
   );
 }
 
+export async function postMultipart<TResponse>(
+  path: string,
+  body: FormData,
+): Promise<TResponse> {
+  const response = await fetch(`${baseUrl()}${path}`, {
+    method: "POST",
+    body,
+  });
+
+  return parseJsonResponse<TResponse>(response);
+}
+
 export async function getJson<TResponse>(path: string): Promise<TResponse> {
   const response = await fetch(`${baseUrl()}${path}`, { method: "GET" });
+  return parseJsonResponse<TResponse>(response);
+}
+
+async function parseJsonResponse<TResponse>(response: Response): Promise<TResponse> {
   const requestId = response.headers.get("X-Request-ID");
   const text = await response.text();
   const parsed: unknown = text ? JSON.parse(text) : null;
 
   if (response.ok) {
     return parsed as TResponse;
+  }
+
+  if (response.status === 422 && isPydanticErrorBody(parsed)) {
+    throw new ValidationError(requestId, parsed.detail);
+  }
+
+  if (response.status === 409 && isErrorEnvelope(parsed)) {
+    throw new ConflictError(requestId, parsed, parsed.detail.error);
   }
 
   if (response.status === 404 && isErrorEnvelope(parsed)) {

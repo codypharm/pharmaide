@@ -9,6 +9,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { ApiError, ConflictError, ValidationError } from "../api/client";
+import { ExtractionError, extractPrescription, type ExtractedPrescription } from "../api/prescriptions";
 import { createTreatment, triggerAnalysis } from "../api/treatments";
 
 type IngestionMethod = "structured" | "manual" | "vision";
@@ -56,6 +57,8 @@ export default function NewTreatmentPage() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [visionFile, setVisionFile] = useState<File | null>(null);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractionError, setExtractionError] = useState<string | null>(null);
 
   const addMedication = () => {
     const newMed: Medication = {
@@ -92,6 +95,41 @@ export default function NewTreatmentPage() {
     event.preventDefault();
     setDragActive(false);
     attachVisionFile(event.dataTransfer.files[0]);
+  };
+
+  const handleExtractPrescription = async () => {
+    if (!visionFile) {
+      return;
+    }
+
+    setIsExtracting(true);
+    setExtractionError(null);
+    try {
+      const prescription = await extractPrescription(visionFile);
+      applyExtractedPrescription(prescription);
+      setMethod("structured");
+      toast.success("Prescription extracted", {
+        description: "Review the prefilled fields before submitting.",
+      });
+    } catch (err) {
+      const message =
+        err instanceof ExtractionError
+          ? extractionErrorMessage(err.errorCode)
+          : "Could not scan this prescription. Try another file or enter it manually.";
+      setExtractionError(message);
+      toast.error("Extraction failed", { description: message });
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
+  const applyExtractedPrescription = (prescription: ExtractedPrescription) => {
+    setPatientName(prescription.patient.name ?? "");
+    setPatientDob(prescription.patient.dob ?? "");
+    setPatientMrn(prescription.patient.mrn ?? generateMrn());
+    setPatientPhone(prescription.patient.phone ?? "");
+    setClinicalObjective(prescription.treatment.clinical_objective ?? "");
+    setMedications(toMedicationDrafts(prescription));
   };
 
   const handleSubmit = async () => {
@@ -391,6 +429,31 @@ export default function NewTreatmentPage() {
                           />
                         </label>
                       </div>
+                      {visionFile && (
+                        <button
+                          type="button"
+                          onClick={handleExtractPrescription}
+                          disabled={isExtracting}
+                          className="mt-4 px-6 py-2.5 bg-slate-900 text-white rounded-xl text-[11px] font-bold uppercase tracking-widest hover:bg-slate-800 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-wait inline-flex items-center gap-2"
+                        >
+                          {isExtracting ? (
+                            <>
+                              <Loader2 size={14} className="animate-spin" />
+                              Extracting...
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles size={14} />
+                              Extract Prescription
+                            </>
+                          )}
+                        </button>
+                      )}
+                      {extractionError && (
+                        <p className="mt-3 text-xs font-semibold text-red-600">
+                          {extractionError}
+                        </p>
+                      )}
                     </div>
 
                     <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 flex items-start gap-3">
@@ -657,6 +720,33 @@ async function startInitialAnalysis(treatmentId: string): Promise<void> {
     toast.warning("Treatment created, analysis not started", {
       description: "Open the Reasoning tab and run analysis manually if it does not start shortly.",
     });
+  }
+}
+
+function toMedicationDrafts(prescription: ExtractedPrescription): Medication[] {
+  const extracted = prescription.medications.map((medication) => ({
+    id: crypto.randomUUID(),
+    name: medication.name ?? "",
+    dosage: medication.dosage ?? "",
+    frequency: medication.frequency ?? "",
+    duration: medication.duration ?? "",
+  }));
+
+  return extracted.length > 0
+    ? extracted
+    : [{ id: crypto.randomUUID(), name: "", dosage: "", frequency: "", duration: "" }];
+}
+
+function extractionErrorMessage(errorCode: string): string {
+  switch (errorCode) {
+    case "image_too_large":
+      return "The prescription file is larger than 10 MB.";
+    case "unsupported_image_type":
+      return "Upload a PNG, JPEG, or PDF prescription.";
+    case "pdf_render_failed":
+      return "This PDF could not be read. Try a clearer scan or use manual entry.";
+    default:
+      return "Could not scan this prescription. Try another file or enter it manually.";
   }
 }
 

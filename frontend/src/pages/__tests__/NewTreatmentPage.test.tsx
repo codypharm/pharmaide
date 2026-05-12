@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import NewTreatmentPage from "../NewTreatmentPage";
 import { ConflictError } from "../../api/client";
+import * as prescriptionsApi from "../../api/prescriptions";
 import * as treatmentsApi from "../../api/treatments";
 
 vi.mock("sonner", () => ({
@@ -79,6 +80,63 @@ describe("NewTreatmentPage", () => {
     fireEvent.drop(dropZone, { dataTransfer: { files: [file] } });
 
     expect(screen.getByText("script.png")).toBeInTheDocument();
+  });
+
+  it("extracts an attached prescription and prefills the treatment form", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(prescriptionsApi, "extractPrescription").mockResolvedValue({
+      patient: {
+        name: "Eleanor Vance",
+        dob: "1955-10-12",
+        mrn: "PHA-AB12CD34",
+        phone: "+18005551212",
+        confidence: { name: 0.91, dob: 0.87, mrn: 0.82, phone: 0.7 },
+      },
+      treatment: {
+        clinical_objective: "Monitor for cough",
+        confidence: { clinical_objective: 0.8 },
+      },
+      medications: [
+        {
+          name: "Lisinopril",
+          dosage: "10 mg",
+          frequency: "Once Daily (QD)",
+          duration: "30 days",
+          objective: null,
+          confidence: {
+            name: 0.95,
+            dosage: 0.93,
+            frequency: 0.9,
+            duration: 0.88,
+            objective: null,
+          },
+        },
+      ],
+      warnings: [],
+    });
+
+    renderPage();
+    await user.click(screen.getByRole("button", { name: /vision/i }));
+    const file = new File(["fake-pdf"], "script.pdf", { type: "application/pdf" });
+    await user.upload(screen.getByLabelText(/browse prescription file/i), file);
+    await user.click(screen.getByRole("button", { name: /extract prescription/i }));
+
+    await waitFor(() => {
+      expect(prescriptionsApi.extractPrescription).toHaveBeenCalledWith(file);
+    });
+    expect(screen.getByLabelText(/full name/i)).toHaveValue("Eleanor Vance");
+    expect(screen.getByLabelText(/date of birth/i)).toHaveValue("1955-10-12");
+    expect(screen.getByLabelText(/mrn number/i)).toHaveValue("PHA-AB12CD34");
+    expect(screen.getByLabelText(/phone number/i)).toHaveValue("+18005551212");
+    expect(screen.getByPlaceholderText(/e.g. amoxicillin/i)).toHaveValue("Lisinopril");
+    expect(screen.getByPlaceholderText(/e.g. 500mg/i)).toHaveValue("10 mg");
+    expect(screen.getByPlaceholderText(/twice daily/i)).toHaveValue("Once Daily (QD)");
+    expect(screen.getByPlaceholderText(/e.g. 10 days/i)).toHaveValue("30 days");
+    expect(screen.getByLabelText(/treatment objective/i)).toHaveValue("Monitor for cough");
+    expect(toast.success).toHaveBeenCalledWith(
+      "Prescription extracted",
+      expect.objectContaining({ description: "Review the prefilled fields before submitting." }),
+    );
   });
 
   it("starts the first analysis automatically after creating a treatment", async () => {

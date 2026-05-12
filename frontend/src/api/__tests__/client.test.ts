@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, ConflictError, NotFoundError, getJson, postJson } from "../client";
+import { ApiError, ConflictError, NotFoundError, getJson, postJson, postMultipart } from "../client";
 
 function mockFetch(response: {
   status: number;
@@ -100,5 +100,24 @@ describe("postJson 500", () => {
       expect((err as ApiError).status).toBe(500);
       expect((err as ApiError).requestId).toBe("req_test_123");
     }
+  });
+});
+
+describe("postMultipart", () => {
+  it("posts FormData without overriding the browser boundary content type", async () => {
+    const fetchSpy = mockFetch({
+      status: 200,
+      body: { patient: {}, treatment: {}, medications: [], warnings: [] },
+    });
+    const form = new FormData();
+    form.append("file", new File(["fake"], "script.png", { type: "image/png" }));
+
+    const result = await postMultipart("/prescriptions/extract", form);
+
+    expect(result).toEqual({ patient: {}, treatment: {}, medications: [], warnings: [] });
+    const [, init] = fetchSpy.mock.calls[0];
+    expect(init?.method).toBe("POST");
+    expect(init?.body).toBe(form);
+    expect(init?.headers).toBeUndefined();
   });
 });
