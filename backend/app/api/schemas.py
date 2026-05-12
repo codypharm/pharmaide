@@ -50,6 +50,10 @@ class CreateTreatmentResponse(BaseModel):
     patient_id: UUID
 
 
+class AnalyzeTreatmentResponse(BaseModel):
+    analysis_id: UUID
+
+
 class PatientView(BaseModel):
     id: UUID
     name: str

@@ -116,6 +116,11 @@ async def get_treatment(session: AsyncSession, treatment_id: UUID) -> TreatmentD
     )
 
 
+async def treatment_exists(session: AsyncSession, treatment_id: UUID) -> bool:
+    result = await session.execute(select(Treatment.id).where(Treatment.id == treatment_id))
+    return result.scalar_one_or_none() is not None
+
+
 async def list_treatments(
     session: AsyncSession, limit: int, offset: int
 ) -> TreatmentList:
