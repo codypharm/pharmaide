@@ -54,6 +54,19 @@ class AnalyzeTreatmentResponse(BaseModel):
     analysis_id: UUID
 
 
+class TreatmentAnalysisView(BaseModel):
+    id: UUID
+    treatment_id: UUID
+    status: str
+    result: dict[str, object] | None
+    error_text: str | None
+    started_at: datetime | None
+    completed_at: datetime | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class PatientView(BaseModel):
     id: UUID
     name: str

@@ -6,7 +6,7 @@ will run the graph and stamp completed/failed outcomes onto the same row.
 
 from uuid import UUID
 
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,3 +49,15 @@ async def analyze_treatment(session: AsyncSession, treatment_id: UUID) -> UUID:
     await session.flush()
 
     return analysis.id
+
+
+async def get_latest_analysis(
+    session: AsyncSession, treatment_id: UUID
+) -> TreatmentAnalysis | None:
+    result = await session.execute(
+        select(TreatmentAnalysis)
+        .where(TreatmentAnalysis.treatment_id == treatment_id)
+        .order_by(TreatmentAnalysis.created_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()

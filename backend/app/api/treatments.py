@@ -9,17 +9,19 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas import (
     AnalyzeTreatmentResponse,
     CreateTreatmentRequest,
     CreateTreatmentResponse,
+    TreatmentAnalysisView,
     TreatmentDetail,
     TreatmentList,
 )
 from app.db.engine import get_session
-from app.services.analysis import AnalysisInProgress, analyze_treatment
+from app.services.analysis import AnalysisInProgress, analyze_treatment, get_latest_analysis
 from app.services.treatments import (
     MRNConflict,
     create_treatment,
@@ -88,3 +90,19 @@ async def post_treatment_analysis(
     except AnalysisInProgress as exc:
         raise HTTPException(status_code=409, detail={"error": "analysis_in_progress"}) from exc
     return AnalyzeTreatmentResponse(analysis_id=analysis_id)
+
+
+@router.get(
+    "/treatments/{treatment_id}/analysis",
+    response_model=TreatmentAnalysisView,
+)
+async def get_treatment_analysis(
+    treatment_id: UUID, session: SessionDep
+) -> TreatmentAnalysisView | Response:
+    if not await treatment_exists(session, treatment_id):
+        raise HTTPException(status_code=404, detail={"error": "treatment_not_found"})
+
+    analysis = await get_latest_analysis(session, treatment_id)
+    if analysis is None:
+        return Response(status_code=204)
+    return TreatmentAnalysisView.model_validate(analysis)
