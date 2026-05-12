@@ -185,6 +185,51 @@ describe("NewTreatmentPage", () => {
     expect(medication).toHaveAttribute("data-extraction-origin", "vision");
   });
 
+  it("marks low-confidence extracted fields and clears that marker when edited", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(prescriptionsApi, "extractPrescription").mockResolvedValue({
+      patient: {
+        name: "Eleanor Vance",
+        dob: null,
+        mrn: null,
+        phone: "+18005551212",
+        confidence: { name: 0.91, phone: 0.62 },
+      },
+      treatment: { clinical_objective: null, confidence: {} },
+      medications: [
+        {
+          name: "Lisinopril",
+          dosage: "10 mg",
+          frequency: "Once Daily (QD)",
+          duration: null,
+          objective: null,
+          confidence: { name: 0.95, dosage: 0.93, frequency: 0.58 },
+        },
+      ],
+      warnings: [],
+    });
+
+    renderPage();
+    await user.click(screen.getByRole("button", { name: /vision/i }));
+    await user.upload(
+      screen.getByLabelText(/browse prescription file/i),
+      new File(["fake-png"], "script.png", { type: "image/png" }),
+    );
+    await user.click(screen.getByRole("button", { name: /scan & prefill form/i }));
+
+    const phone = await screen.findByLabelText(/phone number/i);
+    const frequency = screen.getByPlaceholderText(/twice daily/i);
+    expect(phone).toHaveAttribute("data-extraction-confidence", "low");
+    expect(phone).toHaveAttribute("title", "AI confidence low - verify");
+    expect(frequency).toHaveAttribute("data-extraction-confidence", "low");
+
+    await user.clear(phone);
+    await user.type(phone, "+18005550000");
+
+    expect(phone).not.toHaveAttribute("data-extraction-confidence");
+    expect(frequency).toHaveAttribute("data-extraction-confidence", "low");
+  });
+
   it("starts the first analysis automatically after creating a treatment", async () => {
     vi.spyOn(treatmentsApi, "createTreatment").mockResolvedValue({
       treatment_id: "treatment-1",

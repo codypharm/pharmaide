@@ -39,6 +39,9 @@ type FieldErrors = Partial<Record<"name" | "dob" | "mrn" | "phone", string>>;
 type ExtractionFieldKey = string;
 
 const extractedFieldClass = "border-blue-400 bg-blue-50/30";
+const lowConfidenceFieldClass = "border-amber-500 bg-amber-50/40";
+const LOW_CONFIDENCE_THRESHOLD = 0.7;
+const LOW_CONFIDENCE_TITLE = "AI confidence low - verify";
 
 export default function NewTreatmentPage() {
   const navigate = useNavigate();
@@ -65,6 +68,9 @@ export default function NewTreatmentPage() {
   const [extractedFields, setExtractedFields] = useState<Set<ExtractionFieldKey>>(
     () => new Set(),
   );
+  const [lowConfidenceFields, setLowConfidenceFields] = useState<Set<ExtractionFieldKey>>(
+    () => new Set(),
+  );
 
   const addMedication = () => {
     const newMed: Medication = {
@@ -85,6 +91,14 @@ export default function NewTreatmentPage() {
 
   const clearExtractedField = (key: ExtractionFieldKey) => {
     setExtractedFields((current) => {
+      if (!current.has(key)) {
+        return current;
+      }
+      const next = new Set(current);
+      next.delete(key);
+      return next;
+    });
+    setLowConfidenceFields((current) => {
       if (!current.has(key)) {
         return current;
       }
@@ -153,6 +167,7 @@ export default function NewTreatmentPage() {
     setClinicalObjective(prescription.treatment.clinical_objective ?? "");
     setMedications(medicationDrafts);
     setExtractedFields(extractedFieldKeys(prescription, medicationDrafts));
+    setLowConfidenceFields(lowConfidenceFieldKeys(prescription, medicationDrafts));
   };
 
   const handleSubmit = async () => {
@@ -317,7 +332,9 @@ export default function NewTreatmentPage() {
                   }}
                   placeholder="e.g. Eleanor Vance"
                   data-extraction-origin={extractedFields.has("patient.name") ? "vision" : undefined}
-                  className={`px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none ${fieldErrors.name ? "border-red-400" : extractedFields.has("patient.name") ? extractedFieldClass : "border-slate-200"}`}
+                  data-extraction-confidence={lowConfidenceAttribute(lowConfidenceFields, "patient.name")}
+                  title={lowConfidenceTitle(lowConfidenceFields, "patient.name")}
+                  className={`px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none ${fieldErrors.name ? "border-red-400" : extractionFieldClass(extractedFields, lowConfidenceFields, "patient.name", "border-slate-200")}`}
                 />
                 {fieldErrors.name && <span className="text-[11px] text-red-600">{fieldErrors.name}</span>}
               </div>
@@ -332,7 +349,9 @@ export default function NewTreatmentPage() {
                     clearExtractedField("patient.dob");
                   }}
                   data-extraction-origin={extractedFields.has("patient.dob") ? "vision" : undefined}
-                  className={`px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none ${fieldErrors.dob ? "border-red-400" : extractedFields.has("patient.dob") ? extractedFieldClass : "border-slate-200"}`}
+                  data-extraction-confidence={lowConfidenceAttribute(lowConfidenceFields, "patient.dob")}
+                  title={lowConfidenceTitle(lowConfidenceFields, "patient.dob")}
+                  className={`px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none ${fieldErrors.dob ? "border-red-400" : extractionFieldClass(extractedFields, lowConfidenceFields, "patient.dob", "border-slate-200")}`}
                 />
                 {fieldErrors.dob && <span className="text-[11px] text-red-600">{fieldErrors.dob}</span>}
               </div>
@@ -358,7 +377,9 @@ export default function NewTreatmentPage() {
                   }}
                   placeholder="e.g. 882-12-4401 or click Auto-generate"
                   data-extraction-origin={extractedFields.has("patient.mrn") ? "vision" : undefined}
-                  className={`px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none ${fieldErrors.mrn ? "border-red-400" : extractedFields.has("patient.mrn") ? extractedFieldClass : "border-slate-200"}`}
+                  data-extraction-confidence={lowConfidenceAttribute(lowConfidenceFields, "patient.mrn")}
+                  title={lowConfidenceTitle(lowConfidenceFields, "patient.mrn")}
+                  className={`px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none ${fieldErrors.mrn ? "border-red-400" : extractionFieldClass(extractedFields, lowConfidenceFields, "patient.mrn", "border-slate-200")}`}
                 />
                 {fieldErrors.mrn && <span className="text-[11px] text-red-600">{fieldErrors.mrn}</span>}
               </div>
@@ -374,7 +395,9 @@ export default function NewTreatmentPage() {
                   }}
                   placeholder="+1 800 555 1212"
                   data-extraction-origin={extractedFields.has("patient.phone") ? "vision" : undefined}
-                  className={`px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none ${fieldErrors.phone ? "border-red-400" : extractedFields.has("patient.phone") ? extractedFieldClass : "border-slate-200"}`}
+                  data-extraction-confidence={lowConfidenceAttribute(lowConfidenceFields, "patient.phone")}
+                  title={lowConfidenceTitle(lowConfidenceFields, "patient.phone")}
+                  className={`px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none ${fieldErrors.phone ? "border-red-400" : extractionFieldClass(extractedFields, lowConfidenceFields, "patient.phone", "border-slate-200")}`}
                 />
                 {fieldErrors.phone && <span className="text-[11px] text-red-600">{fieldErrors.phone}</span>}
               </div>
@@ -568,7 +591,9 @@ export default function NewTreatmentPage() {
                               <input
                                 placeholder="e.g. Amoxicillin"
                                 data-extraction-origin={extractedFields.has(medicationFieldKey(med.id, "name")) ? "vision" : undefined}
-                                className={`w-full px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all ${extractedFields.has(medicationFieldKey(med.id, "name")) ? extractedFieldClass : "bg-slate-50 border-slate-200"}`}
+                                data-extraction-confidence={lowConfidenceAttribute(lowConfidenceFields, medicationFieldKey(med.id, "name"))}
+                                title={lowConfidenceTitle(lowConfidenceFields, medicationFieldKey(med.id, "name"))}
+                                className={`w-full px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all ${extractionFieldClass(extractedFields, lowConfidenceFields, medicationFieldKey(med.id, "name"), "bg-slate-50 border-slate-200")}`}
                                 value={med.name}
                                 onChange={(e) => updateMedication(med.id, { name: e.target.value })}
                               />
@@ -578,7 +603,9 @@ export default function NewTreatmentPage() {
                               <input
                                 placeholder="e.g. 500mg"
                                 data-extraction-origin={extractedFields.has(medicationFieldKey(med.id, "dosage")) ? "vision" : undefined}
-                                className={`w-full px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all ${extractedFields.has(medicationFieldKey(med.id, "dosage")) ? extractedFieldClass : "bg-slate-50 border-slate-200"}`}
+                                data-extraction-confidence={lowConfidenceAttribute(lowConfidenceFields, medicationFieldKey(med.id, "dosage"))}
+                                title={lowConfidenceTitle(lowConfidenceFields, medicationFieldKey(med.id, "dosage"))}
+                                className={`w-full px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all ${extractionFieldClass(extractedFields, lowConfidenceFields, medicationFieldKey(med.id, "dosage"), "bg-slate-50 border-slate-200")}`}
                                 value={med.dosage}
                                 onChange={(e) => updateMedication(med.id, { dosage: e.target.value })}
                               />
@@ -592,7 +619,9 @@ export default function NewTreatmentPage() {
                                 list="frequency-suggestions"
                                 placeholder="e.g. Twice Daily (BID), Every 8 Hours, PRN"
                                 data-extraction-origin={extractedFields.has(medicationFieldKey(med.id, "frequency")) ? "vision" : undefined}
-                                className={`w-full px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all ${extractedFields.has(medicationFieldKey(med.id, "frequency")) ? extractedFieldClass : "bg-slate-50 border-slate-200"}`}
+                                data-extraction-confidence={lowConfidenceAttribute(lowConfidenceFields, medicationFieldKey(med.id, "frequency"))}
+                                title={lowConfidenceTitle(lowConfidenceFields, medicationFieldKey(med.id, "frequency"))}
+                                className={`w-full px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all ${extractionFieldClass(extractedFields, lowConfidenceFields, medicationFieldKey(med.id, "frequency"), "bg-slate-50 border-slate-200")}`}
                                 value={med.frequency}
                                 onChange={(e) => updateMedication(med.id, { frequency: e.target.value })}
                               />
@@ -602,7 +631,9 @@ export default function NewTreatmentPage() {
                               <input
                                 placeholder="e.g. 10 days"
                                 data-extraction-origin={extractedFields.has(medicationFieldKey(med.id, "duration")) ? "vision" : undefined}
-                                className={`w-full px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all ${extractedFields.has(medicationFieldKey(med.id, "duration")) ? extractedFieldClass : "bg-slate-50 border-slate-200"}`}
+                                data-extraction-confidence={lowConfidenceAttribute(lowConfidenceFields, medicationFieldKey(med.id, "duration"))}
+                                title={lowConfidenceTitle(lowConfidenceFields, medicationFieldKey(med.id, "duration"))}
+                                className={`w-full px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all ${extractionFieldClass(extractedFields, lowConfidenceFields, medicationFieldKey(med.id, "duration"), "bg-slate-50 border-slate-200")}`}
                                 value={med.duration}
                                 onChange={(e) => updateMedication(med.id, { duration: e.target.value })}
                               />
@@ -693,7 +724,9 @@ export default function NewTreatmentPage() {
                     }}
                     placeholder="e.g. Monitor for ACE-inhibitor cough and dizziness on standing. Confirm the patient takes the morning dose with food."
                     data-extraction-origin={extractedFields.has("treatment.clinical_objective") ? "vision" : undefined}
-                    className={`w-full pl-4 pr-10 py-3 border rounded-xl text-sm min-h-[80px] focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all resize-none ${extractedFields.has("treatment.clinical_objective") ? extractedFieldClass : "bg-slate-50 border-slate-200"}`}
+                    data-extraction-confidence={lowConfidenceAttribute(lowConfidenceFields, "treatment.clinical_objective")}
+                    title={lowConfidenceTitle(lowConfidenceFields, "treatment.clinical_objective")}
+                    className={`w-full pl-4 pr-10 py-3 border rounded-xl text-sm min-h-[80px] focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all resize-none ${extractionFieldClass(extractedFields, lowConfidenceFields, "treatment.clinical_objective", "bg-slate-50 border-slate-200")}`}
                   />
                   <p className="text-[11px] text-slate-500 px-1">
                     Used to focus the agent's check-in questions throughout the treatment cycle.
@@ -831,14 +864,90 @@ function extractedFieldKeys(
   return keys;
 }
 
+function lowConfidenceFieldKeys(
+  prescription: ExtractedPrescription,
+  medicationDrafts: Medication[],
+): Set<ExtractionFieldKey> {
+  const keys = new Set<ExtractionFieldKey>();
+  addIfLowConfidence(keys, "patient.name", prescription.patient.confidence.name);
+  addIfLowConfidence(keys, "patient.dob", prescription.patient.confidence.dob);
+  addIfLowConfidence(keys, "patient.mrn", prescription.patient.confidence.mrn);
+  addIfLowConfidence(keys, "patient.phone", prescription.patient.confidence.phone);
+  addIfLowConfidence(
+    keys,
+    "treatment.clinical_objective",
+    prescription.treatment.confidence.clinical_objective,
+  );
+
+  prescription.medications.forEach((medication, index) => {
+    const draft = medicationDrafts[index];
+    if (!draft) {
+      return;
+    }
+    addIfLowConfidence(keys, medicationFieldKey(draft.id, "name"), medication.confidence.name);
+    addIfLowConfidence(keys, medicationFieldKey(draft.id, "dosage"), medication.confidence.dosage);
+    addIfLowConfidence(
+      keys,
+      medicationFieldKey(draft.id, "frequency"),
+      medication.confidence.frequency,
+    );
+    addIfLowConfidence(
+      keys,
+      medicationFieldKey(draft.id, "duration"),
+      medication.confidence.duration,
+    );
+  });
+
+  return keys;
+}
+
 function addIfPresent(keys: Set<ExtractionFieldKey>, key: ExtractionFieldKey, value: string | null) {
   if (value !== null && value.trim() !== "") {
     keys.add(key);
   }
 }
 
+function addIfLowConfidence(
+  keys: Set<ExtractionFieldKey>,
+  key: ExtractionFieldKey,
+  confidence: number | null | undefined,
+) {
+  if (confidence !== null && confidence !== undefined && confidence < LOW_CONFIDENCE_THRESHOLD) {
+    keys.add(key);
+  }
+}
+
 function medicationFieldKey(id: string, field: keyof Medication): ExtractionFieldKey {
   return `medication.${id}.${field}`;
+}
+
+function extractionFieldClass(
+  extractedFields: Set<ExtractionFieldKey>,
+  lowConfidenceFields: Set<ExtractionFieldKey>,
+  key: ExtractionFieldKey,
+  fallback: string,
+) {
+  if (lowConfidenceFields.has(key)) {
+    return lowConfidenceFieldClass;
+  }
+  if (extractedFields.has(key)) {
+    return extractedFieldClass;
+  }
+  return fallback;
+}
+
+function lowConfidenceAttribute(
+  lowConfidenceFields: Set<ExtractionFieldKey>,
+  key: ExtractionFieldKey,
+) {
+  return lowConfidenceFields.has(key) ? "low" : undefined;
+}
+
+function lowConfidenceTitle(
+  lowConfidenceFields: Set<ExtractionFieldKey>,
+  key: ExtractionFieldKey,
+) {
+  return lowConfidenceFields.has(key) ? LOW_CONFIDENCE_TITLE : undefined;
 }
 
 function extractionErrorMessage(errorCode: string): string {
