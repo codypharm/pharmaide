@@ -7,6 +7,7 @@ checkpointer paths, debug gates) reads the same values everywhere.
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -28,6 +29,8 @@ class Settings(BaseSettings):
     log_mode: Literal["console", "json"] = "console"
 
     rxnorm_base_url: str = "https://rxnav.nlm.nih.gov/REST"
+
+    openai_api_key: SecretStr | None = None
 
 
 # lru_cache so Settings is parsed once per process. Cheap insurance against
