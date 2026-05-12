@@ -101,3 +101,82 @@ export function listTreatments(params: ListTreatmentsParams = {}): Promise<Treat
   const qs = query.toString();
   return getJson<TreatmentList>(qs ? `/treatments?${qs}` : "/treatments");
 }
+
+// POST/GET /treatments/:id/analysis — mirrors backend TreatmentAnalysisView.
+
+export type AnalysisStatus = "pending" | "running" | "completed" | "failed" | "superseded";
+
+export type MedicationGrounding = {
+  medication_id: string;
+  medication_name: string;
+  rxcui: string | null;
+  normalized_name: string | null;
+  confidence: number;
+};
+
+export type DDIWarning = {
+  medication_ids: string[];
+  severity: "minor" | "moderate" | "major";
+  description: string;
+  source: string;
+};
+
+export type ReminderSlot = {
+  medication_id: string;
+  offset_from_start: string;
+  human_label: string;
+};
+
+export type Schedule = {
+  reminders: ReminderSlot[];
+};
+
+export type ClinicalReasoning = {
+  summary: string;
+  red_flags: string[];
+  confidence: number;
+};
+
+export type AnalysisResult = {
+  groundings: MedicationGrounding[];
+  ddi_warnings: DDIWarning[];
+  schedule: Schedule | null;
+  reasoning: ClinicalReasoning | null;
+  degraded: boolean;
+  partial_results: boolean;
+  completed_stages: string[];
+};
+
+export type TreatmentAnalysisRow = {
+  id: string;
+  treatment_id: string;
+  status: AnalysisStatus;
+  result: AnalysisResult | null;
+  error_text: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+};
+
+export type AnalyzeTreatmentResponse = {
+  analysis_id: string;
+};
+
+export type TriggerAnalysisOptions = {
+  force?: boolean;
+};
+
+export function triggerAnalysis(
+  id: string,
+  options: TriggerAnalysisOptions = {},
+): Promise<AnalyzeTreatmentResponse> {
+  const qs = options.force ? "?force=true" : "";
+  return postJson<Record<string, never>, AnalyzeTreatmentResponse>(
+    `/treatments/${id}/analyze${qs}`,
+    {},
+  );
+}
+
+export function getAnalysis(id: string): Promise<TreatmentAnalysisRow | null> {
+  return getJson<TreatmentAnalysisRow | null>(`/treatments/${id}/analysis`);
+}
