@@ -9,7 +9,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { ApiError, ConflictError, ValidationError } from "../api/client";
-import { createTreatment } from "../api/treatments";
+import { createTreatment, triggerAnalysis } from "../api/treatments";
 
 type IngestionMethod = "structured" | "manual" | "vision";
 
@@ -104,6 +104,8 @@ export default function NewTreatmentPage() {
         })),
         ingestion_method: "structured",
       });
+
+      await startInitialAnalysis(result.treatment_id);
 
       toast.success("Treatment created", {
         description: `Treatment ID: ${result.treatment_id.slice(0, 8)}… · Patient ID: ${result.patient_id.slice(0, 8)}…`,
@@ -614,6 +616,22 @@ export default function NewTreatmentPage() {
       )}
     </div>
   );
+}
+
+async function startInitialAnalysis(treatmentId: string): Promise<void> {
+  try {
+    await triggerAnalysis(treatmentId);
+  } catch (err) {
+    if (err instanceof ConflictError) {
+      return;
+    }
+
+    // The treatment is already persisted, so analysis startup is a fallback
+    // concern; the Reasoning tab still exposes manual Run Analysis.
+    toast.warning("Treatment created, analysis not started", {
+      description: "Open the Reasoning tab and run analysis manually if it does not start shortly.",
+    });
+  }
 }
 
 interface ConfirmTreatmentModalProps {

@@ -88,6 +88,14 @@ const COMPLETED_ANALYSIS: TreatmentAnalysisRow = {
   created_at: "2026-05-12T10:00:00Z",
 };
 
+const RUNNING_ANALYSIS: TreatmentAnalysisRow = {
+  ...COMPLETED_ANALYSIS,
+  id: "66666666-6666-6666-6666-666666666666",
+  status: "running",
+  result: null,
+  completed_at: null,
+};
+
 function renderAt(treatmentId: string, { isPrivacyMode = false }: { isPrivacyMode?: boolean } = {}) {
   // TreatmentDetailPage reads isPrivacyMode via useOutletContext, so it must
   // be rendered as a nested route under a parent that supplies the context.
@@ -235,5 +243,19 @@ describe("TreatmentDetailPage", () => {
     await user.click(screen.getByRole("button", { name: /confirm re-run/i }));
 
     expect(trigger).toHaveBeenCalledWith(SAMPLE.treatment.id, { force: true });
+  });
+
+  it("does not show re-run while analysis is still running", async () => {
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(SAMPLE);
+    vi.spyOn(treatmentsApi, "getAnalysis").mockResolvedValue(RUNNING_ANALYSIS);
+    const user = userEvent.setup();
+
+    renderAt(SAMPLE.treatment.id);
+
+    await screen.findByText("Eleanor Vance");
+    await user.click(screen.getByRole("tab", { name: /reasoning/i }));
+
+    expect(await screen.findByText("running")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^re-run$/i })).toBeNull();
   });
 });

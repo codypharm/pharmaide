@@ -319,6 +319,8 @@ function AnalysisStatusHeader({
   onCancelRerun: () => void;
   onConfirmRerun: () => void;
 }) {
+  const canRerun = status !== "pending" && status !== "running";
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -326,17 +328,19 @@ function AnalysisStatusHeader({
         <div className="flex flex-wrap items-center gap-2">
           {result?.partial_results && <StatusChip label="Partial Analysis" />}
           {result?.degraded && <StatusChip label="Degraded" />}
-          <button
-            type="button"
-            onClick={onStartRerun}
-            disabled={isStarting}
-            className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
-          >
-            Re-run
-          </button>
+          {canRerun && (
+            <button
+              type="button"
+              onClick={onStartRerun}
+              disabled={isStarting}
+              className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+            >
+              Re-run
+            </button>
+          )}
         </div>
       </div>
-      {isConfirmingRerun && (
+      {canRerun && isConfirmingRerun && (
         <div className="flex flex-wrap items-center justify-between gap-3 border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
           <span>Replace the current analysis with a fresh run?</span>
           <div className="flex items-center gap-2">
