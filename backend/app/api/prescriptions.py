@@ -5,21 +5,40 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import JSONResponse
+from pydantic import SecretStr
 from pydantic_ai import Agent
+from pydantic_ai.models.openai import OpenAIResponsesModel
+from pydantic_ai.providers.openai import OpenAIProvider
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.extraction import build_extraction_agent, extract_prescription_image
 from app.agents.extraction_schemas import ExtractedPrescription
+from app.config import Settings, get_settings
 from app.db.engine import get_session
 from app.db.models import AuditLogEntry
 from app.services.image_guard import GuardedImage, ImageGuardError, validate_prescription_image
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 
-def get_extraction_agent() -> Agent[None, ExtractedPrescription]:
+def get_extraction_agent(settings: SettingsDep) -> Agent[None, ExtractedPrescription]:
     """FastAPI dependency seam for tests and later provider configuration."""
-    return build_extraction_agent()
+    return build_configured_extraction_agent(settings.openai_api_key)
+
+
+def build_configured_extraction_agent(
+    openai_api_key: SecretStr | None,
+) -> Agent[None, ExtractedPrescription]:
+    """Bridge PHARMAIDE_OPENAI_API_KEY into PydanticAI's OpenAI provider."""
+    if openai_api_key is None:
+        return build_extraction_agent()
+    return build_extraction_agent(
+        OpenAIResponsesModel(
+            "gpt-5.4-mini",
+            provider=OpenAIProvider(api_key=openai_api_key.get_secret_value()),
+        )
+    )
 
 
 ExtractionAgentDep = Annotated[Agent[None, ExtractedPrescription], Depends(get_extraction_agent)]
@@ -61,15 +80,16 @@ async def extract_prescription(
             declared_mime=file.content_type,
         )
         return JSONResponse(status_code=422, content={"detail": {"error": exc.code}})
-    except Exception:
+    except Exception as exc:
+        error_code = _extraction_failure_code(exc)
         _audit_failed(
             session,
             extraction_id=extraction_id,
-            error="extraction_failed",
+            error=error_code,
             size_bytes=len(data),
             declared_mime=file.content_type,
         )
-        return JSONResponse(status_code=422, content={"detail": {"error": "extraction_failed"}})
+        return JSONResponse(status_code=422, content={"detail": {"error": error_code}})
 
     _audit_completed(session, extraction_id=extraction_id, image=image, prescription=prescription)
     return prescription
@@ -156,3 +176,10 @@ def _audit_failed(
             },
         )
     )
+
+
+def _extraction_failure_code(exc: Exception) -> str:
+    message = str(exc).lower()
+    if "api key" in message or "openai_api_key" in message:
+        return "openai_api_key_missing"
+    return "extraction_failed"

@@ -5,14 +5,17 @@ from uuid import UUID
 
 import pytest
 from httpx import AsyncClient
+from pydantic import SecretStr
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage, ModelResponse, ToolCallPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
+from pydantic_ai.models.openai import OpenAIResponsesModel
+from pydantic_ai.providers.openai import OpenAIProvider
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.extraction_schemas import ExtractedPrescription
-from app.api.prescriptions import get_extraction_agent
+from app.api.prescriptions import build_configured_extraction_agent, get_extraction_agent
 from app.db.models import AuditLogEntry
 
 
@@ -131,3 +134,10 @@ def _agent_with_output(output: dict[str, object]) -> Agent[None, ExtractedPrescr
         output_type=ExtractedPrescription,
         defer_model_check=True,
     )
+
+
+def test_build_configured_extraction_agent_uses_app_prefixed_openai_key() -> None:
+    agent = build_configured_extraction_agent(SecretStr("test-openai-key"))
+
+    assert isinstance(agent.model, OpenAIResponsesModel)
+    assert isinstance(agent.model.provider, OpenAIProvider)

@@ -745,6 +745,8 @@ function extractionErrorMessage(errorCode: string): string {
       return "Upload a PNG, JPEG, or PDF prescription.";
     case "pdf_render_failed":
       return "This PDF could not be read. Try a clearer scan or use manual entry.";
+    case "openai_api_key_missing":
+      return "The backend OpenAI API key is not configured.";
     default:
       return "Could not scan this prescription. Try another file or enter it manually.";
   }
