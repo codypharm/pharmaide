@@ -497,6 +497,11 @@ function SchedulePreview({
   return (
     <div className="border-t border-slate-200 pt-5">
       <SubsectionTitle>Schedule Preview</SubsectionTitle>
+      {reminders.length > 0 && (
+        <p className="mt-2 text-xs font-semibold text-slate-500">
+          Planned relative schedule. Adherence state is not tracked here.
+        </p>
+      )}
       {reminders.length > 0 ? (
         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           {reminders.map((reminder, index) => (
@@ -514,8 +519,7 @@ function SchedulePreview({
                 {reminder.human_label}
               </div>
               <div className="mt-1 flex items-center gap-1 text-xs text-slate-500">
-                <span>Offset</span>
-                <span>{formatReminderOffset(reminder.offset_from_start)}</span>
+                <span>{formatReminderTiming(reminder.offset_from_start)}</span>
               </div>
             </div>
           ))}
@@ -527,20 +531,32 @@ function SchedulePreview({
   );
 }
 
-function formatReminderOffset(offset: string): string {
+function formatReminderTiming(offset: string): string {
   const match = offset.match(
     /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?$/,
   );
   if (!match) return offset;
 
   const [, days, hours, minutes, seconds] = match;
-  const parts = [
-    days ? `${days}d` : null,
-    hours ? `${hours}h` : null,
-    minutes ? `${minutes}m` : null,
-    seconds ? `${Number(seconds)}s` : null,
+  const totalSeconds =
+    Number(days ?? 0) * 86_400 +
+    Number(hours ?? 0) * 3_600 +
+    Number(minutes ?? 0) * 60 +
+    Number(seconds ?? 0);
+  const plannedDay = Math.floor(totalSeconds / 86_400) + 1;
+  const secondsWithinDay = totalSeconds % 86_400;
+  const timeParts = [
+    Math.floor(secondsWithinDay / 3_600)
+      ? `${Math.floor(secondsWithinDay / 3_600)}h`
+      : null,
+    Math.floor((secondsWithinDay % 3_600) / 60)
+      ? `${Math.floor((secondsWithinDay % 3_600) / 60)}m`
+      : null,
+    secondsWithinDay % 60 ? `${secondsWithinDay % 60}s` : null,
   ].filter(Boolean);
-  return parts.length > 0 ? `${parts.join(" ")} after start` : "At start";
+  const relativeTime = timeParts.length > 0 ? `+${timeParts.join(" ")}` : "at start";
+
+  return `Planned Day ${plannedDay} · ${relativeTime}`;
 }
 
 function StatusChip({ label }: { label: string }) {

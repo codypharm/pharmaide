@@ -217,8 +217,9 @@ describe("TreatmentDetailPage", () => {
     expect(screen.getByText("Monitor INR closely.")).toBeTruthy();
     expect(screen.getByText("Reminder 1")).toBeTruthy();
     expect(screen.getAllByText("Lisinopril").length).toBeGreaterThan(0);
+    expect(screen.getByText(/planned relative schedule/i)).toBeTruthy();
     expect(screen.getByText("Day 1, 01:00")).toBeTruthy();
-    expect(screen.getByText("1h after start")).toBeTruthy();
+    expect(screen.getByText("Planned Day 1 · +1h")).toBeTruthy();
     expect(screen.getByText("Day 1, 20:00")).toBeTruthy();
     expect(screen.getByText("Day 1, 21:00")).toBeTruthy();
   });
