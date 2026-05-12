@@ -31,6 +31,20 @@ async def test_schedule_runs_multiple_coroutines() -> None:
     assert sorted(seen) == [0, 1, 2]
 
 
+async def test_schedule_forwards_keyword_arguments() -> None:
+    seen: list[str] = []
+
+    async def record(*, value: str) -> None:
+        await asyncio.sleep(0)
+        seen.append(value)
+
+    task_runner.schedule(record, value="configured")
+
+    await task_runner.drain()
+
+    assert seen == ["configured"]
+
+
 async def test_drain_waits_for_in_flight_tasks() -> None:
     started = asyncio.Event()
     release = asyncio.Event()

@@ -112,6 +112,9 @@ async def post_treatment_analysis(
             session_factory,
             analysis_id,
             timeout_seconds,
+            checkpoint_db_path=settings.checkpoint_db_path,
+            rxnorm_base_url=settings.rxnorm_base_url,
+            openai_api_key=settings.openai_api_key,
             user_id=user_id,
             max_concurrent_per_user=settings.max_concurrent_analyses_per_user,
         )

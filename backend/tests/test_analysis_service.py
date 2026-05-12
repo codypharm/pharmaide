@@ -6,12 +6,18 @@ analysis row and audit trail, but does not run the graph yet.
 
 import asyncio
 from datetime import date
+from pathlib import Path
+from typing import Any, cast
 
+import httpx
 import pytest
+from pydantic_ai.models.test import TestModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.db.models import AuditLogEntry, Patient, Treatment, TreatmentAnalysis
+from app.agents.analysis_schemas import AnalysisState
+from app.agents.nodes.summarize import build_summary_agent
+from app.db.models import AuditLogEntry, Medication, Patient, Treatment, TreatmentAnalysis
 from app.services.analysis import (
     AnalysisInProgress,
     analyze_treatment,
@@ -38,6 +44,28 @@ async def _create_treatment(db_session: AsyncSession) -> Treatment:
     return treatment
 
 
+async def _add_medication(
+    db_session: AsyncSession,
+    treatment: Treatment,
+    *,
+    name: str,
+    frequency: str,
+    ordinal: int,
+) -> Medication:
+    medication = Medication(
+        treatment_id=treatment.id,
+        name=name,
+        dosage="10 mg",
+        frequency=frequency,
+        duration="1 day",
+        objective=treatment.clinical_objective,
+        ordinal=ordinal,
+    )
+    db_session.add(medication)
+    await db_session.flush()
+    return medication
+
+
 @pytest.mark.usefixtures("postgres_container")
 async def test_create_pending_analysis_returns_pending_row(
     db_session: AsyncSession,
@@ -57,23 +85,32 @@ async def test_create_pending_analysis_returns_pending_row(
 
 
 @pytest.mark.usefixtures("postgres_container")
-async def test_analyze_treatment_marks_pending_row_running_and_audit(
-    db_session: AsyncSession,
+async def test_analyze_treatment_marks_pending_row_started_and_audits(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     treatment = await _create_treatment(db_session)
     analysis_id = await create_pending_analysis(db_session, treatment.id)
     session_factory = async_sessionmaker(db_session.bind, expire_on_commit=False)
 
+    async def fake_graph(*_args: object, **_kwargs: object) -> AnalysisState:
+        return {"degraded": False}
+
+    monkeypatch.setattr("app.services.analysis._run_analysis_graph", fake_graph)
+
     await analyze_treatment(session_factory, analysis_id)
 
     analysis = await db_session.get(TreatmentAnalysis, analysis_id)
     assert analysis is not None
-    assert analysis.status == "running"
+    assert analysis.status == "completed"
     assert analysis.started_at is not None
 
     audit = (
         await db_session.execute(
-            select(AuditLogEntry).where(AuditLogEntry.resource_id == treatment.id)
+            select(AuditLogEntry)
+            .where(
+                AuditLogEntry.resource_id == treatment.id,
+                AuditLogEntry.event_type == "analysis_started",
+            )
         )
     ).scalar_one()
     assert audit.event_type == "analysis_started"
@@ -92,8 +129,9 @@ async def test_analyze_treatment_marks_timeout_failed_and_audits(
     analysis_id = await create_pending_analysis(db_session, treatment.id)
     session_factory = async_sessionmaker(db_session.bind, expire_on_commit=False)
 
-    async def never_finishes() -> None:
+    async def never_finishes(*_args: object, **_kwargs: object) -> AnalysisState:
         await asyncio.sleep(1)
+        return {"degraded": False}
 
     monkeypatch.setattr("app.services.analysis._run_analysis_graph", never_finishes)
 
@@ -122,6 +160,78 @@ async def test_analyze_treatment_marks_timeout_failed_and_audits(
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_analyze_treatment_runs_graph_and_persists_completed_result(
+    db_session: AsyncSession,
+    tmp_path: Path,
+) -> None:
+    treatment = await _create_treatment(db_session)
+    first_medication = await _add_medication(
+        db_session,
+        treatment,
+        name="Lisinopril",
+        frequency="BID",
+        ordinal=0,
+    )
+    await _add_medication(
+        db_session,
+        treatment,
+        name="Warfarin",
+        frequency="Q8H",
+        ordinal=1,
+    )
+    analysis_id = await create_pending_analysis(db_session, treatment.id)
+    session_factory = async_sessionmaker(db_session.bind, expire_on_commit=False)
+    summary_agent = build_summary_agent(
+        model=TestModel(
+            custom_output_args={
+                "summary": "Graph result ready for pharmacist review.",
+                "red_flags": ["DDI provider is not configured."],
+                "confidence": 0.81,
+            }
+        )
+    )
+
+    await analyze_treatment(
+        session_factory,
+        analysis_id,
+        checkpoint_db_path=str(tmp_path / "analysis.db"),
+        rxnorm_base_url="https://rxnav.test/REST",
+        rxnorm_transport=httpx.MockTransport(_rxnorm_handler),
+        summary_agent=summary_agent,
+    )
+
+    analysis = await db_session.get(TreatmentAnalysis, analysis_id)
+    assert analysis is not None
+    assert analysis.status == "completed"
+    assert analysis.completed_at is not None
+    assert analysis.error_text is None
+    assert analysis.result is not None
+    assert analysis.result["reasoning"] == {
+        "summary": "Graph result ready for pharmacist review.",
+        "red_flags": ["DDI provider is not configured."],
+        "confidence": 0.81,
+    }
+    assert analysis.result["degraded"] is True
+    assert analysis.result["ddi_warnings"] == []
+    groundings = cast("list[dict[str, Any]]", analysis.result["groundings"])
+    assert groundings[0]["medication_id"] == str(first_medication.id)
+    assert groundings[0]["rxcui"] == "29046"
+    assert analysis.result["schedule"] is not None
+
+    await db_session.refresh(treatment)
+    assert treatment.langgraph_thread_id == f"treatment:{treatment.id}"
+
+    audits = (
+        await db_session.execute(
+            select(AuditLogEntry)
+            .where(AuditLogEntry.resource_id == treatment.id)
+            .order_by(AuditLogEntry.created_at)
+        )
+    ).scalars()
+    assert [audit.event_type for audit in audits] == ["analysis_started", "analysis_completed"]
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_analyze_treatment_rejects_second_active_analysis(
     db_session: AsyncSession,
 ) -> None:
@@ -130,3 +240,29 @@ async def test_analyze_treatment_rejects_second_active_analysis(
 
     with pytest.raises(AnalysisInProgress):
         await create_pending_analysis(db_session, treatment.id)
+
+
+async def _rxnorm_handler(request: httpx.Request) -> httpx.Response:
+    term = request.url.params.get("term", "").lower()
+    if "lisinopril" in term:
+        return _rxnorm_response("29046", "lisinopril")
+    if "warfarin" in term:
+        return _rxnorm_response("11289", "warfarin")
+    return httpx.Response(200, json={"approximateGroup": {}})
+
+
+def _rxnorm_response(rxcui: str, name: str) -> httpx.Response:
+    return httpx.Response(
+        200,
+        json={
+            "approximateGroup": {
+                "candidate": [
+                    {
+                        "rxcui": rxcui,
+                        "name": name,
+                        "score": "100",
+                    }
+                ]
+            }
+        },
+    )

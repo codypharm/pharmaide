@@ -36,6 +36,7 @@ def schedule[T](
     *args: object,
     user_id: str | None = None,
     max_concurrent_per_user: int | None = None,
+    **kwargs: object,
 ) -> asyncio.Task[T]:
     """Start a coroutine in the background and keep it alive until completion.
 
@@ -48,7 +49,7 @@ def schedule[T](
         if len(user_tasks) >= max_concurrent_per_user:
             raise RateLimitExceeded(user_id)
 
-    task: asyncio.Task[T] = asyncio.create_task(coro_fn(*args))
+    task: asyncio.Task[T] = asyncio.create_task(coro_fn(*args, **kwargs))
     _live_tasks.add(task)
     task.add_done_callback(_live_tasks.discard)
     if user_id is not None and max_concurrent_per_user is not None:
