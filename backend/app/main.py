@@ -6,6 +6,8 @@ The module-level `app` is what `uvicorn app.main:app` imports — it uses the
 real Settings parsed from the environment.
 """
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import cast
 
 from fastapi import FastAPI
@@ -17,6 +19,7 @@ from app.config import Settings, get_settings
 from app.errors import RequestIdMiddleware, global_exception_handler, run_graph
 from app.graph import open_counter_graph
 from app.logging_setup import configure_logging
+from app.services import task_runner
 
 VERSION = "0.1.0"
 
@@ -29,10 +32,23 @@ class DebugGraphResponse(BaseModel):
     turn: int
 
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Drain in-process background tasks during application shutdown.
+
+    Analysis work is allowed to outlive the request that scheduled it, but
+    shutdown should wait for those tasks so audit/status writes are not cut off.
+    """
+    try:
+        yield
+    finally:
+        await task_runner.drain()
+
+
 def create_app(settings: Settings) -> FastAPI:
     configure_logging(settings.log_mode)
 
-    app = FastAPI(title="PharmAide API", version=VERSION)
+    app = FastAPI(title="PharmAide API", version=VERSION, lifespan=lifespan)
 
     # Middleware order: RequestIdMiddleware is added last so it runs first
     # (Starlette stacks middleware LIFO). The request_id is bound before any
