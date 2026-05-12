@@ -4,7 +4,13 @@ import structlog
 from pydantic_ai import Agent
 from pydantic_ai.models import Model
 
-from app.agents.analysis_schemas import AnalysisState, ClinicalReasoning
+from app.agents.analysis_schemas import (
+    AnalysisState,
+    ClinicalReasoning,
+    ClinicalReasoningWithSchedule,
+    ReminderSlot,
+    Schedule,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -15,6 +21,18 @@ Never invent medications, diagnoses, interactions, schedules, patient facts, or 
 If data is missing, explicitly say it is unavailable and keep confidence lower.
 Return concise clinical reasoning for pharmacist review, not patient-facing advice.
 """
+
+SCHEDULE_INSTRUCTIONS = (
+    SUMMARY_INSTRUCTIONS
+    + "\nWhen needs_llm_parse is true, propose Schedule.reminders only for medications whose "
+    "frequency or duration could not be parsed deterministically. Use only the medication "
+    "instructions present in the validated state. Do not invent frequency, duration, dose timing, "
+    "patient condition, or clinical rationale. Do not create reminders for PRN/as-needed "
+    "medications unless the provided instruction contains explicit timing. Existing deterministic "
+    "reminders are already in state; do not duplicate them. Return null schedule when timing "
+    "cannot be inferred with high confidence. Any proposed reminders are pharmacist-review "
+    "drafts, not patient-facing instructions."
+)
 
 
 def build_summary_agent(
@@ -29,12 +47,28 @@ def build_summary_agent(
     )
 
 
+def build_summary_with_schedule_agent(
+    model: Model | str = "openai:gpt-5-mini",
+) -> Agent[None, ClinicalReasoningWithSchedule]:
+    """Build the typed agent used when ambiguous schedules need LLM parsing."""
+    return Agent(
+        model,
+        output_type=ClinicalReasoningWithSchedule,
+        instructions=SCHEDULE_INSTRUCTIONS,
+        defer_model_check=True,
+    )
+
+
 async def summarize_treatment(
     state: AnalysisState,
     *,
     agent: Agent[None, ClinicalReasoning] | None = None,
+    schedule_agent: Agent[None, ClinicalReasoningWithSchedule] | None = None,
 ) -> AnalysisState:
     """Ask the LLM for typed ClinicalReasoning and store only validated output."""
+    if state.get("needs_llm_parse", False):
+        return await _summarize_with_schedule(state, agent=schedule_agent)
+
     summary_agent = agent or build_summary_agent()
     result = await summary_agent.run(_summary_prompt(state))
     reasoning = result.output
@@ -43,6 +77,35 @@ async def summarize_treatment(
     next_state["reasoning"] = reasoning
     _log_reasoning_summary(next_state, reasoning)
     return next_state
+
+
+async def _summarize_with_schedule(
+    state: AnalysisState,
+    *,
+    agent: Agent[None, ClinicalReasoningWithSchedule] | None,
+) -> AnalysisState:
+    summary_agent = agent or build_summary_with_schedule_agent()
+    result = await summary_agent.run(_summary_prompt(state))
+    output = result.output
+
+    next_state = state.copy()
+    next_state["reasoning"] = output.reasoning
+    if output.schedule is not None:
+        next_state["schedule"] = _merge_schedules(state.get("schedule"), output.schedule)
+    _log_reasoning_summary(next_state, output.reasoning)
+    return next_state
+
+
+def _merge_schedules(existing: Schedule | None, proposed: Schedule) -> Schedule:
+    reminders = [*(existing.reminders if existing is not None else []), *proposed.reminders]
+    return Schedule(reminders=_sort_reminders(reminders))
+
+
+def _sort_reminders(reminders: list[ReminderSlot]) -> list[ReminderSlot]:
+    return sorted(
+        reminders,
+        key=lambda reminder: (reminder.offset_from_start, str(reminder.medication_id)),
+    )
 
 
 def _summary_prompt(state: AnalysisState) -> str:

@@ -61,6 +61,13 @@ class ClinicalReasoning(AnalysisEnvelope):
     confidence: float = Field(ge=0, le=1)
 
 
+class ClinicalReasoningWithSchedule(AnalysisEnvelope):
+    """LLM output when ambiguous schedules require a validated proposal."""
+
+    reasoning: ClinicalReasoning
+    schedule: Schedule | None
+
+
 class AnalysisResult(AnalysisEnvelope):
     """Durable analysis payload stored on treatment_analyses.result."""
 
