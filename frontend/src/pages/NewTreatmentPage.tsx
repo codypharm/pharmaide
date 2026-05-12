@@ -36,6 +36,9 @@ interface Medication {
 }
 
 type FieldErrors = Partial<Record<"name" | "dob" | "mrn" | "phone", string>>;
+type ExtractionFieldKey = string;
+
+const extractedFieldClass = "border-blue-400 bg-blue-50/30";
 
 export default function NewTreatmentPage() {
   const navigate = useNavigate();
@@ -59,6 +62,9 @@ export default function NewTreatmentPage() {
   const [visionFile, setVisionFile] = useState<File | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractionError, setExtractionError] = useState<string | null>(null);
+  const [extractedFields, setExtractedFields] = useState<Set<ExtractionFieldKey>>(
+    () => new Set(),
+  );
 
   const addMedication = () => {
     const newMed: Medication = {
@@ -77,8 +83,22 @@ export default function NewTreatmentPage() {
     }
   };
 
+  const clearExtractedField = (key: ExtractionFieldKey) => {
+    setExtractedFields((current) => {
+      if (!current.has(key)) {
+        return current;
+      }
+      const next = new Set(current);
+      next.delete(key);
+      return next;
+    });
+  };
+
   const updateMedication = (id: string, patch: Partial<Medication>) => {
     setMedications(meds => meds.map(m => (m.id === id ? { ...m, ...patch } : m)));
+    for (const field of Object.keys(patch)) {
+      clearExtractedField(medicationFieldKey(id, field as keyof Medication));
+    }
   };
 
   const attachVisionFile = (file: File | undefined) => {
@@ -125,12 +145,14 @@ export default function NewTreatmentPage() {
   };
 
   const applyExtractedPrescription = (prescription: ExtractedPrescription) => {
+    const medicationDrafts = toMedicationDrafts(prescription);
     setPatientName(prescription.patient.name ?? "");
     setPatientDob(prescription.patient.dob ?? "");
     setPatientMrn(prescription.patient.mrn ?? generateMrn());
     setPatientPhone(prescription.patient.phone ?? "");
     setClinicalObjective(prescription.treatment.clinical_objective ?? "");
-    setMedications(toMedicationDrafts(prescription));
+    setMedications(medicationDrafts);
+    setExtractedFields(extractedFieldKeys(prescription, medicationDrafts));
   };
 
   const handleSubmit = async () => {
@@ -289,9 +311,13 @@ export default function NewTreatmentPage() {
                 <input
                   id="patient-name"
                   value={patientName}
-                  onChange={(e) => setPatientName(e.target.value)}
+                  onChange={(e) => {
+                    setPatientName(e.target.value);
+                    clearExtractedField("patient.name");
+                  }}
                   placeholder="e.g. Eleanor Vance"
-                  className={`px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none ${fieldErrors.name ? "border-red-400" : "border-slate-200"}`}
+                  data-extraction-origin={extractedFields.has("patient.name") ? "vision" : undefined}
+                  className={`px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none ${fieldErrors.name ? "border-red-400" : extractedFields.has("patient.name") ? extractedFieldClass : "border-slate-200"}`}
                 />
                 {fieldErrors.name && <span className="text-[11px] text-red-600">{fieldErrors.name}</span>}
               </div>
@@ -301,8 +327,12 @@ export default function NewTreatmentPage() {
                   id="patient-dob"
                   type="date"
                   value={patientDob}
-                  onChange={(e) => setPatientDob(e.target.value)}
-                  className={`px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none ${fieldErrors.dob ? "border-red-400" : "border-slate-200"}`}
+                  onChange={(e) => {
+                    setPatientDob(e.target.value);
+                    clearExtractedField("patient.dob");
+                  }}
+                  data-extraction-origin={extractedFields.has("patient.dob") ? "vision" : undefined}
+                  className={`px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none ${fieldErrors.dob ? "border-red-400" : extractedFields.has("patient.dob") ? extractedFieldClass : "border-slate-200"}`}
                 />
                 {fieldErrors.dob && <span className="text-[11px] text-red-600">{fieldErrors.dob}</span>}
               </div>
@@ -322,9 +352,13 @@ export default function NewTreatmentPage() {
                 <input
                   id="patient-mrn"
                   value={patientMrn}
-                  onChange={(e) => setPatientMrn(e.target.value)}
+                  onChange={(e) => {
+                    setPatientMrn(e.target.value);
+                    clearExtractedField("patient.mrn");
+                  }}
                   placeholder="e.g. 882-12-4401 or click Auto-generate"
-                  className={`px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none ${fieldErrors.mrn ? "border-red-400" : "border-slate-200"}`}
+                  data-extraction-origin={extractedFields.has("patient.mrn") ? "vision" : undefined}
+                  className={`px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none ${fieldErrors.mrn ? "border-red-400" : extractedFields.has("patient.mrn") ? extractedFieldClass : "border-slate-200"}`}
                 />
                 {fieldErrors.mrn && <span className="text-[11px] text-red-600">{fieldErrors.mrn}</span>}
               </div>
@@ -334,9 +368,13 @@ export default function NewTreatmentPage() {
                   id="patient-phone"
                   type="tel"
                   value={patientPhone}
-                  onChange={(e) => setPatientPhone(e.target.value)}
+                  onChange={(e) => {
+                    setPatientPhone(e.target.value);
+                    clearExtractedField("patient.phone");
+                  }}
                   placeholder="+1 800 555 1212"
-                  className={`px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none ${fieldErrors.phone ? "border-red-400" : "border-slate-200"}`}
+                  data-extraction-origin={extractedFields.has("patient.phone") ? "vision" : undefined}
+                  className={`px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none ${fieldErrors.phone ? "border-red-400" : extractedFields.has("patient.phone") ? extractedFieldClass : "border-slate-200"}`}
                 />
                 {fieldErrors.phone && <span className="text-[11px] text-red-600">{fieldErrors.phone}</span>}
               </div>
@@ -529,7 +567,8 @@ export default function NewTreatmentPage() {
                               <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Medication Name</label>
                               <input
                                 placeholder="e.g. Amoxicillin"
-                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all"
+                                data-extraction-origin={extractedFields.has(medicationFieldKey(med.id, "name")) ? "vision" : undefined}
+                                className={`w-full px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all ${extractedFields.has(medicationFieldKey(med.id, "name")) ? extractedFieldClass : "bg-slate-50 border-slate-200"}`}
                                 value={med.name}
                                 onChange={(e) => updateMedication(med.id, { name: e.target.value })}
                               />
@@ -538,7 +577,8 @@ export default function NewTreatmentPage() {
                               <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Dosage Strength</label>
                               <input
                                 placeholder="e.g. 500mg"
-                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all"
+                                data-extraction-origin={extractedFields.has(medicationFieldKey(med.id, "dosage")) ? "vision" : undefined}
+                                className={`w-full px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all ${extractedFields.has(medicationFieldKey(med.id, "dosage")) ? extractedFieldClass : "bg-slate-50 border-slate-200"}`}
                                 value={med.dosage}
                                 onChange={(e) => updateMedication(med.id, { dosage: e.target.value })}
                               />
@@ -551,7 +591,8 @@ export default function NewTreatmentPage() {
                               <input
                                 list="frequency-suggestions"
                                 placeholder="e.g. Twice Daily (BID), Every 8 Hours, PRN"
-                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all"
+                                data-extraction-origin={extractedFields.has(medicationFieldKey(med.id, "frequency")) ? "vision" : undefined}
+                                className={`w-full px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all ${extractedFields.has(medicationFieldKey(med.id, "frequency")) ? extractedFieldClass : "bg-slate-50 border-slate-200"}`}
                                 value={med.frequency}
                                 onChange={(e) => updateMedication(med.id, { frequency: e.target.value })}
                               />
@@ -560,7 +601,8 @@ export default function NewTreatmentPage() {
                               <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Duration</label>
                               <input
                                 placeholder="e.g. 10 days"
-                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all"
+                                data-extraction-origin={extractedFields.has(medicationFieldKey(med.id, "duration")) ? "vision" : undefined}
+                                className={`w-full px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all ${extractedFields.has(medicationFieldKey(med.id, "duration")) ? extractedFieldClass : "bg-slate-50 border-slate-200"}`}
                                 value={med.duration}
                                 onChange={(e) => updateMedication(med.id, { duration: e.target.value })}
                               />
@@ -645,9 +687,13 @@ export default function NewTreatmentPage() {
                     id="clinical-objective"
                     required
                     value={clinicalObjective}
-                    onChange={(e) => setClinicalObjective(e.target.value)}
+                    onChange={(e) => {
+                      setClinicalObjective(e.target.value);
+                      clearExtractedField("treatment.clinical_objective");
+                    }}
                     placeholder="e.g. Monitor for ACE-inhibitor cough and dizziness on standing. Confirm the patient takes the morning dose with food."
-                    className="w-full pl-4 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm min-h-[80px] focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all resize-none"
+                    data-extraction-origin={extractedFields.has("treatment.clinical_objective") ? "vision" : undefined}
+                    className={`w-full pl-4 pr-10 py-3 border rounded-xl text-sm min-h-[80px] focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all resize-none ${extractedFields.has("treatment.clinical_objective") ? extractedFieldClass : "bg-slate-50 border-slate-200"}`}
                   />
                   <p className="text-[11px] text-slate-500 px-1">
                     Used to focus the agent's check-in questions throughout the treatment cycle.
@@ -754,6 +800,45 @@ function toMedicationDrafts(prescription: ExtractedPrescription): Medication[] {
   return extracted.length > 0
     ? extracted
     : [{ id: crypto.randomUUID(), name: "", dosage: "", frequency: "", duration: "" }];
+}
+
+function extractedFieldKeys(
+  prescription: ExtractedPrescription,
+  medicationDrafts: Medication[],
+): Set<ExtractionFieldKey> {
+  const keys = new Set<ExtractionFieldKey>();
+  addIfPresent(keys, "patient.name", prescription.patient.name);
+  addIfPresent(keys, "patient.dob", prescription.patient.dob);
+  addIfPresent(keys, "patient.mrn", prescription.patient.mrn);
+  addIfPresent(keys, "patient.phone", prescription.patient.phone);
+  addIfPresent(
+    keys,
+    "treatment.clinical_objective",
+    prescription.treatment.clinical_objective,
+  );
+
+  prescription.medications.forEach((medication, index) => {
+    const draft = medicationDrafts[index];
+    if (!draft) {
+      return;
+    }
+    addIfPresent(keys, medicationFieldKey(draft.id, "name"), medication.name);
+    addIfPresent(keys, medicationFieldKey(draft.id, "dosage"), medication.dosage);
+    addIfPresent(keys, medicationFieldKey(draft.id, "frequency"), medication.frequency);
+    addIfPresent(keys, medicationFieldKey(draft.id, "duration"), medication.duration);
+  });
+
+  return keys;
+}
+
+function addIfPresent(keys: Set<ExtractionFieldKey>, key: ExtractionFieldKey, value: string | null) {
+  if (value !== null && value.trim() !== "") {
+    keys.add(key);
+  }
+}
+
+function medicationFieldKey(id: string, field: keyof Medication): ExtractionFieldKey {
+  return `medication.${id}.${field}`;
 }
 
 function extractionErrorMessage(errorCode: string): string {

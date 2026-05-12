@@ -141,6 +141,50 @@ describe("NewTreatmentPage", () => {
     );
   });
 
+  it("marks extracted fields and clears the marker when the pharmacist edits them", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(prescriptionsApi, "extractPrescription").mockResolvedValue({
+      patient: {
+        name: "Eleanor Vance",
+        dob: null,
+        mrn: null,
+        phone: null,
+        confidence: { name: 0.91 },
+      },
+      treatment: { clinical_objective: null, confidence: {} },
+      medications: [
+        {
+          name: "Lisinopril",
+          dosage: "10 mg",
+          frequency: null,
+          duration: null,
+          objective: null,
+          confidence: { name: 0.95, dosage: 0.93 },
+        },
+      ],
+      warnings: [],
+    });
+
+    renderPage();
+    await user.click(screen.getByRole("button", { name: /vision/i }));
+    await user.upload(
+      screen.getByLabelText(/browse prescription file/i),
+      new File(["fake-png"], "script.png", { type: "image/png" }),
+    );
+    await user.click(screen.getByRole("button", { name: /scan & prefill form/i }));
+
+    const name = await screen.findByLabelText(/full name/i);
+    const medication = screen.getByPlaceholderText(/e.g. amoxicillin/i);
+    expect(name).toHaveAttribute("data-extraction-origin", "vision");
+    expect(medication).toHaveAttribute("data-extraction-origin", "vision");
+
+    await user.clear(name);
+    await user.type(name, "Eleanor V.");
+
+    expect(name).not.toHaveAttribute("data-extraction-origin");
+    expect(medication).toHaveAttribute("data-extraction-origin", "vision");
+  });
+
   it("starts the first analysis automatically after creating a treatment", async () => {
     vi.spyOn(treatmentsApi, "createTreatment").mockResolvedValue({
       treatment_id: "treatment-1",
