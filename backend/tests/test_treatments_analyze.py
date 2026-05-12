@@ -189,6 +189,36 @@ async def test_post_treatment_analyze_rejects_duplicate_active_analysis(
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_post_treatment_analyze_force_supersedes_active_analysis(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(task_runner, "schedule", lambda *_args, **_kwargs: None)
+
+    create_response = await app_client.post("/treatments", json=_treatment_body("ANALYZE-006"))
+    assert create_response.status_code == 201
+    treatment_id = UUID(create_response.json()["treatment_id"])
+
+    first_response = await app_client.post(f"/treatments/{treatment_id}/analyze")
+    assert first_response.status_code == 202
+    first_analysis_id = UUID(first_response.json()["analysis_id"])
+
+    second_response = await app_client.post(f"/treatments/{treatment_id}/analyze?force=true")
+
+    assert second_response.status_code == 202, second_response.text
+    second_analysis_id = UUID(second_response.json()["analysis_id"])
+    assert second_analysis_id != first_analysis_id
+
+    first_analysis = await db_session.get(TreatmentAnalysis, first_analysis_id)
+    second_analysis = await db_session.get(TreatmentAnalysis, second_analysis_id)
+    assert first_analysis is not None
+    assert first_analysis.status == "superseded"
+    assert second_analysis is not None
+    assert second_analysis.status == "pending"
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_post_treatment_analyze_returns_404_for_missing_treatment(
     app_client: AsyncClient,
 ) -> None:

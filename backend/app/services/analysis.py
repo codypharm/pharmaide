@@ -15,7 +15,7 @@ from pydantic import SecretStr
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.providers.openai import OpenAIProvider
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
@@ -46,12 +46,20 @@ def _is_active_analysis_conflict(exc: IntegrityError) -> bool:
     return "uq_treatment_analyses_active_treatment" in str(exc)
 
 
-async def create_pending_analysis(session: AsyncSession, treatment_id: UUID) -> UUID:
+async def create_pending_analysis(
+    session: AsyncSession,
+    treatment_id: UUID,
+    *,
+    force: bool = False,
+) -> UUID:
     """Reserve the active analysis slot before background work is scheduled.
 
     The endpoint returns this id immediately. The background worker later
     changes the same row to `running`, so clients can poll a stable resource.
     """
+    if force:
+        await _supersede_active_analyses(session, treatment_id)
+
     analysis = TreatmentAnalysis(
         treatment_id=treatment_id,
         status="pending",
@@ -65,6 +73,18 @@ async def create_pending_analysis(session: AsyncSession, treatment_id: UUID) -> 
         raise
     await session.refresh(analysis)
     return analysis.id
+
+
+async def _supersede_active_analyses(session: AsyncSession, treatment_id: UUID) -> None:
+    """Free the partial unique-index slot before creating a replacement run."""
+    await session.execute(
+        update(TreatmentAnalysis)
+        .where(
+            TreatmentAnalysis.treatment_id == treatment_id,
+            TreatmentAnalysis.status.in_(("pending", "running")),
+        )
+        .values(status="superseded", completed_at=func.clock_timestamp())
+    )
 
 
 async def analyze_treatment(
@@ -84,6 +104,8 @@ async def analyze_treatment(
     async with session_factory() as session, session.begin():
         analysis = await session.get(TreatmentAnalysis, analysis_id)
         if analysis is None:
+            return
+        if analysis.status == "superseded":
             return
         treatment = await _get_treatment_for_analysis(session, analysis.treatment_id)
         if treatment is None:
@@ -242,6 +264,8 @@ async def _mark_analysis_completed(
         analysis = await session.get(TreatmentAnalysis, analysis_id)
         if analysis is None:
             return
+        if analysis.status == "superseded":
+            return
 
         analysis.status = "completed"
         analysis.result = _result_from_state(state).model_dump(mode="json")
@@ -281,6 +305,8 @@ async def mark_analysis_failed(
     async with session_factory() as session, session.begin():
         analysis = await session.get(TreatmentAnalysis, analysis_id)
         if analysis is None:
+            return
+        if analysis.status == "superseded":
             return
 
         analysis.status = "failed"

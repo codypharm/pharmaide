@@ -232,6 +232,38 @@ async def test_analyze_treatment_runs_graph_and_persists_completed_result(
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_superseded_running_analysis_is_not_completed_by_old_task(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    treatment = await _create_treatment(db_session)
+    analysis_id = await create_pending_analysis(db_session, treatment.id)
+    session_factory = async_sessionmaker(db_session.bind, expire_on_commit=False)
+    graph_started = asyncio.Event()
+    release_graph = asyncio.Event()
+
+    async def delayed_graph(*_args: object, **_kwargs: object) -> AnalysisState:
+        graph_started.set()
+        await release_graph.wait()
+        return {"degraded": False}
+
+    monkeypatch.setattr("app.services.analysis._run_analysis_graph", delayed_graph)
+    task = asyncio.create_task(analyze_treatment(session_factory, analysis_id))
+    await graph_started.wait()
+
+    replacement_id = await create_pending_analysis(db_session, treatment.id, force=True)
+    release_graph.set()
+    await task
+
+    original = await db_session.get(TreatmentAnalysis, analysis_id)
+    replacement = await db_session.get(TreatmentAnalysis, replacement_id)
+    assert original is not None
+    assert original.status == "superseded"
+    assert replacement is not None
+    assert replacement.status == "pending"
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_analyze_treatment_rejects_second_active_analysis(
     db_session: AsyncSession,
 ) -> None:

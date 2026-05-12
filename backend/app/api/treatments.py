@@ -94,6 +94,7 @@ async def post_treatment_analysis(
     session_factory: SessionFactoryDep,
     settings: SettingsDep,
     timeout: Annotated[int | None, Query(gt=0, le=300)] = None,
+    force: bool = False,
     user_id: Annotated[str, Header(alias="X-Pharmaide-User-Id", min_length=1)] = "anonymous",
 ) -> AnalyzeTreatmentResponse:
     try:
@@ -102,7 +103,7 @@ async def post_treatment_analysis(
         async with session_factory() as session, session.begin():
             if not await treatment_exists(session, treatment_id):
                 raise HTTPException(status_code=404, detail={"error": "treatment_not_found"})
-            analysis_id = await create_pending_analysis(session, treatment_id)
+            analysis_id = await create_pending_analysis(session, treatment_id, force=force)
     except AnalysisInProgress as exc:
         raise HTTPException(status_code=409, detail={"error": "analysis_in_progress"}) from exc
     timeout_seconds = timeout if timeout is not None else settings.analysis_timeout_seconds
