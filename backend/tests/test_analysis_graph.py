@@ -1,11 +1,15 @@
 """End-to-end behavior for the Sprint 3 treatment analysis graph."""
 
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 from uuid import UUID
 
 import httpx
+import pytest
+from pydantic_ai.models.openai import OpenAIResponsesModel
+from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.models.test import TestModel
 
 from app.agents.analysis_graph import open_analysis_graph
@@ -62,6 +66,53 @@ async def test_analysis_graph_runs_grounding_ddi_schedule_and_summary(
     assert len(state["schedule"].reminders) == 5
     assert state["reasoning"] is not None
     assert state["reasoning"].summary == "Analysis completed for pharmacist review."
+    assert state["completed_stages"] == [
+        "ground_medications",
+        "check_interactions",
+        "generate_schedule",
+        "summarize_treatment",
+    ]
+
+
+@pytest.mark.live_llm
+@pytest.mark.skipif(
+    os.getenv("PHARMAIDE_RUN_LIVE_LLM") != "1"
+    or not os.getenv("PHARMAIDE_OPENAI_API_KEY"),
+    reason="Set PHARMAIDE_RUN_LIVE_LLM=1 and PHARMAIDE_OPENAI_API_KEY to run live LLM smoke tests.",
+)
+async def test_analysis_graph_live_llm_smoke(tmp_path: Path) -> None:
+    """Manual smoke test for the real OpenAI structured-output path."""
+    configure_logging("json")
+    clear_rxnorm_cache()
+    api_key = os.environ["PHARMAIDE_OPENAI_API_KEY"]
+    summary_agent = build_summary_agent(
+        OpenAIResponsesModel("gpt-5-mini", provider=OpenAIProvider(api_key=api_key))
+    )
+
+    async with (
+        httpx.AsyncClient(
+            base_url="https://rxnav.test/REST",
+            transport=httpx.MockTransport(_rxnorm_handler),
+        ) as rxnorm_client,
+        open_analysis_graph(
+            str(tmp_path / "analysis-live.db"),
+            rxnorm_client=rxnorm_client,
+            start_dt=START,
+            summary_agent=summary_agent,
+        ) as graph,
+    ):
+        result = await run_graph(
+            graph,
+            thread_id="live-llm-smoke",
+            input_state=_state(),
+        )
+
+    state = cast("AnalysisState", result)
+    assert state["reasoning"] is not None
+    assert state["reasoning"].summary.strip()
+    assert 0 <= state["reasoning"].confidence <= 1
+    assert [grounding.rxcui for grounding in state["groundings"]] == ["29046", "11289"]
+    assert state["schedule"] is not None
     assert state["completed_stages"] == [
         "ground_medications",
         "check_interactions",
