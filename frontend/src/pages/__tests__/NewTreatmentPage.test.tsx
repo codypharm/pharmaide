@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { toast } from "sonner";
@@ -50,6 +50,37 @@ afterEach(() => {
 });
 
 describe("NewTreatmentPage", () => {
+  it("lets the pharmacist open the Vision tab and choose a prescription file", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole("button", { name: /vision/i }));
+
+    expect(screen.getByText(/prescription image ingestion/i)).toBeInTheDocument();
+    const input = screen.getByLabelText(/browse prescription file/i) as HTMLInputElement;
+    const file = new File(["fake-pdf"], "script.pdf", { type: "application/pdf" });
+    await user.upload(input, file);
+
+    expect(input.files?.[0]).toBe(file);
+    expect(screen.getByText("script.pdf")).toBeInTheDocument();
+  });
+
+  it("shows drag state and attaches a dropped prescription file in the Vision tab", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole("button", { name: /vision/i }));
+    const dropZone = screen.getByLabelText(/drop prescription file/i);
+    fireEvent.dragEnter(dropZone);
+
+    expect(screen.getByText(/release to attach prescription/i)).toBeInTheDocument();
+
+    const file = new File(["fake-png"], "script.png", { type: "image/png" });
+    fireEvent.drop(dropZone, { dataTransfer: { files: [file] } });
+
+    expect(screen.getByText("script.png")).toBeInTheDocument();
+  });
+
   it("starts the first analysis automatically after creating a treatment", async () => {
     vi.spyOn(treatmentsApi, "createTreatment").mockResolvedValue({
       treatment_id: "treatment-1",

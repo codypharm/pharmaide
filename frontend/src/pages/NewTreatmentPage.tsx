@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ChangeEvent, type DragEvent } from "react";
 import {
   FileText, Search, ZoomIn, ZoomOut,
   CheckCircle2, AlertCircle, MessageSquare,
@@ -38,8 +38,8 @@ type FieldErrors = Partial<Record<"name" | "dob" | "mrn" | "phone", string>>;
 
 export default function NewTreatmentPage() {
   const navigate = useNavigate();
-  // Sprint 2: only the structured tab is wired. Vision/Manual stay visible
-  // but disabled — see the tab buttons below for the V1.1 affordance.
+  // Vision starts as a local draft source; extraction wiring lands in the
+  // next slice so pharmacists can review this upload surface independently.
   const [method, setMethod] = useState<IngestionMethod>("structured");
   const [medications, setMedications] = useState<Medication[]>([
     { id: crypto.randomUUID(), name: "", dosage: "", frequency: "", duration: "" }
@@ -55,6 +55,7 @@ export default function NewTreatmentPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [visionFile, setVisionFile] = useState<File | null>(null);
 
   const addMedication = () => {
     const newMed: Medication = {
@@ -75,6 +76,22 @@ export default function NewTreatmentPage() {
 
   const updateMedication = (id: string, patch: Partial<Medication>) => {
     setMedications(meds => meds.map(m => (m.id === id ? { ...m, ...patch } : m)));
+  };
+
+  const attachVisionFile = (file: File | undefined) => {
+    if (file) {
+      setVisionFile(file);
+    }
+  };
+
+  const handleVisionFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    attachVisionFile(event.target.files?.[0]);
+  };
+
+  const handleVisionDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setDragActive(false);
+    attachVisionFile(event.dataTransfer.files[0]);
   };
 
   const handleSubmit = async () => {
@@ -303,18 +320,12 @@ export default function NewTreatmentPage() {
                 </div>
                 
                 <div className="flex gap-4">
-                  {/* Vision and Manual stay visible but disabled until V1.1
-                      ships LLM extraction (Sprint 3+). Structured is the
-                      only mode that posts to the backend. */}
                   <button
-                    disabled
-                    title="Coming in V1.1"
-                    aria-disabled="true"
-                    className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded-lg text-slate-300 cursor-not-allowed"
+                    onClick={() => setMethod("vision")}
+                    className={`flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer ${method === "vision" ? "text-blue-600 border-b-2 border-blue-600 rounded-none" : "text-slate-400 hover:text-slate-600"}`}
                   >
                     <Upload size={14} />
                     Vision
-                    <Lock size={12} />
                   </button>
                   <button
                     disabled
@@ -344,26 +355,41 @@ export default function NewTreatmentPage() {
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">High-Precision OCR</span>
                     </div>
                     
-                    <div 
+                    <div
+                      aria-label="Drop prescription file"
                       className={`flex-1 border-2 border-dashed rounded-[32px] flex flex-col items-center justify-center p-12 transition-all group cursor-pointer ${
                         dragActive ? 'border-blue-500 bg-blue-50/50' : 'border-slate-200 bg-white hover:border-blue-400 hover:bg-slate-50/50'
                       }`}
                       onDragEnter={() => setDragActive(true)}
                       onDragLeave={() => setDragActive(false)}
-                      onDrop={(e) => { e.preventDefault(); setDragActive(false); }}
+                      onDrop={handleVisionDrop}
                       onDragOver={(e) => e.preventDefault()}
                     >
                       <div className="w-20 h-20 bg-slate-50 text-slate-400 rounded-3xl flex items-center justify-center mb-6 group-hover:bg-blue-100 group-hover:text-blue-600 transition-all shadow-inner">
                         <Upload size={32} />
                       </div>
                       <div className="text-center space-y-2">
-                        <p className="text-lg font-bold text-slate-900">Drag & drop prescription image</p>
+                        <p className="text-lg font-bold text-slate-900">
+                          {dragActive ? "Release to attach prescription" : "Drag & drop prescription image"}
+                        </p>
                         <p className="text-sm text-slate-500 font-medium max-w-xs mx-auto">Supported formats: JPEG, PNG, PDF (Scanned). Max file size 10MB.</p>
+                        {visionFile && (
+                          <p className="text-xs font-bold text-blue-700 tabular-nums">
+                            {visionFile.name}
+                          </p>
+                        )}
                       </div>
                       <div className="mt-8">
-                        <button className="px-6 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-[11px] font-bold uppercase tracking-widest hover:bg-slate-50 transition-all cursor-pointer">
+                        <label className="px-6 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-[11px] font-bold uppercase tracking-widest hover:bg-slate-50 transition-all cursor-pointer inline-flex">
                           Browse Files
-                        </button>
+                          <input
+                            aria-label="Browse prescription file"
+                            type="file"
+                            accept="image/png,image/jpeg,application/pdf"
+                            className="sr-only"
+                            onChange={handleVisionFileChange}
+                          />
+                        </label>
                       </div>
                     </div>
 
