@@ -1,11 +1,16 @@
 """Deterministic schedule grammar for common medication frequencies."""
 
 import re
+from datetime import datetime, timedelta
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.agents.analysis_schemas import ReminderSlot, Schedule
+
 FrequencyKind = Literal["daily_count", "interval_hours", "prn"]
+MAX_REMINDER_PREVIEW = 20
 
 _DAILY_COUNTS: dict[str, tuple[int, str]] = {
     "qd": (1, "once daily"),
@@ -18,6 +23,7 @@ _DAILY_COUNTS: dict[str, tuple[int, str]] = {
     "qid": (4, "four times daily"),
 }
 _INTERVAL_RE = re.compile(r"^(?:q|every\s+)(?P<hours>\d{1,2})h?(?:\s+hours?)?$")
+_DURATION_RE = re.compile(r"^(?P<count>\d+)\s+(?P<unit>day|days|week|weeks)$")
 
 
 class FrequencyPattern(BaseModel):
@@ -66,6 +72,40 @@ def parse_frequency(text: str) -> FrequencyPattern | None:
     return None
 
 
+def compose_schedule(
+    *,
+    medication_id: UUID,
+    start_dt: datetime,
+    frequency_pattern: FrequencyPattern,
+    duration_text: str,
+) -> Schedule | None:
+    """Build a deterministic reminder preview from parsed frequency and duration.
+
+    ``start_dt`` is intentionally injected by callers so this module never reads
+    wall-clock time during tests or background graph execution.
+    """
+    del start_dt
+    duration_days = _parse_duration_days(duration_text)
+    if duration_days is None or frequency_pattern.kind == "prn":
+        return None
+
+    if frequency_pattern.kind == "daily_count":
+        offsets = _daily_count_offsets(frequency_pattern, duration_days)
+    else:
+        offsets = _interval_offsets(frequency_pattern, duration_days)
+
+    return Schedule(
+        reminders=[
+            ReminderSlot(
+                medication_id=medication_id,
+                offset_from_start=offset,
+                human_label=label,
+            )
+            for offset, label in offsets[:MAX_REMINDER_PREVIEW]
+        ]
+    )
+
+
 def _normalise_frequency(text: str) -> str:
     value = text.strip().lower()
     value = re.sub(r"\([^)]*\)", "", value)
@@ -81,3 +121,45 @@ def _parse_interval_hours(text: str) -> int | None:
     if hours not in {4, 6, 8, 12}:
         return None
     return hours
+
+
+def _parse_duration_days(text: str) -> int | None:
+    match = _DURATION_RE.match(text.strip().lower())
+    if match is None:
+        return None
+
+    count = int(match.group("count"))
+    unit = match.group("unit")
+    if count <= 0:
+        return None
+    if unit in {"week", "weeks"}:
+        return count * 7
+    return count
+
+
+def _daily_count_offsets(
+    frequency_pattern: FrequencyPattern,
+    duration_days: int,
+) -> list[tuple[timedelta, str]]:
+    assert frequency_pattern.doses_per_day is not None
+    spacing_hours = 24 // frequency_pattern.doses_per_day
+    return [
+        (
+            timedelta(days=day, hours=dose_index * spacing_hours),
+            f"{frequency_pattern.human_label} dose {dose_index + 1}",
+        )
+        for day in range(duration_days)
+        for dose_index in range(frequency_pattern.doses_per_day)
+    ]
+
+
+def _interval_offsets(
+    frequency_pattern: FrequencyPattern,
+    duration_days: int,
+) -> list[tuple[timedelta, str]]:
+    assert frequency_pattern.interval_hours is not None
+    duration_hours = duration_days * 24
+    return [
+        (timedelta(hours=hour), f"{frequency_pattern.human_label} dose")
+        for hour in range(0, duration_hours, frequency_pattern.interval_hours)
+    ]
