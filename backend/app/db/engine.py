@@ -36,6 +36,15 @@ engine = make_engine(get_settings().database_url)
 session_factory = make_session_factory(engine)
 
 
+def get_session_factory() -> async_sessionmaker[AsyncSession]:
+    """Return the app-wide session factory for background-owned sessions.
+
+    Request handlers use `get_session`; background tasks need a factory so
+    they can open their own transaction after the HTTP request has returned.
+    """
+    return session_factory
+
+
 async def get_session() -> AsyncIterator[AsyncSession]:
     """FastAPI dependency yielding one session per request.
 

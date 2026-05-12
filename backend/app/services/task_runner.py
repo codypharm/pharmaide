@@ -7,19 +7,20 @@ implementation while callers keep the same `schedule(coro_fn, *args)` shape.
 """
 
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable, Coroutine
+from typing import Any
 
-_live_tasks: set[asyncio.Task[object]] = set()
+_live_tasks: set[asyncio.Task[Any]] = set()
 
 
-def schedule[T](coro_fn: Callable[..., Awaitable[T]], *args: object) -> asyncio.Task[T]:
+def schedule[T](coro_fn: Callable[..., Coroutine[Any, Any, T]], *args: object) -> asyncio.Task[T]:
     """Start a coroutine in the background and keep it alive until completion.
 
     The module-level set is intentional: the event loop only keeps weak task
     references, so a fire-and-forget task can otherwise be garbage-collected
     before it finishes.
     """
-    task = asyncio.create_task(coro_fn(*args))
+    task: asyncio.Task[T] = asyncio.create_task(coro_fn(*args))
     _live_tasks.add(task)
     task.add_done_callback(_live_tasks.discard)
     return task

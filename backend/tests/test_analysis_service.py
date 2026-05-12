@@ -8,10 +8,14 @@ from datetime import date
 
 import pytest
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db.models import AuditLogEntry, Patient, Treatment, TreatmentAnalysis
-from app.services.analysis import AnalysisInProgress, analyze_treatment
+from app.services.analysis import (
+    AnalysisInProgress,
+    analyze_treatment,
+    create_pending_analysis,
+)
 
 
 async def _create_treatment(db_session: AsyncSession) -> Treatment:
@@ -34,21 +38,37 @@ async def _create_treatment(db_session: AsyncSession) -> Treatment:
 
 
 @pytest.mark.usefixtures("postgres_container")
-async def test_analyze_treatment_starts_running_analysis_and_audit(
+async def test_create_pending_analysis_returns_pending_row(
     db_session: AsyncSession,
 ) -> None:
     treatment = await _create_treatment(db_session)
 
-    analysis_id = await analyze_treatment(db_session, treatment.id)
+    analysis_id = await create_pending_analysis(db_session, treatment.id)
 
     analysis = await db_session.get(TreatmentAnalysis, analysis_id)
     assert analysis is not None
     assert analysis.treatment_id == treatment.id
-    assert analysis.status == "running"
-    assert analysis.started_at is not None
+    assert analysis.status == "pending"
+    assert analysis.started_at is None
     assert analysis.completed_at is None
     assert analysis.result is None
     assert analysis.error_text is None
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_analyze_treatment_marks_pending_row_running_and_audit(
+    db_session: AsyncSession,
+) -> None:
+    treatment = await _create_treatment(db_session)
+    analysis_id = await create_pending_analysis(db_session, treatment.id)
+    session_factory = async_sessionmaker(db_session.bind, expire_on_commit=False)
+
+    await analyze_treatment(session_factory, analysis_id)
+
+    analysis = await db_session.get(TreatmentAnalysis, analysis_id)
+    assert analysis is not None
+    assert analysis.status == "running"
+    assert analysis.started_at is not None
 
     audit = (
         await db_session.execute(
@@ -68,7 +88,7 @@ async def test_analyze_treatment_rejects_second_active_analysis(
     db_session: AsyncSession,
 ) -> None:
     treatment = await _create_treatment(db_session)
-    await analyze_treatment(db_session, treatment.id)
+    await create_pending_analysis(db_session, treatment.id)
 
     with pytest.raises(AnalysisInProgress):
-        await analyze_treatment(db_session, treatment.id)
+        await create_pending_analysis(db_session, treatment.id)

@@ -16,12 +16,12 @@ import pytest
 from alembic.config import Config
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from testcontainers.postgres import PostgresContainer
 
 from alembic import command
 from app.config import Settings
-from app.db.engine import get_session
+from app.db.engine import get_session, get_session_factory
 from app.main import create_app
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
@@ -95,7 +95,18 @@ def test_app(db_session: AsyncSession) -> FastAPI:
         async with db_session.begin_nested():
             yield db_session
 
+    def _factory_override() -> async_sessionmaker[AsyncSession]:
+        """Bind background sessions to the test connection.
+
+        Production background tasks use the app-wide engine. Tests keep one
+        outer transaction per test, so the factory is bound to that same
+        connection; it is still a separate AsyncSession from the request one.
+        """
+        assert db_session.bind is not None
+        return async_sessionmaker(db_session.bind, expire_on_commit=False)
+
     app.dependency_overrides[get_session] = _override
+    app.dependency_overrides[get_session_factory] = _factory_override
     return app
 
 

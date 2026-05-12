@@ -10,7 +10,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.schemas import (
     AnalyzeTreatmentResponse,
@@ -20,8 +20,14 @@ from app.api.schemas import (
     TreatmentDetail,
     TreatmentList,
 )
-from app.db.engine import get_session
-from app.services.analysis import AnalysisInProgress, analyze_treatment, get_latest_analysis
+from app.db.engine import get_session, get_session_factory
+from app.services import task_runner
+from app.services.analysis import (
+    AnalysisInProgress,
+    analyze_treatment,
+    create_pending_analysis,
+    get_latest_analysis,
+)
 from app.services.treatments import (
     MRNConflict,
     create_treatment,
@@ -33,6 +39,7 @@ from app.services.treatments import (
 # FastAPI's modern dependency form. Prevents the lint trap where
 # Depends() looks like a side-effecting default value.
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+SessionFactoryDep = Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)]
 
 router = APIRouter()
 
@@ -80,15 +87,18 @@ async def get_treatment_by_id(treatment_id: UUID, session: SessionDep) -> Treatm
     response_model=AnalyzeTreatmentResponse,
 )
 async def post_treatment_analysis(
-    treatment_id: UUID, session: SessionDep
+    treatment_id: UUID, session_factory: SessionFactoryDep
 ) -> AnalyzeTreatmentResponse:
-    if not await treatment_exists(session, treatment_id):
-        raise HTTPException(status_code=404, detail={"error": "treatment_not_found"})
-
     try:
-        analysis_id = await analyze_treatment(session, treatment_id)
+        # Commit the pending row before scheduling. Otherwise the background
+        # task can race the request transaction and fail to see its work.
+        async with session_factory() as session, session.begin():
+            if not await treatment_exists(session, treatment_id):
+                raise HTTPException(status_code=404, detail={"error": "treatment_not_found"})
+            analysis_id = await create_pending_analysis(session, treatment_id)
     except AnalysisInProgress as exc:
         raise HTTPException(status_code=409, detail={"error": "analysis_in_progress"}) from exc
+    task_runner.schedule(analyze_treatment, session_factory, analysis_id)
     return AnalyzeTreatmentResponse(analysis_id=analysis_id)
 
 

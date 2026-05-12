@@ -1,6 +1,7 @@
 """In-process task runner."""
 
 import asyncio
+from collections.abc import AsyncIterator
 
 import pytest
 
@@ -8,7 +9,7 @@ from app.services import task_runner
 
 
 @pytest.fixture(autouse=True)
-async def drain_tasks() -> None:
+async def drain_tasks() -> AsyncIterator[None]:
     try:
         yield
     finally:
