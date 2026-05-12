@@ -64,6 +64,8 @@ describe("NewTreatmentPage", () => {
 
     expect(input.files?.[0]).toBe(file);
     expect(screen.getByText("script.pdf")).toBeInTheDocument();
+    expect(screen.getByText("Ready")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /scan & prefill form/i })).toBeInTheDocument();
   });
 
   it("shows drag state and attaches a dropped prescription file in the Vision tab", async () => {
@@ -119,7 +121,7 @@ describe("NewTreatmentPage", () => {
     await user.click(screen.getByRole("button", { name: /vision/i }));
     const file = new File(["fake-pdf"], "script.pdf", { type: "application/pdf" });
     await user.upload(screen.getByLabelText(/browse prescription file/i), file);
-    await user.click(screen.getByRole("button", { name: /extract prescription/i }));
+    await user.click(screen.getByRole("button", { name: /scan & prefill form/i }));
 
     await waitFor(() => {
       expect(prescriptionsApi.extractPrescription).toHaveBeenCalledWith(file);

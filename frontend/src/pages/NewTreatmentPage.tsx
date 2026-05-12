@@ -84,6 +84,7 @@ export default function NewTreatmentPage() {
   const attachVisionFile = (file: File | undefined) => {
     if (file) {
       setVisionFile(file);
+      setExtractionError(null);
     }
   };
 
@@ -411,11 +412,6 @@ export default function NewTreatmentPage() {
                           {dragActive ? "Release to attach prescription" : "Drag & drop prescription image"}
                         </p>
                         <p className="text-sm text-slate-500 font-medium max-w-xs mx-auto">Supported formats: JPEG, PNG, PDF (Scanned). Max file size 10MB.</p>
-                        {visionFile && (
-                          <p className="text-xs font-bold text-blue-700 tabular-nums">
-                            {visionFile.name}
-                          </p>
-                        )}
                       </div>
                       <div className="mt-8">
                         <label className="px-6 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-[11px] font-bold uppercase tracking-widest hover:bg-slate-50 transition-all cursor-pointer inline-flex">
@@ -429,32 +425,55 @@ export default function NewTreatmentPage() {
                           />
                         </label>
                       </div>
-                      {visionFile && (
+                    </div>
+
+                    {visionFile && (
+                      <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col gap-4">
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="min-w-0 flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center shrink-0">
+                              <FileText size={18} />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-bold text-slate-900 truncate">
+                                {visionFile.name}
+                              </p>
+                              <p className="text-[11px] font-semibold text-slate-500 tabular-nums">
+                                {formatFileSize(visionFile.size)}
+                              </p>
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider bg-blue-50 border border-blue-100 rounded-full px-2.5 py-1">
+                            Ready
+                          </span>
+                        </div>
+
                         <button
                           type="button"
                           onClick={handleExtractPrescription}
                           disabled={isExtracting}
-                          className="mt-4 px-6 py-2.5 bg-slate-900 text-white rounded-xl text-[11px] font-bold uppercase tracking-widest hover:bg-slate-800 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-wait inline-flex items-center gap-2"
+                          className="w-full py-3 bg-slate-900 text-white rounded-xl text-[11px] font-bold uppercase tracking-widest hover:bg-slate-800 transition-all cursor-pointer disabled:opacity-70 disabled:cursor-wait flex items-center justify-center gap-2"
                         >
                           {isExtracting ? (
                             <>
-                              <Loader2 size={14} className="animate-spin" />
-                              Extracting...
+                              <Loader2 size={16} className="animate-spin" />
+                              Scanning Prescription...
                             </>
                           ) : (
                             <>
-                              <Sparkles size={14} />
-                              Extract Prescription
+                              <Sparkles size={16} />
+                              Scan &amp; Prefill Form
                             </>
                           )}
                         </button>
-                      )}
-                      {extractionError && (
-                        <p className="mt-3 text-xs font-semibold text-red-600">
-                          {extractionError}
-                        </p>
-                      )}
-                    </div>
+
+                        {extractionError && (
+                          <p className="text-xs font-semibold text-red-600">
+                            {extractionError}
+                          </p>
+                        )}
+                      </div>
+                    )}
 
                     <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 flex items-start gap-3">
                       <AlertCircle size={16} className="text-blue-600 shrink-0 mt-0.5" />
@@ -750,6 +769,17 @@ function extractionErrorMessage(errorCode: string): string {
     default:
       return "Could not scan this prescription. Try another file or enter it manually.";
   }
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  const kilobytes = bytes / 1024;
+  if (kilobytes < 1024) {
+    return `${kilobytes.toFixed(1)} KB`;
+  }
+  return `${(kilobytes / 1024).toFixed(1)} MB`;
 }
 
 interface ConfirmTreatmentModalProps {
