@@ -59,6 +59,29 @@ async def test_post_treatment_analyze_starts_analysis(
     assert analysis.status == "pending"
     assert len(scheduled) == 1
     assert scheduled[0][1][1] == analysis_id
+    assert scheduled[0][1][2] == 60
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_treatment_analyze_passes_timeout_override(
+    app_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scheduled: list[tuple[object, tuple[object, ...]]] = []
+
+    def capture_schedule(coro_fn: object, *args: object) -> None:
+        scheduled.append((coro_fn, args))
+
+    monkeypatch.setattr(task_runner, "schedule", capture_schedule)
+
+    create_response = await app_client.post("/treatments", json=_treatment_body("ANALYZE-004"))
+    assert create_response.status_code == 201
+    treatment_id = UUID(create_response.json()["treatment_id"])
+
+    response = await app_client.post(f"/treatments/{treatment_id}/analyze?timeout=12")
+
+    assert response.status_code == 202, response.text
+    assert len(scheduled) == 1
+    assert scheduled[0][1][2] == 12
 
 
 @pytest.mark.usefixtures("postgres_container")

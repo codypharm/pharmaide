@@ -20,6 +20,7 @@ from app.api.schemas import (
     TreatmentDetail,
     TreatmentList,
 )
+from app.config import Settings, get_settings
 from app.db.engine import get_session, get_session_factory
 from app.services import task_runner
 from app.services.analysis import (
@@ -40,6 +41,7 @@ from app.services.treatments import (
 # Depends() looks like a side-effecting default value.
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 SessionFactoryDep = Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)]
+SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 router = APIRouter()
 
@@ -87,7 +89,10 @@ async def get_treatment_by_id(treatment_id: UUID, session: SessionDep) -> Treatm
     response_model=AnalyzeTreatmentResponse,
 )
 async def post_treatment_analysis(
-    treatment_id: UUID, session_factory: SessionFactoryDep
+    treatment_id: UUID,
+    session_factory: SessionFactoryDep,
+    settings: SettingsDep,
+    timeout: Annotated[int | None, Query(gt=0, le=300)] = None,
 ) -> AnalyzeTreatmentResponse:
     try:
         # Commit the pending row before scheduling. Otherwise the background
@@ -98,7 +103,8 @@ async def post_treatment_analysis(
             analysis_id = await create_pending_analysis(session, treatment_id)
     except AnalysisInProgress as exc:
         raise HTTPException(status_code=409, detail={"error": "analysis_in_progress"}) from exc
-    task_runner.schedule(analyze_treatment, session_factory, analysis_id)
+    timeout_seconds = timeout if timeout is not None else settings.analysis_timeout_seconds
+    task_runner.schedule(analyze_treatment, session_factory, analysis_id, timeout_seconds)
     return AnalyzeTreatmentResponse(analysis_id=analysis_id)
 
 

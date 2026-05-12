@@ -4,6 +4,7 @@ Sprint 3 starts with an inert analysis service: it creates the durable
 analysis row and audit trail, but does not run the graph yet.
 """
 
+import asyncio
 from datetime import date
 
 import pytest
@@ -80,6 +81,43 @@ async def test_analyze_treatment_marks_pending_row_running_and_audit(
     assert audit.payload == {
         "treatment_id": str(treatment.id),
         "analysis_id": str(analysis_id),
+    }
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_analyze_treatment_marks_timeout_failed_and_audits(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    treatment = await _create_treatment(db_session)
+    analysis_id = await create_pending_analysis(db_session, treatment.id)
+    session_factory = async_sessionmaker(db_session.bind, expire_on_commit=False)
+
+    async def never_finishes() -> None:
+        await asyncio.sleep(1)
+
+    monkeypatch.setattr("app.services.analysis._run_analysis_graph", never_finishes)
+
+    await analyze_treatment(session_factory, analysis_id, timeout_seconds=0.01)
+
+    analysis = await db_session.get(TreatmentAnalysis, analysis_id)
+    assert analysis is not None
+    assert analysis.status == "failed"
+    assert analysis.error_text == "analysis_timeout"
+    assert analysis.completed_at is not None
+
+    failed_audit = (
+        await db_session.execute(
+            select(AuditLogEntry).where(
+                AuditLogEntry.resource_id == treatment.id,
+                AuditLogEntry.event_type == "analysis_failed",
+            )
+        )
+    ).scalar_one()
+    assert failed_audit.resource_type == "treatment"
+    assert failed_audit.payload == {
+        "treatment_id": str(treatment.id),
+        "analysis_id": str(analysis_id),
+        "error": "analysis_timeout",
     }
 
 

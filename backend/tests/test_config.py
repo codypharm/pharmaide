@@ -10,6 +10,7 @@ def test_settings_defaults_match_env_example(monkeypatch: pytest.MonkeyPatch) ->
         "PHARMAIDE_CHECKPOINT_DB_PATH",
         "PHARMAIDE_RXNORM_BASE_URL",
         "PHARMAIDE_OPENAI_API_KEY",
+        "PHARMAIDE_ANALYSIS_TIMEOUT_SECONDS",
     ):
         monkeypatch.delenv(var, raising=False)
 
@@ -20,6 +21,7 @@ def test_settings_defaults_match_env_example(monkeypatch: pytest.MonkeyPatch) ->
     assert settings.checkpoint_db_path == "./pharmaide.db"
     assert settings.rxnorm_base_url == "https://rxnav.nlm.nih.gov/REST"
     assert settings.openai_api_key is None
+    assert settings.analysis_timeout_seconds == 60
 
 
 def test_settings_reads_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -28,6 +30,7 @@ def test_settings_reads_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PHARMAIDE_CHECKPOINT_DB_PATH", "/tmp/x.db")
     monkeypatch.setenv("PHARMAIDE_RXNORM_BASE_URL", "https://rxnav.test/REST")
     monkeypatch.setenv("PHARMAIDE_OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("PHARMAIDE_ANALYSIS_TIMEOUT_SECONDS", "12")
 
     settings = Settings(_env_file=None)
 
@@ -37,3 +40,4 @@ def test_settings_reads_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.rxnorm_base_url == "https://rxnav.test/REST"
     assert settings.openai_api_key is not None
     assert settings.openai_api_key.get_secret_value() == "sk-test"
+    assert settings.analysis_timeout_seconds == 12

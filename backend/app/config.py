@@ -7,7 +7,7 @@ checkpointer paths, debug gates) reads the same values everywhere.
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     rxnorm_base_url: str = "https://rxnav.nlm.nih.gov/REST"
 
     openai_api_key: SecretStr | None = None
+
+    # Caps a single analysis run so a stuck graph cannot pin background
+    # capacity indefinitely. Route-level test overrides use the same bounds.
+    analysis_timeout_seconds: int = Field(default=60, gt=0, le=300)
 
 
 # lru_cache so Settings is parsed once per process. Cheap insurance against
