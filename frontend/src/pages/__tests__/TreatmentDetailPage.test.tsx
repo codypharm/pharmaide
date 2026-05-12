@@ -256,6 +256,7 @@ describe("TreatmentDetailPage", () => {
     await user.click(screen.getByRole("tab", { name: /reasoning/i }));
 
     expect(await screen.findByText("running")).toBeTruthy();
+    expect(screen.getByText(/analysis in progress/i)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^re-run$/i })).toBeNull();
   });
 });

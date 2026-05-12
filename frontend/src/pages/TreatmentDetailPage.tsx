@@ -279,6 +279,9 @@ function ReasoningTab({ treatmentId }: { treatmentId: string }) {
     );
   }
 
+  const isActiveAnalysis =
+    analysis.data.status === "pending" || analysis.data.status === "running";
+
   return (
     <Section title="Reasoning" icon={<Brain size={16} />}>
       <AnalysisStatusHeader
@@ -293,12 +296,28 @@ function ReasoningTab({ treatmentId }: { treatmentId: string }) {
       {startError && <p className="mt-3 text-sm text-red-700">{startError}</p>}
       {analysis.data.result ? (
         <AnalysisResultView result={analysis.data.result} />
+      ) : isActiveAnalysis ? (
+        <ActiveAnalysisNotice status={analysis.data.status} />
       ) : (
         <p className="mt-6 text-sm text-slate-500">
           Analysis result is not available yet.
         </p>
       )}
     </Section>
+  );
+}
+
+function ActiveAnalysisNotice({ status }: { status: string }) {
+  return (
+    <div className="mt-6 flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+      <Loader2 size={18} className="mt-0.5 animate-spin text-slate-600" />
+      <div>
+        <p className="text-sm font-bold text-slate-900">Analysis in progress</p>
+        <p className="mt-1 text-sm text-slate-500">
+          Current status is {status}. This page is polling for the completed reasoning result.
+        </p>
+      </div>
+    </div>
   );
 }
 
