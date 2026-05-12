@@ -5,8 +5,9 @@ import { toast } from "sonner";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import NewTreatmentPage from "../NewTreatmentPage";
-import { ConflictError } from "../../api/client";
+import { ApiError, ConflictError } from "../../api/client";
 import * as prescriptionsApi from "../../api/prescriptions";
+import { ExtractionError } from "../../api/prescriptions";
 import * as treatmentsApi from "../../api/treatments";
 
 vi.mock("sonner", () => ({
@@ -228,6 +229,37 @@ describe("NewTreatmentPage", () => {
 
     expect(phone).not.toHaveAttribute("data-extraction-confidence");
     expect(frequency).toHaveAttribute("data-extraction-confidence", "low");
+  });
+
+  it("shows extraction failure with request id and lets pharmacist use form entry", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(prescriptionsApi, "extractPrescription").mockRejectedValue(
+      new ExtractionError(
+        new ApiError(
+          422,
+          "req_extract_123",
+          { detail: { error: "pdf_render_failed" } },
+          "Request failed: 422",
+        ),
+        "pdf_render_failed",
+      ),
+    );
+
+    renderPage();
+    await user.click(screen.getByRole("button", { name: /vision/i }));
+    await user.upload(
+      screen.getByLabelText(/browse prescription file/i),
+      new File(["fake-pdf"], "script.pdf", { type: "application/pdf" }),
+    );
+    await user.click(screen.getByRole("button", { name: /scan & prefill form/i }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("This PDF could not be read");
+    expect(alert).toHaveTextContent("req_extract_123");
+
+    await user.click(screen.getByRole("button", { name: /use form entry/i }));
+
+    expect(screen.getByText(/manual regimen entry/i)).toBeInTheDocument();
   });
 
   it("starts the first analysis automatically after creating a treatment", async () => {

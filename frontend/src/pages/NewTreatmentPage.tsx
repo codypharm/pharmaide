@@ -37,6 +37,7 @@ interface Medication {
 
 type FieldErrors = Partial<Record<"name" | "dob" | "mrn" | "phone", string>>;
 type ExtractionFieldKey = string;
+type ExtractionErrorState = { message: string; requestId: string | null };
 
 const extractedFieldClass = "border-blue-400 bg-blue-50/30";
 const lowConfidenceFieldClass = "border-amber-500 bg-amber-50/40";
@@ -64,7 +65,7 @@ export default function NewTreatmentPage() {
   const [dragActive, setDragActive] = useState(false);
   const [visionFile, setVisionFile] = useState<File | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
-  const [extractionError, setExtractionError] = useState<string | null>(null);
+  const [extractionError, setExtractionError] = useState<ExtractionErrorState | null>(null);
   const [extractedFields, setExtractedFields] = useState<Set<ExtractionFieldKey>>(
     () => new Set(),
   );
@@ -151,7 +152,10 @@ export default function NewTreatmentPage() {
         err instanceof ExtractionError
           ? extractionErrorMessage(err.errorCode)
           : "Could not scan this prescription. Try another file or enter it manually.";
-      setExtractionError(message);
+      setExtractionError({
+        message,
+        requestId: err instanceof ExtractionError ? err.requestId : null,
+      });
       toast.error("Extraction failed", { description: message });
     } finally {
       setIsExtracting(false);
@@ -529,9 +533,31 @@ export default function NewTreatmentPage() {
                         </button>
 
                         {extractionError && (
-                          <p className="text-xs font-semibold text-red-600">
-                            {extractionError}
-                          </p>
+                          <div
+                            role="alert"
+                            className="border border-red-200 bg-red-50 rounded-xl p-3 flex flex-col gap-3"
+                          >
+                            <div className="flex items-start gap-2">
+                              <AlertCircle size={16} className="text-red-600 shrink-0 mt-0.5" />
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold text-red-700">
+                                  {extractionError.message}
+                                </p>
+                                {extractionError.requestId && (
+                                  <p className="text-[11px] font-semibold text-red-600 tabular-nums mt-1">
+                                    Reference ID: {extractionError.requestId}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setMethod("structured")}
+                              className="self-start px-3 py-1.5 bg-white border border-red-200 text-red-700 rounded-lg text-[11px] font-bold uppercase tracking-wider hover:bg-red-100 transition-colors cursor-pointer"
+                            >
+                              Use Form Entry
+                            </button>
+                          </div>
                         )}
                       </div>
                     )}
