@@ -75,6 +75,35 @@ async def test_generate_schedule_writes_combined_deterministic_preview() -> None
     ]
 
 
+async def test_generate_schedule_does_not_cap_multi_day_treatments() -> None:
+    state = {
+        "medications": [
+            {
+                "id": FIRST_MEDICATION_ID,
+                "name": "Medication One",
+                "dosage": "1 g",
+                "frequency": "BID",
+                "duration": "14 days",
+                "objective": None,
+            },
+            {
+                "id": SECOND_MEDICATION_ID,
+                "name": "Medication Two",
+                "dosage": "400 mg",
+                "frequency": "TID",
+                "duration": "7 days",
+                "objective": None,
+            },
+        ],
+        "degraded": False,
+    }
+
+    scheduled = await generate_schedule(state, start_dt=START)
+
+    assert scheduled["schedule"] is not None
+    assert len(scheduled["schedule"].reminders) == 49
+
+
 async def test_generate_schedule_marks_llm_parse_when_medication_is_unsupported() -> None:
     state = _state()
     state["medications"][1]["frequency"] = "morning and evening with food"

@@ -16,10 +16,10 @@ function analysisRow(status: AnalysisStatus): TreatmentAnalysisRow {
   };
 }
 
-function mockAnalysisResponses(responses: TreatmentAnalysisRow[]) {
-  const fallback = responses.at(-1) ?? analysisRow("completed");
+function mockAnalysisResponses(responses: Array<TreatmentAnalysisRow | null>) {
+  const fallback = responses.length > 0 ? responses[responses.length - 1] : analysisRow("completed");
   return vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
-    const next = responses.shift() ?? fallback;
+    const next = responses.length > 0 ? responses.shift() : fallback;
     return new Response(JSON.stringify(next), {
       status: 200,
       headers: new Headers({ "X-Request-ID": "req_analysis" }),
@@ -95,6 +95,30 @@ describe("useAnalysisStatus", () => {
       await vi.advanceTimersByTimeAsync(10_000);
     });
     expect(spy).toHaveBeenCalledTimes(5);
+  });
+
+  it("continues polling when manual refresh finds a pending analysis", async () => {
+    const spy = mockAnalysisResponses([
+      null,
+      analysisRow("pending"),
+      analysisRow("completed"),
+    ]);
+
+    const { result } = renderHook(() => useAnalysisStatus("treatment-1"));
+
+    await flushHookWork();
+    expect(result.current.status).toBe("idle");
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+    expect(result.current.status).toBe("pending");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+    expect(result.current.status).toBe("completed");
+    expect(spy).toHaveBeenCalledTimes(3);
   });
 
   it("stops polling after an analysis load error", async () => {

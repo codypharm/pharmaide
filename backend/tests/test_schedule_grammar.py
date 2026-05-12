@@ -155,7 +155,7 @@ def test_compose_schedule_builds_interval_offsets() -> None:
     )
 
 
-def test_compose_schedule_caps_preview_at_twenty_reminders() -> None:
+def test_compose_schedule_returns_full_reminder_schedule() -> None:
     pattern = FrequencyPattern(
         kind="interval_hours",
         interval_hours=4,
@@ -170,8 +170,8 @@ def test_compose_schedule_caps_preview_at_twenty_reminders() -> None:
     )
 
     assert schedule is not None
-    assert len(schedule.reminders) == 20
-    assert schedule.reminders[-1].offset_from_start == timedelta(hours=76)
+    assert len(schedule.reminders) == 180
+    assert schedule.reminders[-1].offset_from_start == timedelta(hours=716)
 
 
 @pytest.mark.parametrize("duration_text", ["", "until finished", "two weeks"])

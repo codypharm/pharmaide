@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field, model_validator
 from app.agents.analysis_schemas import ReminderSlot, Schedule
 
 FrequencyKind = Literal["daily_count", "interval_hours", "prn"]
-MAX_REMINDER_PREVIEW = 20
 
 _DAILY_COUNTS: dict[str, tuple[int, str]] = {
     "qd": (1, "once daily"),
@@ -101,7 +100,7 @@ def compose_schedule(
                 offset_from_start=offset,
                 human_label=label,
             )
-            for offset, label in offsets[:MAX_REMINDER_PREVIEW]
+            for offset, label in offsets
         ]
     )
 

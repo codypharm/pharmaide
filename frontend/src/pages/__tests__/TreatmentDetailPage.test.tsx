@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import TreatmentDetailPage from "../TreatmentDetailPage";
 import { ApiError, NotFoundError } from "../../api/client";
 import * as treatmentsApi from "../../api/treatments";
-import type { TreatmentDetail } from "../../api/treatments";
+import type { TreatmentAnalysisRow, TreatmentDetail } from "../../api/treatments";
 
 const SAMPLE: TreatmentDetail = {
   patient: {
@@ -34,6 +34,58 @@ const SAMPLE: TreatmentDetail = {
       ordinal: 0,
     },
   ],
+};
+
+const COMPLETED_ANALYSIS: TreatmentAnalysisRow = {
+  id: "44444444-4444-4444-4444-444444444444",
+  treatment_id: SAMPLE.treatment.id,
+  status: "completed",
+  result: {
+    groundings: [
+      {
+        medication_id: SAMPLE.medications[0].id,
+        medication_name: "Lisinopril",
+        rxcui: "29046",
+        normalized_name: "lisinopril",
+        confidence: 0.93,
+      },
+    ],
+    ddi_warnings: [
+      {
+        medication_ids: [
+          SAMPLE.medications[0].id,
+          "55555555-5555-5555-5555-555555555555",
+        ],
+        severity: "major",
+        description: "Monitor INR closely.",
+        source: "licensed-provider",
+      },
+    ],
+    schedule: {
+      reminders: Array.from({ length: 21 }, (_, index) => ({
+        medication_id: SAMPLE.medications[0].id,
+        offset_from_start: `PT${index + 1}H`,
+        human_label: `Day 1, ${String(index + 1).padStart(2, "0")}:00`,
+      })),
+    },
+    reasoning: {
+      summary: "Patient should be monitored for cough and dizziness.",
+      red_flags: ["Escalate worsening dizziness."],
+      confidence: 0.84,
+    },
+    degraded: false,
+    partial_results: false,
+    completed_stages: [
+      "ground_medications",
+      "check_interactions",
+      "generate_schedule",
+      "summarize_treatment",
+    ],
+  },
+  error_text: null,
+  started_at: "2026-05-12T10:00:00Z",
+  completed_at: "2026-05-12T10:01:00Z",
+  created_at: "2026-05-12T10:00:00Z",
 };
 
 function renderAt(treatmentId: string, { isPrivacyMode = false }: { isPrivacyMode?: boolean } = {}) {
@@ -136,5 +188,52 @@ describe("TreatmentDetailPage", () => {
     await user.click(screen.getByRole("button", { name: /run analysis/i }));
 
     expect(trigger).toHaveBeenCalledWith(SAMPLE.treatment.id);
+  });
+
+  it("renders completed analysis results in the Reasoning tab", async () => {
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(SAMPLE);
+    vi.spyOn(treatmentsApi, "getAnalysis").mockResolvedValue(COMPLETED_ANALYSIS);
+    const user = userEvent.setup();
+
+    renderAt(SAMPLE.treatment.id);
+
+    await screen.findByText("Eleanor Vance");
+    await user.click(screen.getByRole("tab", { name: /reasoning/i }));
+
+    expect(
+      await screen.findByText("Patient should be monitored for cough and dizziness."),
+    ).toBeTruthy();
+    expect(screen.getByText("Escalate worsening dizziness.")).toBeTruthy();
+    expect(screen.getAllByText(/Lisinopril/).length).toBeGreaterThan(1);
+    expect(screen.getByText(/RxCUI 29046/)).toBeTruthy();
+    expect(screen.getByText("Monitor INR closely.")).toBeTruthy();
+    expect(screen.getByText("Reminder 1")).toBeTruthy();
+    expect(screen.getAllByText("Lisinopril").length).toBeGreaterThan(0);
+    expect(screen.getByText("Day 1, 01:00")).toBeTruthy();
+    expect(screen.getByText("1h after start")).toBeTruthy();
+    expect(screen.getByText("Day 1, 20:00")).toBeTruthy();
+    expect(screen.getByText("Day 1, 21:00")).toBeTruthy();
+  });
+
+  it("lets the pharmacist confirm a forced re-run after an analysis exists", async () => {
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(SAMPLE);
+    vi.spyOn(treatmentsApi, "getAnalysis").mockResolvedValue(COMPLETED_ANALYSIS);
+    const trigger = vi
+      .spyOn(treatmentsApi, "triggerAnalysis")
+      .mockResolvedValue({ analysis_id: "analysis-rerun" });
+    const user = userEvent.setup();
+
+    renderAt(SAMPLE.treatment.id);
+
+    await screen.findByText("Eleanor Vance");
+    await user.click(screen.getByRole("tab", { name: /reasoning/i }));
+    await screen.findByText("Patient should be monitored for cough and dizziness.");
+
+    await user.click(screen.getByRole("button", { name: /^re-run$/i }));
+    expect(screen.getByText(/replace the current analysis/i)).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: /confirm re-run/i }));
+
+    expect(trigger).toHaveBeenCalledWith(SAMPLE.treatment.id, { force: true });
   });
 });

@@ -30,22 +30,27 @@ export function useAnalysisStatus(treatmentId: string): UseAnalysisStatusResult 
   const [status, setStatus] = useState<AnalysisHookStatus>("loading");
   const [error, setError] = useState<unknown>(null);
   const delayRef = useRef(INITIAL_POLL_DELAY_MS);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestVersionRef = useRef(0);
 
-  const refresh = useCallback(async () => {
-    setError(null);
-    const next = await getAnalysis(treatmentId);
-    setData(next);
-    setStatus(next?.status ?? "idle");
-  }, [treatmentId]);
+  const clearPollTimer = useCallback(() => {
+    if (timerRef.current !== null) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
+  const poll = useCallback(
+    async (resetDelay = false) => {
+      clearPollTimer();
+      if (resetDelay) {
+        delayRef.current = INITIAL_POLL_DELAY_MS;
+      }
 
-    async function poll(): Promise<void> {
+      const requestVersion = ++requestVersionRef.current;
       try {
         const next = await getAnalysis(treatmentId);
-        if (cancelled) return;
+        if (requestVersion !== requestVersionRef.current) return;
 
         setData(next);
         setError(null);
@@ -55,29 +60,36 @@ export function useAnalysisStatus(treatmentId: string): UseAnalysisStatusResult 
         if (shouldPoll(nextStatus)) {
           const delay = delayRef.current;
           delayRef.current = nextDelay(delay);
-          timer = setTimeout(() => void poll(), delay);
+          timerRef.current = setTimeout(() => void poll(), delay);
         } else {
           delayRef.current = INITIAL_POLL_DELAY_MS;
         }
       } catch (caught) {
-        if (cancelled) return;
+        if (requestVersion !== requestVersionRef.current) return;
         setError(caught);
         setStatus("idle");
         delayRef.current = INITIAL_POLL_DELAY_MS;
       }
-    }
+    },
+    [clearPollTimer, treatmentId],
+  );
 
+  const refresh = useCallback(async () => {
+    await poll(true);
+  }, [poll]);
+
+  useEffect(() => {
     setStatus("loading");
     setData(null);
     setError(null);
     delayRef.current = INITIAL_POLL_DELAY_MS;
-    void poll();
+    void poll(true);
 
     return () => {
-      cancelled = true;
-      if (timer !== null) clearTimeout(timer);
+      requestVersionRef.current += 1;
+      clearPollTimer();
     };
-  }, [treatmentId]);
+  }, [clearPollTimer, poll]);
 
   return { status, data, error, refresh };
 }

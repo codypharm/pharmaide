@@ -12,7 +12,15 @@ import {
 } from "lucide-react";
 
 import { ApiError, NotFoundError } from "../api/client";
-import { getTreatment, triggerAnalysis, type TreatmentDetail } from "../api/treatments";
+import {
+  getTreatment,
+  triggerAnalysis,
+  type AnalysisResult,
+  type DDIWarning,
+  type MedicationGrounding,
+  type ReminderSlot,
+  type TreatmentDetail,
+} from "../api/treatments";
 import { useAnalysisStatus } from "../hooks/useAnalysisStatus";
 
 type OutletContext = {
@@ -212,12 +220,18 @@ function ReasoningTab({ treatmentId }: { treatmentId: string }) {
   const analysis = useAnalysisStatus(treatmentId);
   const [isStarting, setIsStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  const [isConfirmingRerun, setIsConfirmingRerun] = useState(false);
 
-  async function handleStartAnalysis(): Promise<void> {
+  async function handleStartAnalysis(force = false): Promise<void> {
     setIsStarting(true);
     setStartError(null);
     try {
-      await triggerAnalysis(treatmentId);
+      if (force) {
+        await triggerAnalysis(treatmentId, { force: true });
+      } else {
+        await triggerAnalysis(treatmentId);
+      }
+      setIsConfirmingRerun(false);
       await analysis.refresh();
     } catch {
       setStartError("Could not start analysis.");
@@ -267,16 +281,263 @@ function ReasoningTab({ treatmentId }: { treatmentId: string }) {
 
   return (
     <Section title="Reasoning" icon={<Brain size={16} />}>
-      <div className="flex items-center justify-between">
-        <Field label="Analysis Status" value={analysis.data.status} />
-        {analysis.data.result?.partial_results && (
-          <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold uppercase tracking-wider text-amber-800">
-            Partial Analysis
-          </span>
-        )}
-      </div>
+      <AnalysisStatusHeader
+        status={analysis.data.status}
+        result={analysis.data.result}
+        isStarting={isStarting}
+        isConfirmingRerun={isConfirmingRerun}
+        onStartRerun={() => setIsConfirmingRerun(true)}
+        onCancelRerun={() => setIsConfirmingRerun(false)}
+        onConfirmRerun={() => void handleStartAnalysis(true)}
+      />
+      {startError && <p className="mt-3 text-sm text-red-700">{startError}</p>}
+      {analysis.data.result ? (
+        <AnalysisResultView result={analysis.data.result} />
+      ) : (
+        <p className="mt-6 text-sm text-slate-500">
+          Analysis result is not available yet.
+        </p>
+      )}
     </Section>
   );
+}
+
+function AnalysisStatusHeader({
+  status,
+  result,
+  isStarting,
+  isConfirmingRerun,
+  onStartRerun,
+  onCancelRerun,
+  onConfirmRerun,
+}: {
+  status: string;
+  result: AnalysisResult | null;
+  isStarting: boolean;
+  isConfirmingRerun: boolean;
+  onStartRerun: () => void;
+  onCancelRerun: () => void;
+  onConfirmRerun: () => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Field label="Analysis Status" value={status} />
+        <div className="flex flex-wrap items-center gap-2">
+          {result?.partial_results && <StatusChip label="Partial Analysis" />}
+          {result?.degraded && <StatusChip label="Degraded" />}
+          <button
+            type="button"
+            onClick={onStartRerun}
+            disabled={isStarting}
+            className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+          >
+            Re-run
+          </button>
+        </div>
+      </div>
+      {isConfirmingRerun && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+          <span>Replace the current analysis with a fresh run?</span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onCancelRerun}
+              className="cursor-pointer rounded-md border border-amber-300 bg-white px-3 py-1.5 font-bold text-amber-950"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onConfirmRerun}
+              disabled={isStarting}
+              className="cursor-pointer rounded-md bg-slate-900 px-3 py-1.5 font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+            >
+              Confirm Re-run
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AnalysisResultView({ result }: { result: AnalysisResult }) {
+  return (
+    <div className="mt-6 space-y-6">
+      <ClinicalSummary result={result} />
+      <GroundingsList groundings={result.groundings} />
+      <InteractionsList warnings={result.ddi_warnings} />
+      <SchedulePreview
+        groundings={result.groundings}
+        reminders={result.schedule?.reminders ?? []}
+      />
+    </div>
+  );
+}
+
+function ClinicalSummary({ result }: { result: AnalysisResult }) {
+  return (
+    <div className="border-t border-slate-200 pt-5">
+      <SubsectionTitle>Clinical Summary</SubsectionTitle>
+      {result.reasoning ? (
+        <div className="mt-3 space-y-3">
+          <p className="text-sm leading-6 text-slate-900">{result.reasoning.summary}</p>
+          {result.reasoning.red_flags.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-red-700">
+                Red Flags
+              </div>
+              <ul className="space-y-1">
+                {result.reasoning.red_flags.map((flag) => (
+                  <li key={flag} className="text-sm text-red-800">
+                    {flag}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      ) : (
+        <EmptyAnalysisText>No clinical summary was produced.</EmptyAnalysisText>
+      )}
+    </div>
+  );
+}
+
+function GroundingsList({ groundings }: { groundings: MedicationGrounding[] }) {
+  return (
+    <div className="border-t border-slate-200 pt-5">
+      <SubsectionTitle>Groundings</SubsectionTitle>
+      {groundings.length > 0 ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {groundings.map((grounding) => (
+            <span
+              key={grounding.medication_id}
+              className={`rounded-full border px-3 py-1 text-sm font-bold ${
+                grounding.rxcui
+                  ? "border-slate-200 bg-slate-50 text-slate-800"
+                  : "border-red-200 bg-red-50 text-red-800"
+              }`}
+            >
+              {grounding.medication_name} /{" "}
+              {grounding.rxcui ? `RxCUI ${grounding.rxcui}` : "Unmatched"}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <EmptyAnalysisText>No medication groundings were produced.</EmptyAnalysisText>
+      )}
+    </div>
+  );
+}
+
+function InteractionsList({ warnings }: { warnings: DDIWarning[] }) {
+  return (
+    <div className="border-t border-slate-200 pt-5">
+      <SubsectionTitle>Interactions</SubsectionTitle>
+      {warnings.length > 0 ? (
+        <div className="mt-3 space-y-2">
+          {warnings.map((warning) => (
+            <div
+              key={`${warning.source}-${warning.description}`}
+              className={`border px-3 py-2 text-sm ${
+                warning.severity === "major"
+                  ? "border-red-200 bg-red-50 text-red-900"
+                  : "border-amber-200 bg-amber-50 text-amber-900"
+              }`}
+            >
+              <div className="font-bold uppercase tracking-wider">
+                {warning.severity}
+              </div>
+              <div className="mt-1">{warning.description}</div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <EmptyAnalysisText>No interaction warnings were returned.</EmptyAnalysisText>
+      )}
+    </div>
+  );
+}
+
+function SchedulePreview({
+  groundings,
+  reminders,
+}: {
+  groundings: MedicationGrounding[];
+  reminders: ReminderSlot[];
+}) {
+  const medicationNames = new Map(
+    groundings.map((grounding) => [grounding.medication_id, grounding.medication_name]),
+  );
+  return (
+    <div className="border-t border-slate-200 pt-5">
+      <SubsectionTitle>Schedule Preview</SubsectionTitle>
+      {reminders.length > 0 ? (
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {reminders.map((reminder, index) => (
+            <div
+              key={`${reminder.medication_id}-${reminder.offset_from_start}`}
+              className="border border-slate-200 bg-slate-50 px-3 py-2 tabular-nums"
+            >
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Reminder {index + 1}
+              </div>
+              <div className="mt-1 text-sm font-bold text-slate-900">
+                {medicationNames.get(reminder.medication_id) ?? "Medication"}
+              </div>
+              <div className="mt-1 text-sm font-bold text-slate-900">
+                {reminder.human_label}
+              </div>
+              <div className="mt-1 flex items-center gap-1 text-xs text-slate-500">
+                <span>Offset</span>
+                <span>{formatReminderOffset(reminder.offset_from_start)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <EmptyAnalysisText>No schedule reminders were generated.</EmptyAnalysisText>
+      )}
+    </div>
+  );
+}
+
+function formatReminderOffset(offset: string): string {
+  const match = offset.match(
+    /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?$/,
+  );
+  if (!match) return offset;
+
+  const [, days, hours, minutes, seconds] = match;
+  const parts = [
+    days ? `${days}d` : null,
+    hours ? `${hours}h` : null,
+    minutes ? `${minutes}m` : null,
+    seconds ? `${Number(seconds)}s` : null,
+  ].filter(Boolean);
+  return parts.length > 0 ? `${parts.join(" ")} after start` : "At start";
+}
+
+function StatusChip({ label }: { label: string }) {
+  return (
+    <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold uppercase tracking-wider text-amber-800">
+      {label}
+    </span>
+  );
+}
+
+function SubsectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+      {children}
+    </h4>
+  );
+}
+
+function EmptyAnalysisText({ children }: { children: React.ReactNode }) {
+  return <p className="mt-3 text-sm text-slate-500">{children}</p>;
 }
 
 function Section({
