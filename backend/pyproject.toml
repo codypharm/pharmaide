@@ -21,6 +21,8 @@ dependencies = [
     "asyncpg>=0.30",
     "alembic>=1.14",
     "sqlalchemy-cockroachdb>=2.0.2",
+    "pypdfium2>=5.0",
+    "pillow>=11.0",
 ]
 
 [dependency-groups]
