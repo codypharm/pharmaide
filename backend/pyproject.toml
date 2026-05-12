@@ -23,6 +23,7 @@ dependencies = [
     "sqlalchemy-cockroachdb>=2.0.2",
     "pypdfium2>=5.0",
     "pillow>=11.0",
+    "python-multipart>=0.0.28",
 ]
 
 [dependency-groups]
