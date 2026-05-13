@@ -2120,6 +2120,7 @@ dependencies = [
     { name = "sqlalchemy-cockroachdb" },
     { name = "structlog" },
     { name = "tenacity" },
+    { name = "tiktoken" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -2155,6 +2156,7 @@ requires-dist = [
     { name = "sqlalchemy-cockroachdb", specifier = ">=2.0.2" },
     { name = "structlog", specifier = ">=25.1" },
     { name = "tenacity", specifier = ">=9.1" },
+    { name = "tiktoken", specifier = ">=0.12" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.38" },
 ]
 
