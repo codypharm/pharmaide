@@ -242,51 +242,57 @@ function DocumentsTable({
             </tr>
           </thead>
           <tbody>
-            {items.map((document, index) => (
-              <tr
-                key={document.id}
-                className={`border-b border-slate-100 last:border-b-0 ${
-                  index % 2 === 1 ? "bg-slate-50/50" : ""
-                } hover:bg-blue-50/50`}
-              >
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-center text-slate-500">
-                      {document.mime.includes("csv") ? (
-                        <FileSpreadsheet size={18} />
+            {items.map((document, index) => {
+              const isDeleting = busyDocumentId === document.id;
+              const isProcessing = document.status === "ingesting";
+              const deleteDisabled = isDeleting || isProcessing;
+
+              return (
+                <tr
+                  key={document.id}
+                  className={`border-b border-slate-100 last:border-b-0 ${
+                    index % 2 === 1 ? "bg-slate-50/50" : ""
+                  } hover:bg-blue-50/50`}
+                >
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-center text-slate-500">
+                        {document.mime.includes("csv") ? (
+                          <FileSpreadsheet size={18} />
+                        ) : (
+                          <FileText size={18} />
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-900">{document.title}</p>
+                        <p className="text-xs text-slate-500">{document.mime}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <StatusPill status={document.status} />
+                  </td>
+                  <td className="px-6 py-4 text-slate-700 tabular-nums">
+                    {formatDateTime(document.updated_at)}
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <button
+                      type="button"
+                      aria-label={`Delete ${document.title}`}
+                      disabled={deleteDisabled}
+                      onClick={() => onDelete(document)}
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-red-700 hover:bg-red-50 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      {isDeleting ? (
+                        <Loader2 size={16} className="animate-spin" />
                       ) : (
-                        <FileText size={18} />
+                        <Trash2 size={16} />
                       )}
-                    </div>
-                    <div>
-                      <p className="font-bold text-slate-900">{document.title}</p>
-                      <p className="text-xs text-slate-500">{document.mime}</p>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <StatusPill status={document.status} />
-                </td>
-                <td className="px-6 py-4 text-slate-700 tabular-nums">
-                  {formatDateTime(document.updated_at)}
-                </td>
-                <td className="px-6 py-4 text-right">
-                  <button
-                    type="button"
-                    aria-label={`Delete ${document.title}`}
-                    disabled={busyDocumentId === document.id}
-                    onClick={() => onDelete(document)}
-                    className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-red-700 hover:bg-red-50 disabled:opacity-50 cursor-pointer"
-                  >
-                    {busyDocumentId === document.id ? (
-                      <Loader2 size={16} className="animate-spin" />
-                    ) : (
-                      <Trash2 size={16} />
-                    )}
-                  </button>
-                </td>
-              </tr>
-            ))}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

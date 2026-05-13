@@ -299,20 +299,41 @@ def _chunk_csv_row(
     available_body_tokens: int,
 ) -> list[ChunkDraft]:
     lines = [line.strip() for line in body_text.split("\n") if line.strip()]
+    if len(list(encoder.encode("\n".join(lines)))) <= available_body_tokens:
+        return [_build_chunk(segment, prefix_text, "\n".join(lines), encoder)]
+
     chunks: list[ChunkDraft] = []
+    current_lines: list[str] = []
     for line in lines:
-        if len(list(encoder.encode(line))) <= available_body_tokens:
-            chunks.append(_build_chunk(segment, prefix_text, line, encoder))
-            continue
-        chunks.extend(
-            _chunk_oversized_csv_line(
-                segment,
-                prefix_text=prefix_text,
-                line=line,
-                encoder=encoder,
-                available_body_tokens=available_body_tokens,
+        line_tokens = len(list(encoder.encode(line)))
+        if line_tokens > available_body_tokens:
+            if current_lines:
+                chunks.append(
+                    _build_chunk(segment, prefix_text, "\n".join(current_lines), encoder)
+                )
+                current_lines = []
+            chunks.extend(
+                _chunk_oversized_csv_line(
+                    segment,
+                    prefix_text=prefix_text,
+                    line=line,
+                    encoder=encoder,
+                    available_body_tokens=available_body_tokens,
+                )
             )
-        )
+            continue
+
+        candidate_lines = [*current_lines, line]
+        candidate_body = "\n".join(candidate_lines)
+        if len(list(encoder.encode(candidate_body))) > available_body_tokens:
+            chunks.append(_build_chunk(segment, prefix_text, "\n".join(current_lines), encoder))
+            current_lines = [line]
+            continue
+
+        current_lines = candidate_lines
+
+    if current_lines:
+        chunks.append(_build_chunk(segment, prefix_text, "\n".join(current_lines), encoder))
     return chunks
 
 

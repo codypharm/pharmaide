@@ -50,7 +50,7 @@ def test_chunk_segments_applies_overlap_for_text_segments() -> None:
     ]
 
 
-def test_chunk_segments_does_not_overlap_csv_rows() -> None:
+def test_chunk_segments_keeps_csv_row_fields_together_when_they_fit() -> None:
     chunks = chunk_segments(
         [
             TextSegment(
@@ -66,41 +66,21 @@ def test_chunk_segments_does_not_overlap_csv_rows() -> None:
             )
         ],
         encoder=_WordEncoder(),
-        max_tokens=8,
+        max_tokens=20,
         overlap_tokens=2,
     )
 
     assert chunks == [
         ChunkDraft(
-            content="Document: Formulary\nRow: 7\n\ndrug: Warfarin",
-            tokens=6,
-            kind="csv_row",
-            document_title="Formulary",
-            section_title=None,
-            page_number=None,
-            row_number=7,
-        ),
-        ChunkDraft(
-            content="Document: Formulary\nRow: 7\n\ndose: 5 mg",
-            tokens=7,
-            kind="csv_row",
-            document_title="Formulary",
-            section_title=None,
-            page_number=None,
-            row_number=7,
-        ),
-        ChunkDraft(
-            content="Document: Formulary\nRow: 7\n\nmonitoring: INR weekly",
-            tokens=7,
-            kind="csv_row",
-            document_title="Formulary",
-            section_title=None,
-            page_number=None,
-            row_number=7,
-        ),
-        ChunkDraft(
-            content="Document: Formulary\nRow: 7\n\nwarning: avoid NSAIDs",
-            tokens=7,
+            content=(
+                "Document: Formulary\n"
+                "Row: 7\n\n"
+                "drug: Warfarin\n"
+                "dose: 5 mg\n"
+                "monitoring: INR weekly\n"
+                "warning: avoid NSAIDs"
+            ),
+            tokens=15,
             kind="csv_row",
             document_title="Formulary",
             section_title=None,

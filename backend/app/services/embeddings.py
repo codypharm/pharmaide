@@ -3,6 +3,7 @@
 from collections.abc import Sequence
 from typing import Protocol
 
+import structlog
 from openai import (
     APIConnectionError,
     APITimeoutError,
@@ -16,6 +17,8 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 EMBEDDING_MODEL = "text-embedding-3-large"
 EMBEDDING_DIMENSIONS = 3072
 EMBEDDING_BATCH_SIZE = 100
+
+log = structlog.get_logger(__name__)
 
 type EmbeddingVector = list[float]
 
@@ -62,11 +65,24 @@ async def embed_texts(
 ) -> list[EmbeddingVector]:
     """Embed text chunks in stable input order."""
     embeddings: list[EmbeddingVector] = []
-    for batch in _batches([_normalise_text(text) for text in texts], EMBEDDING_BATCH_SIZE):
+    batches = _batches([_normalise_text(text) for text in texts], EMBEDDING_BATCH_SIZE)
+    for index, batch in enumerate(batches, start=1):
         if not batch:
             continue
+        log.info(
+            "kb_embedding_batch_started",
+            batch_index=index,
+            batch_count=len(batches),
+            item_count=len(batch),
+        )
         response = await _create_embeddings_with_retry(client, batch)
         embeddings.extend(_ordered_embeddings(response))
+        log.info(
+            "kb_embedding_batch_completed",
+            batch_index=index,
+            batch_count=len(batches),
+            item_count=len(batch),
+        )
     return embeddings
 
 

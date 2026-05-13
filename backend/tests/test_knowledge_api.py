@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings, get_settings
@@ -160,7 +160,13 @@ async def test_list_and_get_knowledge_documents_return_metadata_with_chunk_count
 async def test_delete_knowledge_document_soft_removes_it_and_audits(
     app_client: AsyncClient,
     db_session: AsyncSession,
+    tmp_path: Path,
+    test_app: FastAPI,
 ) -> None:
+    test_app.dependency_overrides[get_settings] = lambda: Settings(
+        _env_file=None,
+        knowledge_upload_dir=str(tmp_path),
+    )
     owner_id = uuid4()
     document = KnowledgeDocument(
         source_type="user_upload",
@@ -171,6 +177,18 @@ async def test_delete_knowledge_document_soft_removes_it_and_audits(
         uploaded_by=owner_id,
     )
     db_session.add(document)
+    await db_session.flush()
+    stored_file = tmp_path / f"{document.id}.bin"
+    stored_file.write_bytes(b"stored clinical asset")
+    db_session.add(
+        KnowledgeChunk(
+            document_id=document.id,
+            ordinal=0,
+            content="Stored guidance.",
+            embedding=_vector_literal(0.0),
+            tokens=2,
+        )
+    )
     await db_session.flush()
 
     response = await app_client.delete(
@@ -185,11 +203,22 @@ async def test_delete_knowledge_document_soft_removes_it_and_audits(
             AuditLogEntry.event_type == "kb_doc_removed",
         )
     )
+    chunk_count = await db_session.scalar(
+        select(func.count())
+        .select_from(KnowledgeChunk)
+        .where(KnowledgeChunk.document_id == document.id)
+    )
 
     assert response.status_code == 204
     assert document.status == "removed"
+    assert not stored_file.exists()
+    assert chunk_count == 0
     assert audit is not None
-    assert audit.payload == {"document_id": str(document.id)}
+    assert audit.payload == {
+        "document_id": str(document.id),
+        "stored_file_removed": True,
+        "chunk_count_removed": 1,
+    }
 
 
 @pytest.mark.usefixtures("postgres_container")

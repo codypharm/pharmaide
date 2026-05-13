@@ -45,6 +45,7 @@ async def ingest_document(
             duration_ms=_duration_ms(started_at),
         )
     except Exception:
+        log.exception("kb_doc_ingestion_error", document_id=str(document_id))
         await _mark_failed(session_factory, document_id, duration_ms=_duration_ms(started_at))
 
 
@@ -82,6 +83,9 @@ async def _mark_ingested(
         document = await _get_document_for_update(session, document_id)
         if document is None:
             log.info("kb_doc_ingestion_skipped", document_id=str(document_id), reason="not_found")
+            return
+        if _is_removed(document):
+            log.info("kb_doc_ingestion_skipped", document_id=str(document_id), reason="removed")
             return
 
         await session.execute(
@@ -138,6 +142,13 @@ async def _mark_failed(
                 reason="not_found",
             )
             return
+        if _is_removed(document):
+            log.info(
+                "kb_doc_ingestion_failed_skipped",
+                document_id=str(document_id),
+                reason="removed",
+            )
+            return
 
         document.status = "failed"
         document.error_text = "ingestion_failed"
@@ -174,6 +185,11 @@ async def _get_document_for_update(
 def _vector_literal(embedding: Sequence[float]) -> str:
     """Render a pgvector literal; never log the vector contents."""
     return f"[{','.join(str(value) for value in embedding)}]"
+
+
+def _is_removed(document: KnowledgeDocument) -> bool:
+    """Removed documents are terminal even if an older ingestion task finishes later."""
+    return document.status == "removed"
 
 
 def _duration_ms(started_at: datetime) -> int:

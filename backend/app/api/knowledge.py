@@ -10,7 +10,7 @@ import structlog
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field, SecretStr
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.agents.knowledge_sources.user_upload import UserUploadSource
@@ -143,6 +143,7 @@ async def get_document(
 async def delete_document(
     document_id: UUID,
     session: SessionDep,
+    settings: SettingsDep,
     actor_id: ActorDep,
 ) -> Response:
     row = await session.execute(
@@ -156,6 +157,8 @@ async def delete_document(
     if document is None:
         raise HTTPException(status_code=404, detail={"error": "knowledge_document_not_found"})
 
+    stored_file_removed = _remove_stored_upload(settings.knowledge_upload_dir, document)
+    chunk_count_removed = await _remove_document_chunks(session, document_id)
     document.status = "removed"
     document.updated_at = func.clock_timestamp()
     session.add(
@@ -163,10 +166,20 @@ async def delete_document(
             event_type="kb_doc_removed",
             resource_type="kb_document",
             resource_id=document_id,
-            payload={"document_id": str(document_id)},
+            payload={
+                "document_id": str(document_id),
+                "stored_file_removed": stored_file_removed,
+                "chunk_count_removed": chunk_count_removed,
+            },
         )
     )
-    log.info("kb_doc_removed", document_id=str(document_id), actor_id=str(actor_id))
+    log.info(
+        "kb_doc_removed",
+        document_id=str(document_id),
+        actor_id=str(actor_id),
+        stored_file_removed=stored_file_removed,
+        chunk_count_removed=chunk_count_removed,
+    )
     return Response(status_code=204)
 
 
@@ -244,6 +257,26 @@ def _safe_title(filename: str | None) -> str:
 
 def _storage_path(upload_dir: str, document_id: UUID) -> Path:
     return Path(upload_dir) / f"{document_id}.bin"
+
+
+async def _remove_document_chunks(session: AsyncSession, document_id: UUID) -> int:
+    result = await session.execute(
+        delete(KnowledgeChunk).where(KnowledgeChunk.document_id == document_id)
+    )
+    return int(result.rowcount or 0)
+
+
+def _remove_stored_upload(upload_dir: str, document: KnowledgeDocument) -> bool:
+    if document.source_type != "user_upload":
+        return False
+
+    path = _storage_path(upload_dir, document.id)
+    if not path.exists():
+        log.info("kb_doc_upload_file_missing", document_id=str(document.id))
+        return False
+
+    path.unlink()
+    return True
 
 
 def _source_uri(document_id: UUID, title: str) -> str:

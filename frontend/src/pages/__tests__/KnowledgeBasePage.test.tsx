@@ -147,6 +147,23 @@ describe("KnowledgeBasePage", () => {
     expect(screen.getAllByText("File ready").length).toBeGreaterThan(0);
   });
 
+  it("disables delete while a document is processing", async () => {
+    const user = userEvent.setup();
+    const processingDoc = { ...DOC, status: "ingesting" as const, chunk_count: 0 };
+    vi.spyOn(knowledgeApi, "listKnowledgeDocuments").mockResolvedValue({ items: [processingDoc] });
+
+    renderPage();
+
+    await screen.findAllByText("Processing");
+    const deleteButton = screen.getByRole("button", {
+      name: /delete anticoagulation protocol/i,
+    });
+
+    expect(deleteButton).toBeDisabled();
+    await user.click(deleteButton);
+    expect(screen.queryByRole("dialog", { name: /remove clinical asset/i })).toBeNull();
+  });
+
   it("soft-deletes a document after confirmation", async () => {
     const user = userEvent.setup();
     vi.spyOn(knowledgeApi, "listKnowledgeDocuments")

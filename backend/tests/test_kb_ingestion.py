@@ -126,3 +126,38 @@ async def test_ingest_document_marks_failed_and_audits_without_source_text(
         "document_id": str(document.id),
         "error": "ingestion_failed",
     }
+
+
+async def test_ingest_document_does_not_overwrite_removed_document(
+    db_session: AsyncSession,
+) -> None:
+    document = KnowledgeDocument(
+        source_type="user_upload",
+        source_uri="local://kb/deleted.pdf",
+        title="Deleted Protocol",
+        mime="application/pdf",
+        status="removed",
+    )
+    db_session.add(document)
+    await db_session.flush()
+
+    session_factory = async_sessionmaker(db_session.bind, expire_on_commit=False)
+
+    await ingest_document(session_factory, document.id, source=_MemorySource(), embedder=_embed)
+    await ingest_document(session_factory, document.id, source=_FailingSource(), embedder=_embed)
+
+    await db_session.refresh(document)
+    chunk_count = await db_session.scalar(
+        select(func.count())
+        .select_from(KnowledgeChunk)
+        .where(KnowledgeChunk.document_id == document.id)
+    )
+    audit_count = await db_session.scalar(
+        select(func.count())
+        .select_from(AuditLogEntry)
+        .where(AuditLogEntry.resource_id == document.id)
+    )
+
+    assert document.status == "removed"
+    assert chunk_count == 0
+    assert audit_count == 0
