@@ -7,7 +7,6 @@ call DailyMed directly.
 """
 
 from collections.abc import Awaitable, Callable, Sequence
-from uuid import UUID
 
 import structlog
 from sqlalchemy import select
@@ -18,6 +17,7 @@ from app.agents.knowledge_sources import KnowledgeSource, KnowledgeSourceChunk
 from app.agents.knowledge_sources.dailymed import DailyMedClient, DailyMedSource
 from app.db.models import AuditLogEntry, KnowledgeChunk, KnowledgeDocument
 from app.services.kb_ingestion import EmbeddingVector, vector_literal
+from app.services.kb_scope import GLOBAL_DAILYMED_SCOPE_ID
 
 Embedder = Callable[[Sequence[str]], Awaitable[list[EmbeddingVector]]]
 
@@ -27,14 +27,13 @@ log = structlog.get_logger(__name__)
 async def ensure_dailymed_cached(
     session: AsyncSession,
     *,
-    kb_scope_id: UUID,
     source: KnowledgeSource,
     source_uri: str,
     title: str,
     embedder: Embedder,
 ) -> KnowledgeDocument:
-    """Create a ready DailyMed KB document if this scoped label is not cached."""
-    cached = await _cached_document(session, kb_scope_id=kb_scope_id, source_uri=source_uri)
+    """Create a ready global DailyMed KB document if this label is not cached."""
+    cached = await _cached_document(session, source_uri=source_uri)
     if cached is not None:
         log.info("dailymed_cache_hit", document_id=str(cached.id), source_uri=source_uri)
         return cached
@@ -45,7 +44,7 @@ async def ensure_dailymed_cached(
         title=title,
         mime="application/spl+xml",
         status="ingesting",
-        uploaded_by=kb_scope_id,
+        uploaded_by=GLOBAL_DAILYMED_SCOPE_ID,
     )
     session.add(document)
     await session.flush()
@@ -108,7 +107,6 @@ async def ensure_dailymed_cached(
 async def ensure_dailymed_cached_for_groundings(
     session: AsyncSession,
     *,
-    kb_scope_id: UUID,
     groundings: Sequence[MedicationGrounding],
     client: DailyMedClient,
     embedder: Embedder,
@@ -136,7 +134,6 @@ async def ensure_dailymed_cached_for_groundings(
 
             await ensure_dailymed_cached(
                 session,
-                kb_scope_id=kb_scope_id,
                 source=DailyMedSource(
                     client=client,
                     rxcui=rxcui,
@@ -169,18 +166,39 @@ async def ensure_dailymed_cached_for_groundings(
 async def _cached_document(
     session: AsyncSession,
     *,
-    kb_scope_id: UUID,
     source_uri: str,
 ) -> KnowledgeDocument | None:
-    result = await session.execute(
+    global_result = await session.execute(
         select(KnowledgeDocument).where(
             KnowledgeDocument.source_type == "dailymed",
             KnowledgeDocument.source_uri == source_uri,
-            KnowledgeDocument.uploaded_by == kb_scope_id,
+            KnowledgeDocument.uploaded_by == GLOBAL_DAILYMED_SCOPE_ID,
             KnowledgeDocument.status == "ready",
         )
     )
-    return result.scalar_one_or_none()
+    global_document = global_result.scalar_one_or_none()
+    if global_document is not None:
+        return global_document
+
+    legacy_result = await session.execute(
+        select(KnowledgeDocument)
+        .where(
+            KnowledgeDocument.source_type == "dailymed",
+            KnowledgeDocument.source_uri == source_uri,
+            KnowledgeDocument.status == "ready",
+        )
+        .limit(1)
+    )
+    legacy_document = legacy_result.scalar_one_or_none()
+    if legacy_document is None:
+        return None
+
+    # Previous development builds cached DailyMed per workspace. Promote a
+    # matching public label instead of creating another copy immediately.
+    legacy_document.uploaded_by = GLOBAL_DAILYMED_SCOPE_ID
+    await session.flush()
+    log.info("dailymed_cache_promoted_to_global", document_id=str(legacy_document.id))
+    return legacy_document
 
 
 def _validate_embedding_count(

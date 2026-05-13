@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.kb_reranker import RerankedCitation, RerankResult
 from app.db.models import EMBEDDING_DIMENSIONS, AuditLogEntry, KnowledgeChunk, KnowledgeDocument
 from app.services.kb_retrieval import Citation, retrieve
+from app.services.kb_scope import GLOBAL_DAILYMED_SCOPE_ID
 
 
 def _embedding(axis: int) -> list[float]:
@@ -200,7 +201,15 @@ async def test_retrieve_only_returns_chunks_uploaded_by_scope(
         status="ready",
         uploaded_by=other_scope_id,
     )
-    db_session.add_all([scope_document, other_document])
+    dailymed_document = KnowledgeDocument(
+        source_type="dailymed",
+        source_uri="dailymed://setid-1",
+        title="Lisinopril Tablet",
+        mime="application/spl+xml",
+        status="ready",
+        uploaded_by=GLOBAL_DAILYMED_SCOPE_ID,
+    )
+    db_session.add_all([scope_document, other_document, dailymed_document])
     await db_session.flush()
     db_session.add_all(
         [
@@ -218,6 +227,13 @@ async def test_retrieve_only_returns_chunks_uploaded_by_scope(
                 embedding=_vector_literal(_embedding(0)),
                 tokens=6,
             ),
+            KnowledgeChunk(
+                document_id=dailymed_document.id,
+                ordinal=0,
+                content="Public DailyMed label can be retrieved by any workspace.",
+                embedding=_vector_literal(_embedding(0)),
+                tokens=8,
+            ),
         ]
     )
     await db_session.flush()
@@ -229,7 +245,10 @@ async def test_retrieve_only_returns_chunks_uploaded_by_scope(
         uploaded_by=scope_id,
     )
 
-    assert [citation.text for citation in citations] == ["Workspace pharmacist protocol."]
+    assert {citation.text for citation in citations} == {
+        "Workspace pharmacist protocol.",
+        "Public DailyMed label can be retrieved by any workspace.",
+    }
 
 
 async def test_retrieve_without_kb_scope_returns_no_citations(

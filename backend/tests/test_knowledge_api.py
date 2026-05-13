@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings, get_settings
 from app.db.models import EMBEDDING_DIMENSIONS, AuditLogEntry, KnowledgeChunk, KnowledgeDocument
 from app.services import task_runner
+from app.services.kb_scope import GLOBAL_DAILYMED_SCOPE_ID
 
 
 @pytest.mark.usefixtures("postgres_container")
@@ -105,7 +106,15 @@ async def test_list_and_get_knowledge_documents_return_metadata_with_chunk_count
         status="ready",
         uploaded_by=other_owner_id,
     )
-    db_session.add_all([document, other_document])
+    dailymed_document = KnowledgeDocument(
+        source_type="dailymed",
+        source_uri="dailymed://setid-1",
+        title="Lisinopril Tablet",
+        mime="application/spl+xml",
+        status="ready",
+        uploaded_by=GLOBAL_DAILYMED_SCOPE_ID,
+    )
+    db_session.add_all([document, other_document, dailymed_document])
     await db_session.flush()
     db_session.add_all(
         [
@@ -121,6 +130,13 @@ async def test_list_and_get_knowledge_documents_return_metadata_with_chunk_count
                 ordinal=1,
                 content="Bleeding risk guidance.",
                 embedding=_vector_literal(1.0),
+                tokens=3,
+            ),
+            KnowledgeChunk(
+                document_id=dailymed_document.id,
+                ordinal=0,
+                content="DailyMed label warning.",
+                embedding=_vector_literal(0.0),
                 tokens=3,
             ),
         ]
@@ -139,22 +155,22 @@ async def test_list_and_get_knowledge_documents_return_metadata_with_chunk_count
         f"/knowledge/documents/{other_document.id}",
         headers={"X-Pharmaide-User-Id": str(owner_id)},
     )
+    dailymed_response = await app_client.get(
+        f"/knowledge/documents/{dailymed_document.id}",
+        headers={"X-Pharmaide-User-Id": str(owner_id)},
+    )
 
     assert list_response.status_code == 200
-    assert list_response.json()["items"] == [
-        {
-            "id": str(document.id),
-            "source_type": "user_upload",
-            "title": "Anticoagulation Protocol",
-            "mime": "application/pdf",
-            "status": "ready",
-            "chunk_count": 2,
-            "created_at": document.created_at.isoformat().replace("+00:00", "Z"),
-            "updated_at": document.updated_at.isoformat().replace("+00:00", "Z"),
-        }
-    ]
+    items_by_title = {item["title"]: item for item in list_response.json()["items"]}
+    assert set(items_by_title) == {"Anticoagulation Protocol", "Lisinopril Tablet"}
+    assert items_by_title["Anticoagulation Protocol"]["source_type"] == "user_upload"
+    assert items_by_title["Anticoagulation Protocol"]["chunk_count"] == 2
+    assert items_by_title["Lisinopril Tablet"]["source_type"] == "dailymed"
+    assert items_by_title["Lisinopril Tablet"]["chunk_count"] == 1
     assert get_response.status_code == 200
     assert get_response.json()["chunk_count"] == 2
+    assert dailymed_response.status_code == 200
+    assert dailymed_response.json()["source_type"] == "dailymed"
     assert cross_scope_response.status_code == 404
 
 
@@ -170,7 +186,7 @@ async def test_delete_knowledge_document_rejects_read_only_dailymed_reference(
         title="Lisinopril Tablet",
         mime="application/spl+xml",
         status="ready",
-        uploaded_by=owner_id,
+        uploaded_by=GLOBAL_DAILYMED_SCOPE_ID,
     )
     db_session.add(document)
     await db_session.flush()

@@ -333,7 +333,6 @@ def _configured_kb_retriever(
             ):
                 await ensure_dailymed_cached_for_groundings(
                     session,
-                    kb_scope_id=kb_scope_id,
                     groundings=state.get("groundings", []),
                     client=DailyMedClient(http_client=dailymed_http_client),
                     embedder=embedder,

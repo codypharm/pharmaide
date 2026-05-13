@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.kb_reranker import RerankResult
 from app.db.models import EMBEDDING_DIMENSIONS, AuditLogEntry
+from app.services.kb_scope import GLOBAL_DAILYMED_SCOPE_ID
 
 EmbeddingVector = list[float]
 Embedder = Callable[[Sequence[str]], Awaitable[list[EmbeddingVector]]]
@@ -36,7 +37,10 @@ _RETRIEVAL_SQL = text(
     FROM kb_chunks c
     JOIN kb_documents d ON d.id = c.document_id
     WHERE d.status = 'ready'
-      AND d.uploaded_by = :uploaded_by
+      AND (
+        (d.source_type = 'user_upload' AND d.uploaded_by = :uploaded_by)
+        OR (d.source_type = 'dailymed' AND d.uploaded_by = :global_dailymed_scope_id)
+      )
     ORDER BY c.embedding <=> CAST(:query_vector AS vector(3072)), c.created_at, c.id
     LIMIT :limit
     """
@@ -143,6 +147,7 @@ async def _query_citations(
             "query_vector": _vector_literal(query_embedding),
             "limit": limit,
             "uploaded_by": uploaded_by,
+            "global_dailymed_scope_id": GLOBAL_DAILYMED_SCOPE_ID,
         },
     )
     return [

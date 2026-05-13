@@ -10,7 +10,7 @@ import structlog
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field, SecretStr
-from sqlalchemy import delete, func, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.agents.knowledge_sources.user_upload import UserUploadSource
@@ -20,6 +20,7 @@ from app.db.models import AuditLogEntry, KnowledgeChunk, KnowledgeDocument
 from app.services import task_runner
 from app.services.embeddings import build_embedding_client, embed_texts
 from app.services.kb_ingestion import ingest_document, mark_stale_ingestions_failed
+from app.services.kb_scope import GLOBAL_DAILYMED_SCOPE_ID
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 SessionFactoryDep = Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)]
@@ -160,7 +161,7 @@ async def delete_document(
     row = await session.execute(
         select(KnowledgeDocument).where(
             KnowledgeDocument.id == document_id,
-            KnowledgeDocument.uploaded_by == actor_id,
+            _visible_document_filter(actor_id),
             KnowledgeDocument.status != "removed",
         )
     )
@@ -207,7 +208,7 @@ async def _document_rows(
         select(KnowledgeDocument, func.count(KnowledgeChunk.id))
         .outerjoin(KnowledgeChunk, KnowledgeChunk.document_id == KnowledgeDocument.id)
         .where(
-            KnowledgeDocument.uploaded_by == actor_id,
+            _visible_document_filter(actor_id),
             KnowledgeDocument.status != "removed",
         )
         .group_by(KnowledgeDocument.id)
@@ -229,7 +230,7 @@ async def _document_row(
         .outerjoin(KnowledgeChunk, KnowledgeChunk.document_id == KnowledgeDocument.id)
         .where(
             KnowledgeDocument.id == document_id,
-            KnowledgeDocument.uploaded_by == actor_id,
+            _visible_document_filter(actor_id),
             KnowledgeDocument.status != "removed",
         )
         .group_by(KnowledgeDocument.id)
@@ -248,6 +249,20 @@ def _document_view(row: tuple[KnowledgeDocument, int]) -> KnowledgeDocumentView:
         chunk_count=chunk_count,
         created_at=document.created_at,
         updated_at=document.updated_at,
+    )
+
+
+def _visible_document_filter(actor_id: UUID):
+    """Scope uploaded files to the workspace and DailyMed to the global cache."""
+    return or_(
+        and_(
+            KnowledgeDocument.source_type == "user_upload",
+            KnowledgeDocument.uploaded_by == actor_id,
+        ),
+        and_(
+            KnowledgeDocument.source_type == "dailymed",
+            KnowledgeDocument.uploaded_by == GLOBAL_DAILYMED_SCOPE_ID,
+        ),
     )
 
 
