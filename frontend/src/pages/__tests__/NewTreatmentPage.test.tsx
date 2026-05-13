@@ -142,6 +142,43 @@ describe("NewTreatmentPage", () => {
     );
   });
 
+  it("shows non-blocking extraction warnings after prefill", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(prescriptionsApi, "extractPrescription").mockResolvedValue({
+      patient: {
+        name: "Eleanor Vance",
+        dob: null,
+        mrn: null,
+        phone: null,
+        confidence: { name: 0.91 },
+      },
+      treatment: { clinical_objective: null, confidence: {} },
+      medications: [
+        {
+          name: "Lisinopril",
+          dosage: "10 mg",
+          frequency: "Once Daily (QD)",
+          duration: null,
+          objective: null,
+          confidence: { name: 0.95, dosage: 0.93, frequency: 0.9 },
+        },
+      ],
+      warnings: ["Duration was not visible on the uploaded prescription."],
+    });
+
+    renderPage();
+    await user.click(screen.getByRole("button", { name: /vision/i }));
+    await user.upload(
+      screen.getByLabelText(/browse prescription file/i),
+      new File(["fake-png"], "script.png", { type: "image/png" }),
+    );
+    await user.click(screen.getByRole("button", { name: /scan & prefill form/i }));
+
+    expect(await screen.findByText(/extraction warnings/i)).toBeInTheDocument();
+    expect(screen.getByText("Duration was not visible on the uploaded prescription.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /review & approve/i })).toBeEnabled();
+  });
+
   it("marks extracted fields and clears the marker when the pharmacist edits them", async () => {
     const user = userEvent.setup();
     vi.spyOn(prescriptionsApi, "extractPrescription").mockResolvedValue({

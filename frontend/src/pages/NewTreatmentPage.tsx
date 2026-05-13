@@ -66,6 +66,7 @@ export default function NewTreatmentPage() {
   const [visionFile, setVisionFile] = useState<File | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractionError, setExtractionError] = useState<ExtractionErrorState | null>(null);
+  const [extractionWarnings, setExtractionWarnings] = useState<string[]>([]);
   const [extractedFields, setExtractedFields] = useState<Set<ExtractionFieldKey>>(
     () => new Set(),
   );
@@ -120,6 +121,7 @@ export default function NewTreatmentPage() {
     if (file) {
       setVisionFile(file);
       setExtractionError(null);
+      setExtractionWarnings([]);
     }
   };
 
@@ -140,6 +142,7 @@ export default function NewTreatmentPage() {
 
     setIsExtracting(true);
     setExtractionError(null);
+    setExtractionWarnings([]);
     try {
       const prescription = await extractPrescription(visionFile);
       applyExtractedPrescription(prescription);
@@ -172,6 +175,7 @@ export default function NewTreatmentPage() {
     setMedications(medicationDrafts);
     setExtractedFields(extractedFieldKeys(prescription, medicationDrafts));
     setLowConfidenceFields(lowConfidenceFieldKeys(prescription, medicationDrafts));
+    setExtractionWarnings(prescription.warnings);
   };
 
   const handleSubmit = async () => {
@@ -221,6 +225,7 @@ export default function NewTreatmentPage() {
       setMedications([
         { id: crypto.randomUUID(), name: "", dosage: "", frequency: "", duration: "" },
       ]);
+      setExtractionWarnings([]);
     } catch (err) {
       if (err instanceof ConflictError) {
         setFieldErrors({ mrn: "This MRN already exists. Please verify or use a different identifier." });
@@ -708,6 +713,24 @@ export default function NewTreatmentPage() {
               </div>
 
               <div className="space-y-4 max-h-[450px] overflow-y-auto pr-2">
+                {extractionWarnings.length > 0 && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-3">
+                    <AlertCircle size={16} className="text-amber-600 mt-0.5 shrink-0" />
+                    <div className="space-y-2">
+                      <p className="text-[11px] font-bold text-amber-800 uppercase tracking-wider">
+                        Extraction warnings
+                      </p>
+                      <ul className="space-y-1">
+                        {extractionWarnings.map((warning, index) => (
+                          <li key={`${warning}-${index}`} className="text-xs text-amber-900 leading-relaxed font-medium">
+                            {warning}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+
                 {medications.map((med, i) => (
                   <div key={med.id} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3 relative group transition-all hover:bg-white hover:border-blue-200">
                     <div className="flex justify-between items-center border-b border-slate-100 pb-2 mb-2">
