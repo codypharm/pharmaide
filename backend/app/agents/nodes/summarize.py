@@ -119,6 +119,7 @@ def _summary_prompt(state: AnalysisState) -> str:
             f"groundings:\n{_groundings_section(state)}",
             f"ddi_warnings:\n{_ddi_section(state)}",
             f"schedule:\n{_schedule_section(state)}",
+            f"kb_citations:\n{_kb_citations_section(state)}",
         ]
     )
 
@@ -174,6 +175,19 @@ def _schedule_section(state: AnalysisState) -> str:
             f"label={slot.human_label}"
         )
         for slot in schedule.reminders[:20]
+    )
+
+
+def _kb_citations_section(state: AnalysisState) -> str:
+    citations = state.get("kb_citations", [])
+    if not citations:
+        return "- none"
+    return "\n".join(
+        (
+            f"- chunk_id={citation.chunk_id} document_title={citation.document_title} "
+            f"score={citation.score} source_uri={citation.source_uri}\n  text={citation.text}"
+        )
+        for citation in citations
     )
 
 

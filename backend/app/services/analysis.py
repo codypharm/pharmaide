@@ -6,6 +6,7 @@ checkpointed medication analysis graph.
 """
 
 import asyncio
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import cast
 from uuid import UUID
@@ -26,11 +27,16 @@ from app.agents.analysis_schemas import (
     AnalysisState,
     ClinicalReasoning,
     ClinicalReasoningWithSchedule,
+    KBCitation,
 )
+from app.agents.kb_reranker import build_reranker_agent, rerank_citations_with_agent
+from app.agents.nodes.retrieve_kb import KnowledgeRetriever
 from app.agents.nodes.summarize import build_summary_agent, build_summary_with_schedule_agent
 from app.config import get_settings
 from app.db.models import AuditLogEntry, Treatment, TreatmentAnalysis
 from app.errors import run_graph
+from app.services.embeddings import build_embedding_client, embed_texts
+from app.services.kb_retrieval import Citation, retrieve
 
 ConfiguredSummaryAgents = tuple[
     Agent[None, ClinicalReasoning] | None,
@@ -98,6 +104,8 @@ async def analyze_treatment(
     rxnorm_transport: httpx.AsyncBaseTransport | None = None,
     summary_agent: Agent[None, ClinicalReasoning] | None = None,
     schedule_agent: Agent[None, ClinicalReasoningWithSchedule] | None = None,
+    kb_retriever: KnowledgeRetriever | None = None,
+    kb_scope_id: UUID | None = None,
 ) -> None:
     """Run the treatment analysis graph and persist its validated result."""
     settings = get_settings()
@@ -143,6 +151,9 @@ async def analyze_treatment(
                 rxnorm_transport=rxnorm_transport,
                 summary_agent=summary_agent,
                 schedule_agent=schedule_agent,
+                session_factory=session_factory,
+                kb_retriever=kb_retriever,
+                kb_scope_id=kb_scope_id,
             ),
             timeout=timeout_seconds,
         )
@@ -212,12 +223,21 @@ async def _run_analysis_graph(
     rxnorm_transport: httpx.AsyncBaseTransport | None,
     summary_agent: Agent[None, ClinicalReasoning] | None,
     schedule_agent: Agent[None, ClinicalReasoningWithSchedule] | None,
+    session_factory: async_sessionmaker[AsyncSession],
+    kb_retriever: KnowledgeRetriever | None,
+    kb_scope_id: UUID | None,
 ) -> AnalysisState:
     """Invoke the compiled graph with shared runtime clients scoped to this run."""
     summary_agent, schedule_agent = _configured_summary_agents(
         openai_api_key,
         summary_agent=summary_agent,
         schedule_agent=schedule_agent,
+    )
+    configured_kb_retriever = _configured_kb_retriever(
+        session_factory,
+        openai_api_key,
+        kb_retriever=kb_retriever,
+        kb_scope_id=kb_scope_id,
     )
     async with (
         httpx.AsyncClient(
@@ -230,6 +250,7 @@ async def _run_analysis_graph(
             start_dt=datetime.now(UTC),
             summary_agent=summary_agent,
             schedule_agent=schedule_agent,
+            kb_retriever=configured_kb_retriever,
         ) as graph,
     ):
         result = await run_graph(graph, thread_id=thread_id, input_state=state)
@@ -263,6 +284,72 @@ def _configured_summary_agents(
     return summary_agent, schedule_agent
 
 
+def _configured_kb_retriever(
+    session_factory: async_sessionmaker[AsyncSession],
+    openai_api_key: SecretStr | None,
+    *,
+    kb_retriever: KnowledgeRetriever | None,
+    kb_scope_id: UUID | None,
+) -> KnowledgeRetriever | None:
+    if kb_retriever is not None:
+        return kb_retriever
+    if openai_api_key is None or kb_scope_id is None:
+        return None
+
+    secret = openai_api_key.get_secret_value()
+    reranker_agent = build_reranker_agent(
+        OpenAIResponsesModel("gpt-5-mini", provider=OpenAIProvider(api_key=secret))
+    )
+
+    async def configured_retriever(query: str, treatment_id: UUID | None) -> list[KBCitation]:
+        embedding_client = build_embedding_client(openai_api_key)
+
+        async def embedder(texts: Sequence[str]) -> list[list[float]]:
+            return await embed_texts(texts, client=embedding_client)
+
+        async def reranker(
+            rerank_query: str,
+            candidates: Sequence[Citation],
+            limit: int,
+        ):
+            return await rerank_citations_with_agent(
+                rerank_query,
+                candidates,
+                limit,
+                agent=reranker_agent,
+            )
+
+        try:
+            async with session_factory() as session, session.begin():
+                citations = await retrieve(
+                    session,
+                    query,
+                    embedder=embedder,
+                    reranker=reranker,
+                    k=5,
+                    candidate_k=20,
+                    treatment_id=treatment_id,
+                    uploaded_by=kb_scope_id,
+                )
+        finally:
+            await embedding_client.close()
+
+        return [_kb_citation_from_retrieval(citation) for citation in citations]
+
+    return configured_retriever
+
+
+def _kb_citation_from_retrieval(citation: Citation) -> KBCitation:
+    return KBCitation(
+        chunk_id=citation.chunk_id,
+        document_id=citation.document_id,
+        document_title=citation.document_title,
+        source_uri=citation.source_uri,
+        text=citation.text,
+        score=citation.score,
+    )
+
+
 async def _mark_analysis_completed(
     session_factory: async_sessionmaker[AsyncSession],
     analysis_id: UUID,
@@ -288,6 +375,7 @@ async def _mark_analysis_completed(
                     "analysis_id": str(analysis.id),
                     "grounding_count": len(state.get("groundings", [])),
                     "ddi_warning_count": len(state.get("ddi_warnings", [])),
+                    "kb_citation_count": len(state.get("kb_citations", [])),
                     "degraded": state.get("degraded", False),
                 },
             )
@@ -303,6 +391,7 @@ def _result_from_state(
         groundings=state.get("groundings", []),
         ddi_warnings=state.get("ddi_warnings", []),
         schedule=state.get("schedule"),
+        kb_citations=state.get("kb_citations", []),
         reasoning=state.get("reasoning"),
         degraded=state.get("degraded", False),
         partial_results=partial_results,

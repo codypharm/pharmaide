@@ -36,6 +36,7 @@ _RETRIEVAL_SQL = text(
     FROM kb_chunks c
     JOIN kb_documents d ON d.id = c.document_id
     WHERE d.status = 'ready'
+      AND d.uploaded_by = :uploaded_by
     ORDER BY c.embedding <=> CAST(:query_vector AS vector(3072)), c.created_at, c.id
     LIMIT :limit
     """
@@ -63,16 +64,24 @@ async def retrieve(
     k: int = 5,
     candidate_k: int | None = None,
     treatment_id: UUID | None = None,
+    uploaded_by: UUID | None = None,
 ) -> list[Citation]:
     """Return the top-K ready KB chunks for a clinical query."""
     normalized_query = query.strip()
-    if not normalized_query:
+    if not normalized_query or uploaded_by is None:
+        if uploaded_by is None:
+            log.info("kb_retrieval_skipped", reason="kb_scope_missing")
         return []
 
     limit = _normalize_limit(k)
     candidate_limit = _candidate_limit(limit, candidate_k, reranker=reranker)
     query_embedding = await _embed_query(normalized_query, embedder)
-    candidates = await _query_citations(session, query_embedding, candidate_limit)
+    candidates = await _query_citations(
+        session,
+        query_embedding,
+        candidate_limit,
+        uploaded_by=uploaded_by,
+    )
     citations = await _rerank_if_requested(
         normalized_query,
         candidates,
@@ -125,12 +134,15 @@ async def _query_citations(
     session: AsyncSession,
     query_embedding: Sequence[float],
     limit: int,
+    *,
+    uploaded_by: UUID,
 ) -> list[Citation]:
     result = await session.execute(
         _RETRIEVAL_SQL,
         {
             "query_vector": _vector_literal(query_embedding),
             "limit": limit,
+            "uploaded_by": uploaded_by,
         },
     )
     return [

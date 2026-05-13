@@ -68,12 +68,24 @@ class ClinicalReasoningWithSchedule(AnalysisEnvelope):
     schedule: Schedule | None
 
 
+class KBCitation(AnalysisEnvelope):
+    """Knowledge-base passage retrieved for clinical reasoning citation."""
+
+    chunk_id: UUID
+    document_id: UUID
+    document_title: str = Field(min_length=1)
+    source_uri: str = Field(min_length=1)
+    text: str = Field(min_length=1)
+    score: float = Field(ge=0, le=1)
+
+
 class AnalysisResult(AnalysisEnvelope):
     """Durable analysis payload stored on treatment_analyses.result."""
 
     groundings: list[MedicationGrounding]
     ddi_warnings: list[DDIWarning]
     schedule: Schedule | None
+    kb_citations: list[KBCitation] = Field(default_factory=list)
     reasoning: ClinicalReasoning | None
     degraded: bool
     partial_results: bool = False
@@ -99,6 +111,7 @@ class AnalysisState(TypedDict, total=False):
     groundings: list[MedicationGrounding]
     ddi_warnings: list[DDIWarning]
     schedule: Schedule | None
+    kb_citations: NotRequired[list[KBCitation]]
     reasoning: ClinicalReasoning | None
     degraded: bool
     needs_llm_parse: NotRequired[bool]

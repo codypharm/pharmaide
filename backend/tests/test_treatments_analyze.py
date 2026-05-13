@@ -66,6 +66,33 @@ async def test_post_treatment_analyze_starts_analysis(
     assert scheduled[0][2]["checkpoint_db_path"] == "./pharmaide.db"
     assert scheduled[0][2]["rxnorm_base_url"] == "https://rxnav.nlm.nih.gov/REST"
     assert "openai_api_key" in scheduled[0][2]
+    assert scheduled[0][2]["kb_scope_id"] is None
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_treatment_analyze_passes_uuid_user_header_as_kb_scope(
+    app_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scheduled: list[tuple[object, tuple[object, ...], dict[str, object]]] = []
+    scope_id = uuid4()
+
+    def capture_schedule(coro_fn: object, *args: object, **kwargs: object) -> None:
+        scheduled.append((coro_fn, args, kwargs))
+
+    monkeypatch.setattr(task_runner, "schedule", capture_schedule)
+
+    create_response = await app_client.post("/treatments", json=_treatment_body("ANALYZE-006"))
+    assert create_response.status_code == 201
+    treatment_id = UUID(create_response.json()["treatment_id"])
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/analyze",
+        headers={"X-Pharmaide-User-Id": str(scope_id)},
+    )
+
+    assert response.status_code == 202, response.text
+    assert scheduled[0][2]["user_id"] == str(scope_id)
+    assert scheduled[0][2]["kb_scope_id"] == scope_id
 
 
 @pytest.mark.usefixtures("postgres_container")
@@ -219,6 +246,7 @@ async def test_post_treatment_analyze_audits_successful_run_without_phi(
         "analysis_id": str(analysis_id),
         "grounding_count": 0,
         "ddi_warning_count": 0,
+        "kb_citation_count": 0,
         "degraded": False,
     }
 

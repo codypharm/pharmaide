@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.agents import analysis_graph as analysis_graph_module
 from app.agents.analysis_graph import AnalysisGraphFailure
-from app.agents.analysis_schemas import AnalysisState
+from app.agents.analysis_schemas import AnalysisState, KBCitation
 from app.agents.nodes.summarize import build_summary_agent
 from app.db.models import AuditLogEntry, Medication, Patient, Treatment, TreatmentAnalysis
 from app.services.analysis import (
@@ -194,6 +194,19 @@ async def test_analyze_treatment_runs_graph_and_persists_completed_result(
         )
     )
 
+    async def kb_retriever(_query: str, treatment_id: Any) -> list[KBCitation]:
+        assert treatment_id == treatment.id
+        return [
+            KBCitation(
+                chunk_id="44444444-4444-4444-4444-444444444444",
+                document_id="55555555-5555-5555-5555-555555555555",
+                document_title="Anticoagulation Protocol",
+                source_uri="local://kb/anticoagulation.pdf",
+                text="Warfarin requires INR monitoring.",
+                score=0.91,
+            )
+        ]
+
     await analyze_treatment(
         session_factory,
         analysis_id,
@@ -201,6 +214,7 @@ async def test_analyze_treatment_runs_graph_and_persists_completed_result(
         rxnorm_base_url="https://rxnav.test/REST",
         rxnorm_transport=httpx.MockTransport(_rxnorm_handler),
         summary_agent=summary_agent,
+        kb_retriever=kb_retriever,
     )
 
     analysis = await db_session.get(TreatmentAnalysis, analysis_id)
@@ -216,6 +230,16 @@ async def test_analyze_treatment_runs_graph_and_persists_completed_result(
     }
     assert analysis.result["degraded"] is True
     assert analysis.result["ddi_warnings"] == []
+    assert analysis.result["kb_citations"] == [
+        {
+            "chunk_id": "44444444-4444-4444-4444-444444444444",
+            "document_id": "55555555-5555-5555-5555-555555555555",
+            "document_title": "Anticoagulation Protocol",
+            "source_uri": "local://kb/anticoagulation.pdf",
+            "text": "Warfarin requires INR monitoring.",
+            "score": 0.91,
+        }
+    ]
     groundings = cast("list[dict[str, Any]]", analysis.result["groundings"])
     assert groundings[0]["medication_id"] == str(first_medication.id)
     assert groundings[0]["rxcui"] == "29046"

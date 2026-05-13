@@ -116,6 +116,7 @@ async def post_treatment_analysis(
             checkpoint_db_path=settings.checkpoint_db_path,
             rxnorm_base_url=settings.rxnorm_base_url,
             openai_api_key=settings.openai_api_key,
+            kb_scope_id=_parse_optional_uuid(user_id),
             user_id=user_id,
             max_concurrent_per_user=settings.max_concurrent_analyses_per_user,
         )
@@ -143,3 +144,11 @@ async def get_treatment_analysis(
     if analysis is None:
         return Response(status_code=204)
     return TreatmentAnalysisView.model_validate(analysis)
+
+
+def _parse_optional_uuid(value: str) -> UUID | None:
+    """Pre-auth user ids may be labels; only UUID actor ids can scope KB rows."""
+    try:
+        return UUID(value)
+    except ValueError:
+        return None

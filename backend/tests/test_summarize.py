@@ -21,6 +21,7 @@ from app.agents.analysis_schemas import (
     AnalysisState,
     ClinicalReasoning,
     ClinicalReasoningWithSchedule,
+    KBCitation,
     MedicationGrounding,
     ReminderSlot,
     Schedule,
@@ -234,6 +235,46 @@ async def test_summarize_treatment_prompt_restricts_model_to_state_content() -> 
     assert "Lisinopril" in seen["prompt"]
     assert "Warfarin" in seen["prompt"]
     assert "degraded: True" in seen["prompt"]
+
+
+async def test_summarize_treatment_prompt_includes_kb_citations() -> None:
+    seen: dict[str, str] = {}
+
+    def model_function(_messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        seen["prompt"] = _user_prompt(_messages)
+        output_tool = info.output_tools[0]
+        return ModelResponse(
+            parts=[
+                ToolCallPart(
+                    output_tool.name,
+                    {
+                        "summary": "KB citations were considered.",
+                        "red_flags": [],
+                        "confidence": 0.82,
+                    },
+                )
+            ],
+            model_name="summary-kb-test",
+        )
+
+    state = _state()
+    state["kb_citations"] = [
+        KBCitation(
+            chunk_id=UUID("44444444-4444-4444-4444-444444444444"),
+            document_id=UUID("55555555-5555-5555-5555-555555555555"),
+            document_title="Anticoagulation Protocol",
+            source_uri="local://kb/anticoagulation.pdf",
+            text="Warfarin requires INR monitoring.",
+            score=0.92,
+        )
+    ]
+    agent: Agent[None, ClinicalReasoning] = build_summary_agent(model=FunctionModel(model_function))
+
+    await summarize_treatment(state, agent=agent)
+
+    assert "kb_citations:" in seen["prompt"]
+    assert "Anticoagulation Protocol" in seen["prompt"]
+    assert "Warfarin requires INR monitoring." in seen["prompt"]
 
 
 async def test_summarize_treatment_prompt_requests_schedule_only_when_needed() -> None:

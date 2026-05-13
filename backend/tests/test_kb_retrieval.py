@@ -1,7 +1,7 @@
 """Knowledge-base retrieval service tests."""
 
 from collections.abc import Sequence
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +28,7 @@ async def _embed_query(_texts: Sequence[str]) -> list[list[float]]:
 async def test_retrieve_returns_nearest_ready_chunks_and_non_phi_audit(
     db_session: AsyncSession,
 ) -> None:
+    scope_id = uuid4()
     treatment_id = uuid4()
     ready_document = KnowledgeDocument(
         source_type="user_upload",
@@ -35,6 +36,7 @@ async def test_retrieve_returns_nearest_ready_chunks_and_non_phi_audit(
         title="Anticoagulation Protocol",
         mime="application/pdf",
         status="ready",
+        uploaded_by=scope_id,
     )
     ignored_document = KnowledgeDocument(
         source_type="user_upload",
@@ -42,6 +44,7 @@ async def test_retrieve_returns_nearest_ready_chunks_and_non_phi_audit(
         title="Draft Protocol",
         mime="application/pdf",
         status="ingesting",
+        uploaded_by=scope_id,
     )
     db_session.add_all([ready_document, ignored_document])
     await db_session.flush()
@@ -78,6 +81,7 @@ async def test_retrieve_returns_nearest_ready_chunks_and_non_phi_audit(
         embedder=_embed_query,
         k=2,
         treatment_id=treatment_id,
+        uploaded_by=scope_id,
     )
 
     audit = await db_session.scalar(
@@ -105,12 +109,14 @@ async def test_retrieve_returns_nearest_ready_chunks_and_non_phi_audit(
 async def test_retrieve_can_rerank_a_wider_candidate_set(
     db_session: AsyncSession,
 ) -> None:
+    scope_id = uuid4()
     document = KnowledgeDocument(
         source_type="user_upload",
         source_uri="local://kb/diabetes.pdf",
         title="Diabetes Protocol",
         mime="application/pdf",
         status="ready",
+        uploaded_by=scope_id,
     )
     db_session.add(document)
     await db_session.flush()
@@ -163,6 +169,7 @@ async def test_retrieve_can_rerank_a_wider_candidate_set(
         k=2,
         candidate_k=3,
         reranker=_rerank,
+        uploaded_by=scope_id,
     )
 
     assert [citation.text for citation in citations] == [
@@ -170,6 +177,88 @@ async def test_retrieve_can_rerank_a_wider_candidate_set(
         "Metformin may cause gastrointestinal side effects.",
     ]
     assert [citation.score for citation in citations] == [0.97, 0.81]
+
+
+async def test_retrieve_only_returns_chunks_uploaded_by_scope(
+    db_session: AsyncSession,
+) -> None:
+    scope_id = UUID("11111111-1111-1111-1111-111111111111")
+    other_scope_id = UUID("22222222-2222-2222-2222-222222222222")
+    scope_document = KnowledgeDocument(
+        source_type="user_upload",
+        source_uri="local://kb/workspace.pdf",
+        title="Workspace Protocol",
+        mime="application/pdf",
+        status="ready",
+        uploaded_by=scope_id,
+    )
+    other_document = KnowledgeDocument(
+        source_type="user_upload",
+        source_uri="local://kb/other.pdf",
+        title="Other Pharmacist Protocol",
+        mime="application/pdf",
+        status="ready",
+        uploaded_by=other_scope_id,
+    )
+    db_session.add_all([scope_document, other_document])
+    await db_session.flush()
+    db_session.add_all(
+        [
+            KnowledgeChunk(
+                document_id=scope_document.id,
+                ordinal=0,
+                content="Workspace pharmacist protocol.",
+                embedding=_vector_literal(_embedding(0)),
+                tokens=4,
+            ),
+            KnowledgeChunk(
+                document_id=other_document.id,
+                ordinal=0,
+                content="Other pharmacist protocol must not leak.",
+                embedding=_vector_literal(_embedding(0)),
+                tokens=6,
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    citations = await retrieve(
+        db_session,
+        "protocol",
+        embedder=_embed_query,
+        uploaded_by=scope_id,
+    )
+
+    assert [citation.text for citation in citations] == ["Workspace pharmacist protocol."]
+
+
+async def test_retrieve_without_kb_scope_returns_no_citations(
+    db_session: AsyncSession,
+) -> None:
+    document = KnowledgeDocument(
+        source_type="user_upload",
+        source_uri="local://kb/unscoped.pdf",
+        title="Unscoped Protocol",
+        mime="application/pdf",
+        status="ready",
+        uploaded_by=uuid4(),
+    )
+    db_session.add(document)
+    await db_session.flush()
+    db_session.add(
+        KnowledgeChunk(
+            document_id=document.id,
+            ordinal=0,
+            content="Unscoped content should not be returned.",
+            embedding=_vector_literal(_embedding(0)),
+            tokens=6,
+        )
+    )
+    await db_session.flush()
+
+    citations = await retrieve(db_session, "protocol", embedder=_embed_query)
+
+    assert citations == []
 
 
 async def test_retrieve_rejects_empty_query_without_embedding(
