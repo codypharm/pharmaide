@@ -1,5 +1,9 @@
 import { deleteJson, getJson, postMultipart } from "./client";
 
+// Pre-auth scaffolding only. Once auth/workspaces land, the KB scope must
+// come from the signed-in workspace/clinic, not this dashboard-local constant.
+export const PRE_AUTH_KB_SCOPE_ID = "00000000-0000-4000-8000-000000000001";
+
 export type KnowledgeDocumentStatus = "ingesting" | "ready" | "failed" | "removed";
 
 export type KnowledgeDocumentCreated = {

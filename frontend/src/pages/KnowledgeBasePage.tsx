@@ -1,256 +1,349 @@
-import { 
-  Search, 
-  Upload, 
-  Database, 
-  ShieldCheck, 
-  Bot, 
-  FileText, 
-  ChevronRight, 
-  MoreHorizontal, 
-  Plus, 
-  RefreshCw, 
+import {
   AlertCircle,
-  FileCode,
+  Database,
   FileSpreadsheet,
-  Activity
+  FileText,
+  Loader2,
+  RefreshCw,
+  Trash2,
+  Upload,
 } from "lucide-react";
-import { useState } from "react";
-import { useOutletContext } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
 
-type OutletContext = {
-  isPrivacyMode: boolean;
-};
+import { ApiError } from "../api/client";
+import {
+  PRE_AUTH_KB_SCOPE_ID,
+  deleteKnowledgeDocument,
+  listKnowledgeDocuments,
+  uploadKnowledgeDocument,
+  type KnowledgeDocumentView,
+} from "../api/knowledge";
 
-const DATA_SOURCES = [
-  { 
-    name: "Clinical Guidelines v4.2", 
-    file: "clinical_guidelines_2023_v4.2.pdf", 
-    type: "PDF", 
-    status: "Indexed", 
-    agents: ["TA", "RA"], 
-    date: "Oct 24, 2023", 
-    time: "14:32 PST" 
-  },
-  { 
-    name: "Drug Interaction Database", 
-    file: "interactions_q4_export.csv", 
-    type: "CSV", 
-    status: "Indexed", 
-    agents: ["RV"], 
-    date: "Oct 22, 2023", 
-    time: "09:15 PST" 
-  },
-  { 
-    name: "Fall Risk Protocol", 
-    file: "fall_risk_assessment_draft.pdf", 
-    type: "PDF", 
-    status: "Parsing Error", 
-    agents: [], 
-    date: "Just now", 
-    time: "",
-    error: true
-  },
-];
+const PAGE_SIZE = 50;
+const KB_SCOPE = { scopeId: PRE_AUTH_KB_SCOPE_ID };
+
+type FetchState =
+  | { kind: "loading" }
+  | { kind: "ok"; items: KnowledgeDocumentView[] }
+  | { kind: "error"; requestId: string | null };
 
 export default function KnowledgeBasePage() {
-  const { isPrivacyMode } = useOutletContext<OutletContext>();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [typeFilter, setTypeFilter] = useState("All Source Types");
+  const [state, setState] = useState<FetchState>({ kind: "loading" });
+  const [busyDocumentId, setBusyDocumentId] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const filteredSources = DATA_SOURCES.filter(source => {
-    const matchesSearch = source.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          source.file.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesType = typeFilter === "All Source Types" || 
-                        (typeFilter === "PDF Documents" && source.type === "PDF") ||
-                        (typeFilter === "CSV Databases" && source.type === "CSV");
-    return matchesSearch && matchesType;
-  });
+  async function refresh() {
+    try {
+      const result = await listKnowledgeDocuments({
+        ...KB_SCOPE,
+        limit: PAGE_SIZE,
+        offset: 0,
+      });
+      setState({ kind: "ok", items: result.items });
+    } catch (err) {
+      setState({
+        kind: "error",
+        requestId: err instanceof ApiError ? err.requestId : null,
+      });
+    }
+  }
+
+  useEffect(() => {
+    void refresh();
+  }, []);
+
+  async function handleUpload(file: File | undefined) {
+    if (!file || isUploading) return;
+    setIsUploading(true);
+    try {
+      await uploadKnowledgeDocument(file, KB_SCOPE);
+      await refresh();
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
+  async function handleDelete(document: KnowledgeDocumentView) {
+    if (!window.confirm(`Delete ${document.title}?`)) return;
+    setBusyDocumentId(document.id);
+    try {
+      await deleteKnowledgeDocument(document.id, KB_SCOPE);
+      await refresh();
+    } finally {
+      setBusyDocumentId(null);
+    }
+  }
+
+  const items = state.kind === "ok" ? state.items : [];
 
   return (
     <div className="h-full overflow-y-auto p-8">
       <div className="flex flex-col gap-6">
-        <div className="flex items-center justify-between">
-          <div className="flex flex-col gap-1">
-            <h2 className="text-2xl font-bold tracking-tight text-slate-900">Knowledge Base & Agent Intelligence</h2>
-            <p className="text-sm text-slate-500">Manage and upload clinical guidelines and drug databases to ground AI agent responses.</p>
-          </div>
-          <button className="px-4 py-2 bg-slate-900 text-white rounded-xl font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-sm shadow-slate-200 cursor-pointer">
-            <Upload size={16} />
-            Upload Source
-          </button>
-        </div>
+        <Header
+          total={items.length}
+          isUploading={isUploading}
+          onUpload={handleUpload}
+          onRefresh={refresh}
+          fileInputRef={fileInputRef}
+        />
 
-        <div className="grid grid-cols-12 gap-6">
-          {/* Active Intelligence Assets Card */}
-          <div className="col-span-4 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col gap-4">
-            <div className="flex items-center gap-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              <Database size={14} />
-              Active Intelligence Assets
-            </div>
-            <div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-4xl font-bold text-slate-900">42</span>
-                <span className="text-sm font-bold text-emerald-600 flex items-center gap-0.5">
-                  <Plus size={12} /> 3 this week
-                </span>
-              </div>
-              <p className="text-sm text-slate-500 mt-2 leading-relaxed">
-                Providing context across 5 distinct AI agent workflows.
-              </p>
-            </div>
-          </div>
-
-          {/* Agent Grounding Matrix Card */}
-          <div className="col-span-8 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col gap-4 relative">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                <Bot size={14} />
-                Agent Grounding Matrix
-              </div>
-              <button className="text-[11px] font-bold text-blue-600 uppercase tracking-wider hover:underline cursor-pointer">
-                Configure All
-              </button>
-            </div>
-            
-            <div className="flex items-center gap-4 mt-2">
-              <div className="flex-1 bg-slate-50 border border-slate-100 rounded-xl p-4 flex flex-col gap-3 group hover:border-blue-200 transition-all cursor-pointer">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-bold text-slate-900 flex items-center gap-2">
-                    <ShieldCheck size={16} className="text-blue-500" />
-                    Rx Verification
-                  </h4>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <span className="px-2 py-1 bg-white border border-slate-200 rounded text-[10px] font-medium text-slate-600">DrugDB_v2</span>
-                  <span className="px-2 py-1 bg-white border border-slate-200 rounded text-[10px] font-medium text-slate-600">Interactions</span>
-                </div>
-              </div>
-
-              <div className="flex-1 bg-slate-50 border border-slate-100 rounded-xl p-4 flex flex-col gap-3 group hover:border-blue-200 transition-all cursor-pointer">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-bold text-slate-900 flex items-center gap-2">
-                    <Activity size={16} className="text-blue-500" />
-                    Triage Assistant
-                  </h4>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <span className="px-2 py-1 bg-white border border-slate-200 rounded text-[10px] font-medium text-slate-600">Fall_Risk</span>
-                  <span className="px-2 py-1 bg-white border border-slate-200 rounded text-[10px] font-medium text-slate-600">Guidelines_v4</span>
-                </div>
-              </div>
-
-              <div className="flex-1 border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center gap-2 group hover:border-blue-300 hover:bg-blue-50/30 transition-all cursor-pointer">
-                <Plus size={20} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
-                <span className="text-xs font-bold text-slate-400 group-hover:text-blue-600">New Agent Rule</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mt-2">
-          <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/30">
-            <h3 className="font-bold text-slate-900">Data Sources</h3>
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input 
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Filter sources..."
-                  className="pl-9 pr-4 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all"
-                />
-              </div>
-              <select 
-                value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value)}
-                className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-100 cursor-pointer"
-              >
-                <option>All Source Types</option>
-                <option>PDF Documents</option>
-                <option>CSV Databases</option>
-              </select>
-            </div>
-          </div>
-
-          <table className="w-full text-left">
-            <thead>
-              <tr className="bg-slate-50/50 border-b border-slate-100">
-                <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Source Name & Type</th>
-                <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Assigned Agents</th>
-                <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Last Indexed</th>
-                <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredSources.map((source, i) => (
-                <tr key={i} className="hover:bg-slate-50/50 transition-colors group">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 bg-slate-50 border border-slate-100 rounded-lg flex items-center justify-center text-slate-400 group-hover:text-blue-500 transition-colors">
-                        {source.type === "PDF" ? <FileText size={18} /> : <FileSpreadsheet size={18} />}
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-slate-900 text-sm group-hover:text-blue-600 transition-colors">{source.name}</h4>
-                        <p className="text-xs text-slate-500 font-mono">{source.file}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                      source.error ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'
-                    }`}>
-                      {source.error ? <AlertCircle size={10} /> : <ShieldCheck size={10} />}
-                      {source.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex -space-x-2">
-                      {source.agents.length > 0 ? source.agents.map((agent, j) => (
-                        <div key={j} className="w-7 h-7 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[10px] font-bold text-slate-600" title={agent}>
-                          {agent}
-                        </div>
-                      )) : (
-                        <span className="text-xs italic text-slate-400">Unassigned</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex flex-col">
-                      <span className="text-sm font-medium text-slate-700">{source.date}</span>
-                      <span className="text-[10px] text-slate-400 font-mono">{source.time}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    {source.error ? (
-                      <button className="text-xs font-bold text-blue-600 hover:underline cursor-pointer flex items-center gap-1 justify-end ml-auto">
-                        <RefreshCw size={12} />
-                        Retry
-                      </button>
-                    ) : (
-                      <button className="text-slate-300 hover:text-slate-600 transition-colors cursor-pointer">
-                        <MoreHorizontal size={18} />
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          
-          <div className="px-6 py-4 bg-slate-50/30 border-t border-slate-100 flex items-center justify-between">
-            <span className="text-xs text-slate-500 font-medium">Showing 1 to {DATA_SOURCES.length} of 42 entries</span>
-            <div className="flex items-center gap-2">
-              <button className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:bg-white hover:text-slate-600 transition-all disabled:opacity-50 cursor-pointer">
-                <ChevronRight size={16} className="rotate-180" />
-              </button>
-              <button className="p-1.5 border border-slate-200 rounded-lg text-slate-400 hover:bg-white hover:text-slate-600 transition-all cursor-pointer">
-                <ChevronRight size={16} />
-              </button>
-            </div>
-          </div>
-        </div>
+        {state.kind === "loading" && <LoadingCard />}
+        {state.kind === "error" && <ErrorCard requestId={state.requestId} onRetry={refresh} />}
+        {state.kind === "ok" && (
+          <>
+            <SummaryBand documents={items} />
+            {items.length === 0 ? (
+              <EmptyCard />
+            ) : (
+              <DocumentsTable
+                items={items}
+                busyDocumentId={busyDocumentId}
+                onDelete={handleDelete}
+              />
+            )}
+          </>
+        )}
       </div>
     </div>
   );
+}
+
+function Header({
+  total,
+  isUploading,
+  onUpload,
+  onRefresh,
+  fileInputRef,
+}: {
+  total: number;
+  isUploading: boolean;
+  onUpload: (file: File | undefined) => void;
+  onRefresh: () => void;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 bg-blue-50 text-blue-700 rounded-xl flex items-center justify-center">
+          <Database size={20} />
+        </div>
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight text-slate-900">Clinical Assets</h2>
+          <p className="text-sm text-slate-500">
+            Upload clinic protocols, formularies, and reference files for grounded analysis.
+          </p>
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onRefresh}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 cursor-pointer"
+        >
+          <RefreshCw size={16} />
+          Refresh
+        </button>
+        <label className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 cursor-pointer">
+          {isUploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+          {isUploading ? "Uploading" : "Upload"}
+          <input
+            ref={fileInputRef}
+            aria-label="Upload clinical asset"
+            type="file"
+            accept=".pdf,.txt,.csv,application/pdf,text/plain,text/csv"
+            className="sr-only"
+            disabled={isUploading}
+            onChange={(event) => onUpload(event.target.files?.[0])}
+          />
+        </label>
+        <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+          {total} assets
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function SummaryBand({ documents }: { documents: KnowledgeDocumentView[] }) {
+  const ready = documents.filter((document) => document.status === "ready").length;
+  const ingesting = documents.filter((document) => document.status === "ingesting").length;
+  const failed = documents.filter((document) => document.status === "failed").length;
+
+  return (
+    <section className="grid grid-cols-3 gap-4">
+      <Metric label="Ready" value={ready} tone="text-blue-700" />
+      <Metric label="Ingesting" value={ingesting} tone="text-amber-700" />
+      <Metric label="Failed" value={failed} tone="text-red-700" />
+    </section>
+  );
+}
+
+function Metric({ label, value, tone }: { label: string; value: number; tone: string }) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-5">
+      <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
+      <p className={`mt-2 text-3xl font-bold tabular-nums ${tone}`}>{value}</p>
+    </div>
+  );
+}
+
+function DocumentsTable({
+  items,
+  busyDocumentId,
+  onDelete,
+}: {
+  items: KnowledgeDocumentView[];
+  busyDocumentId: string | null;
+  onDelete: (document: KnowledgeDocumentView) => void;
+}) {
+  return (
+    <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50">
+            <tr className="text-[11px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200">
+              <th className="text-left px-6 py-3">Source</th>
+              <th className="text-left px-6 py-3">Status</th>
+              <th className="text-left px-6 py-3">Chunks</th>
+              <th className="text-left px-6 py-3">Updated</th>
+              <th className="px-6 py-3 w-16"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((document, index) => (
+              <tr
+                key={document.id}
+                className={`border-b border-slate-100 last:border-b-0 ${
+                  index % 2 === 1 ? "bg-slate-50/50" : ""
+                } hover:bg-blue-50/50`}
+              >
+                <td className="px-6 py-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-center text-slate-500">
+                      {document.mime.includes("csv") ? (
+                        <FileSpreadsheet size={18} />
+                      ) : (
+                        <FileText size={18} />
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-900">{document.title}</p>
+                      <p className="text-xs text-slate-500">{document.mime}</p>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-6 py-4">
+                  <StatusPill status={document.status} />
+                </td>
+                <td className="px-6 py-4 text-slate-700 tabular-nums">
+                  {document.chunk_count} chunks
+                </td>
+                <td className="px-6 py-4 text-slate-700 tabular-nums">
+                  {formatDateTime(document.updated_at)}
+                </td>
+                <td className="px-6 py-4 text-right">
+                  <button
+                    type="button"
+                    aria-label={`Delete ${document.title}`}
+                    disabled={busyDocumentId === document.id}
+                    onClick={() => onDelete(document)}
+                    className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-red-700 hover:bg-red-50 disabled:opacity-50 cursor-pointer"
+                  >
+                    {busyDocumentId === document.id ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      <Trash2 size={16} />
+                    )}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function StatusPill({ status }: { status: KnowledgeDocumentView["status"] }) {
+  const tone =
+    status === "ready"
+      ? "bg-blue-50 text-blue-800 border-blue-200"
+      : status === "ingesting"
+        ? "bg-amber-50 text-amber-800 border-amber-200"
+        : "bg-red-50 text-red-800 border-red-200";
+  return (
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] font-bold uppercase tracking-wider ${tone}`}
+    >
+      {statusLabel(status)}
+    </span>
+  );
+}
+
+function LoadingCard() {
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-10 flex items-center justify-center gap-3 text-slate-500">
+      <Loader2 size={18} className="animate-spin" />
+      <span>Loading clinical assets...</span>
+    </div>
+  );
+}
+
+function EmptyCard() {
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-10 text-center">
+      <h3 className="text-lg font-bold text-slate-900 mb-2">No clinical assets uploaded</h3>
+      <p className="text-sm text-slate-500">
+        Upload a PDF, TXT, or CSV protocol to make it available for grounded analysis.
+      </p>
+    </div>
+  );
+}
+
+function ErrorCard({
+  requestId,
+  onRetry,
+}: {
+  requestId: string | null;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="bg-white border border-red-200 rounded-xl p-6 flex items-start justify-between gap-4">
+      <div className="flex items-start gap-3">
+        <AlertCircle size={20} className="text-red-700 mt-0.5" />
+        <div>
+          <p className="font-bold text-slate-900">Could not load clinical assets.</p>
+          <p className="text-sm text-slate-500 mt-1">
+            Please retry. Reference ID:{" "}
+            <code className="text-slate-700">{requestId ?? "unknown"}</code>
+          </p>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 cursor-pointer"
+      >
+        <RefreshCw size={16} />
+        Retry
+      </button>
+    </div>
+  );
+}
+
+function statusLabel(status: KnowledgeDocumentView["status"]): string {
+  if (status === "ready") return "Ready";
+  if (status === "ingesting") return "Ingesting";
+  if (status === "failed") return "Failed";
+  return "Removed";
+}
+
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 }
