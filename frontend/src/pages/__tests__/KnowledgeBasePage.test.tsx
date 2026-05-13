@@ -1,12 +1,20 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
+import { toast } from "sonner";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError, NotFoundError } from "../../api/client";
 import * as knowledgeApi from "../../api/knowledge";
 import type { KnowledgeDocumentList, KnowledgeDocumentView } from "../../api/knowledge";
 import KnowledgeBasePage from "../KnowledgeBasePage";
+
+vi.mock("sonner", () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
+}));
 
 const DOC: KnowledgeDocumentView = {
   id: "doc-1",
@@ -31,6 +39,8 @@ function renderPage() {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
+  vi.clearAllMocks();
   vi.restoreAllMocks();
 });
 
@@ -43,8 +53,8 @@ describe("KnowledgeBasePage", () => {
     renderPage();
 
     await waitFor(() => expect(screen.getByText("Anticoagulation Protocol")).toBeTruthy());
-    expect(screen.getAllByText("Ready").length).toBeGreaterThan(0);
-    expect(screen.getByText("8 chunks")).toBeTruthy();
+    expect(screen.getAllByText("File ready").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/chunks/i)).toBeNull();
     expect(spy).toHaveBeenCalledWith({
       scopeId: knowledgeApi.PRE_AUTH_KB_SCOPE_ID,
       limit: 50,
@@ -115,9 +125,30 @@ describe("KnowledgeBasePage", () => {
     await waitFor(() => expect(screen.getByText("Anticoagulation Protocol")).toBeTruthy());
   });
 
+  it("refreshes while an uploaded document is still processing", async () => {
+    vi.useFakeTimers();
+    const processingDoc = { ...DOC, status: "ingesting" as const, chunk_count: 0 };
+    const spy = vi.spyOn(knowledgeApi, "listKnowledgeDocuments")
+      .mockResolvedValueOnce({ items: [processingDoc] })
+      .mockResolvedValueOnce({ items: [{ ...DOC, status: "ready" }] });
+
+    renderPage();
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.getAllByText("Processing").length).toBeGreaterThan(0);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(screen.getAllByText("File ready").length).toBeGreaterThan(0);
+  });
+
   it("soft-deletes a document after confirmation", async () => {
     const user = userEvent.setup();
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     vi.spyOn(knowledgeApi, "listKnowledgeDocuments")
       .mockResolvedValueOnce({ items: [DOC] })
       .mockResolvedValueOnce({ items: [] });
@@ -127,10 +158,15 @@ describe("KnowledgeBasePage", () => {
     await screen.findByText("Anticoagulation Protocol");
 
     await user.click(screen.getByRole("button", { name: /delete anticoagulation protocol/i }));
+    expect(screen.getByRole("dialog", { name: /remove clinical asset/i })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /^remove$/i }));
 
     await waitFor(() => expect(deleteSpy).toHaveBeenCalledWith("doc-1", {
       scopeId: knowledgeApi.PRE_AUTH_KB_SCOPE_ID,
     }));
+    expect(toast.success).toHaveBeenCalledWith("Clinical asset removed", {
+      description: "Anticoagulation Protocol",
+    });
     await waitFor(() => expect(screen.getByText(/no clinical assets uploaded/i)).toBeTruthy());
   });
 });

@@ -7,8 +7,10 @@ import {
   RefreshCw,
   Trash2,
   Upload,
+  X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import { ApiError, NotFoundError } from "../api/client";
 import {
@@ -20,6 +22,7 @@ import {
 } from "../api/knowledge";
 
 const PAGE_SIZE = 50;
+const PROCESSING_REFRESH_MS = 3000;
 const KB_SCOPE = { scopeId: PRE_AUTH_KB_SCOPE_ID };
 
 type FetchState =
@@ -35,6 +38,7 @@ type KnowledgeLoadError =
 export default function KnowledgeBasePage() {
   const [state, setState] = useState<FetchState>({ kind: "loading" });
   const [busyDocumentId, setBusyDocumentId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<KnowledgeDocumentView | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -55,6 +59,20 @@ export default function KnowledgeBasePage() {
     void refresh();
   }, []);
 
+  const hasProcessingAssets =
+    state.kind === "ok" && state.items.some((document) => document.status === "ingesting");
+
+  useEffect(() => {
+    if (!hasProcessingAssets) return;
+
+    // Upload processing is asynchronous, so keep the page current until files settle.
+    const intervalId = window.setInterval(() => {
+      void refresh();
+    }, PROCESSING_REFRESH_MS);
+
+    return () => window.clearInterval(intervalId);
+  }, [hasProcessingAssets]);
+
   async function handleUpload(file: File | undefined) {
     if (!file || isUploading) return;
     setIsUploading(true);
@@ -68,11 +86,14 @@ export default function KnowledgeBasePage() {
   }
 
   async function handleDelete(document: KnowledgeDocumentView) {
-    if (!window.confirm(`Delete ${document.title}?`)) return;
     setBusyDocumentId(document.id);
     try {
       await deleteKnowledgeDocument(document.id, KB_SCOPE);
+      toast.success("Clinical asset removed", { description: document.title });
+      setPendingDelete(null);
       await refresh();
+    } catch {
+      toast.error("Could not remove clinical asset", { description: "Please retry." });
     } finally {
       setBusyDocumentId(null);
     }
@@ -102,10 +123,18 @@ export default function KnowledgeBasePage() {
               <DocumentsTable
                 items={items}
                 busyDocumentId={busyDocumentId}
-                onDelete={handleDelete}
+                onDelete={setPendingDelete}
               />
             )}
           </>
+        )}
+        {pendingDelete && (
+          <DeleteAssetDialog
+            document={pendingDelete}
+            isDeleting={busyDocumentId === pendingDelete.id}
+            onCancel={() => setPendingDelete(null)}
+            onConfirm={() => void handleDelete(pendingDelete)}
+          />
         )}
       </div>
     </div>
@@ -170,14 +199,14 @@ function Header({
 
 function SummaryBand({ documents }: { documents: KnowledgeDocumentView[] }) {
   const ready = documents.filter((document) => document.status === "ready").length;
-  const ingesting = documents.filter((document) => document.status === "ingesting").length;
+  const processing = documents.filter((document) => document.status === "ingesting").length;
   const failed = documents.filter((document) => document.status === "failed").length;
 
   return (
     <section className="grid grid-cols-3 gap-4">
-      <Metric label="Ready" value={ready} tone="text-blue-700" />
-      <Metric label="Ingesting" value={ingesting} tone="text-amber-700" />
-      <Metric label="Failed" value={failed} tone="text-red-700" />
+      <Metric label="File ready" value={ready} tone="text-blue-700" />
+      <Metric label="Processing" value={processing} tone="text-amber-700" />
+      <Metric label="Needs review" value={failed} tone="text-red-700" />
     </section>
   );
 }
@@ -208,7 +237,6 @@ function DocumentsTable({
             <tr className="text-[11px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200">
               <th className="text-left px-6 py-3">Source</th>
               <th className="text-left px-6 py-3">Status</th>
-              <th className="text-left px-6 py-3">Chunks</th>
               <th className="text-left px-6 py-3">Updated</th>
               <th className="px-6 py-3 w-16"></th>
             </tr>
@@ -238,9 +266,6 @@ function DocumentsTable({
                 </td>
                 <td className="px-6 py-4">
                   <StatusPill status={document.status} />
-                </td>
-                <td className="px-6 py-4 text-slate-700 tabular-nums">
-                  {document.chunk_count} chunks
                 </td>
                 <td className="px-6 py-4 text-slate-700 tabular-nums">
                   {formatDateTime(document.updated_at)}
@@ -365,6 +390,78 @@ function ErrorCard({
   );
 }
 
+function DeleteAssetDialog({
+  document,
+  isDeleting,
+  onCancel,
+  onConfirm,
+}: {
+  document: KnowledgeDocumentView;
+  isDeleting: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="delete-asset-title"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-6"
+      onClick={isDeleting ? undefined : onCancel}
+    >
+      <div
+        className="w-full max-w-md rounded-xl border border-slate-200 bg-white"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 p-5">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              Confirm removal
+            </p>
+            <h2 id="delete-asset-title" className="mt-1 text-lg font-bold text-slate-900">
+              Remove clinical asset?
+            </h2>
+          </div>
+          <button
+            type="button"
+            aria-label="Close confirmation"
+            disabled={isDeleting}
+            onClick={onCancel}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-50 hover:text-slate-700 disabled:opacity-50 cursor-pointer"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="p-5">
+          <p className="text-sm text-slate-600">
+            <span className="font-bold text-slate-900">{document.title}</span> will no longer be
+            available in the clinical workspace.
+          </p>
+        </div>
+        <div className="flex items-center justify-end gap-3 border-t border-slate-100 p-5">
+          <button
+            type="button"
+            disabled={isDeleting}
+            onClick={onCancel}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2 font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={isDeleting}
+            onClick={onConfirm}
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 font-bold text-white hover:bg-slate-800 disabled:opacity-50 cursor-pointer"
+          >
+            {isDeleting && <Loader2 size={16} className="animate-spin" />}
+            Remove
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function knowledgeLoadError(err: unknown): KnowledgeLoadError {
   if (err instanceof NotFoundError) {
     return { kind: "missing_route", requestId: err.requestId };
@@ -402,9 +499,9 @@ function errorCopy(error: KnowledgeLoadError): {
 }
 
 function statusLabel(status: KnowledgeDocumentView["status"]): string {
-  if (status === "ready") return "Ready";
-  if (status === "ingesting") return "Ingesting";
-  if (status === "failed") return "Failed";
+  if (status === "ready") return "File ready";
+  if (status === "ingesting") return "Processing";
+  if (status === "failed") return "Needs review";
   return "Removed";
 }
 

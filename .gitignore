@@ -11,3 +11,4 @@ dist
 .vite
 .env
 SPRINT_3_PLAN.md
+backend/data/kb_uploads/*
