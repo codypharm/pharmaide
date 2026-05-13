@@ -95,20 +95,43 @@ export async function postJson<TRequest, TResponse>(
   );
 }
 
+type RequestOptions = {
+  headers?: Record<string, string>;
+};
+
 export async function postMultipart<TResponse>(
   path: string,
   body: FormData,
+  options: RequestOptions = {},
 ): Promise<TResponse> {
   const response = await fetch(`${baseUrl()}${path}`, {
     method: "POST",
     body,
+    headers: options.headers,
   });
 
   return parseJsonResponse<TResponse>(response);
 }
 
-export async function getJson<TResponse>(path: string): Promise<TResponse> {
-  const response = await fetch(`${baseUrl()}${path}`, { method: "GET" });
+export async function getJson<TResponse>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<TResponse> {
+  const response = await fetch(`${baseUrl()}${path}`, {
+    method: "GET",
+    headers: options.headers,
+  });
+  return parseJsonResponse<TResponse>(response);
+}
+
+export async function deleteJson<TResponse = null>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<TResponse> {
+  const response = await fetch(`${baseUrl()}${path}`, {
+    method: "DELETE",
+    headers: options.headers,
+  });
   return parseJsonResponse<TResponse>(response);
 }
 

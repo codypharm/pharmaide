@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, ConflictError, NotFoundError, getJson, postJson, postMultipart } from "../client";
+import {
+  ApiError,
+  ConflictError,
+  NotFoundError,
+  deleteJson,
+  getJson,
+  postJson,
+  postMultipart,
+} from "../client";
 
 function mockFetch(response: {
   status: number;
@@ -85,6 +93,27 @@ describe("getJson", () => {
   });
 });
 
+describe("deleteJson", () => {
+  it("sends DELETE and accepts an empty 204 response", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      return new Response(null, {
+        status: 204,
+        headers: new Headers({ "X-Request-ID": "req_delete" }),
+      });
+    });
+
+    await expect(
+      deleteJson("/knowledge/documents/doc1", {
+        headers: { "X-Pharmaide-User-Id": "scope1" },
+      }),
+    ).resolves.toBeNull();
+
+    const [, init] = fetchSpy.mock.calls[0];
+    expect(init?.method).toBe("DELETE");
+    expect(init?.headers).toEqual({ "X-Pharmaide-User-Id": "scope1" });
+  });
+});
+
 describe("postJson 500", () => {
   it("throws ApiError on 500 with request_id breadcrumb", async () => {
     mockFetch({
@@ -119,5 +148,21 @@ describe("postMultipart", () => {
     expect(init?.method).toBe("POST");
     expect(init?.body).toBe(form);
     expect(init?.headers).toBeUndefined();
+  });
+
+  it("accepts explicit headers without setting Content-Type", async () => {
+    const fetchSpy = mockFetch({
+      status: 202,
+      body: { document_id: "doc1", status: "ingesting" },
+    });
+    const form = new FormData();
+    form.append("file", new File(["fake"], "protocol.csv", { type: "text/csv" }));
+
+    await postMultipart("/knowledge/documents", form, {
+      headers: { "X-Pharmaide-User-Id": "scope1" },
+    });
+
+    const [, init] = fetchSpy.mock.calls[0];
+    expect(init?.headers).toEqual({ "X-Pharmaide-User-Id": "scope1" });
   });
 });
