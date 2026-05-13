@@ -194,8 +194,13 @@ async def test_analyze_treatment_runs_graph_and_persists_completed_result(
         )
     )
 
-    async def kb_retriever(_query: str, treatment_id: Any) -> list[KBCitation]:
+    async def kb_retriever(
+        _query: str,
+        treatment_id: Any,
+        state: AnalysisState,
+    ) -> list[KBCitation]:
         assert treatment_id == treatment.id
+        assert state["groundings"][0].rxcui == "29046"
         return [
             KBCitation(
                 chunk_id="44444444-4444-4444-4444-444444444444",

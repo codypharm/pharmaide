@@ -3,12 +3,18 @@
 from collections.abc import AsyncIterator, Sequence
 from uuid import UUID, uuid4
 
+import httpx
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.analysis_schemas import MedicationGrounding
 from app.agents.knowledge_sources import KnowledgeSourceChunk
+from app.agents.knowledge_sources.dailymed import DailyMedClient
 from app.db.models import EMBEDDING_DIMENSIONS, AuditLogEntry, KnowledgeChunk, KnowledgeDocument
-from app.services.dailymed_cache import ensure_dailymed_cached
+from app.services.dailymed_cache import (
+    ensure_dailymed_cached,
+    ensure_dailymed_cached_for_groundings,
+)
 
 
 class _DailyMedMemorySource:
@@ -111,3 +117,86 @@ async def test_ensure_dailymed_cached_returns_existing_ready_document_without_re
     assert document.id == existing.id
     assert source.calls == 0
     assert document_count == 1
+
+
+async def test_ensure_dailymed_cached_for_groundings_fetches_one_label_per_rxcui(
+    db_session: AsyncSession,
+) -> None:
+    scope_id = uuid4()
+    medication_id = uuid4()
+    search_calls = 0
+    xml_calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal search_calls, xml_calls
+        if request.url.path == "/dailymed/services/v2/spls.json":
+            search_calls += 1
+            assert request.url.params["rxcui"] == "29046"
+            return httpx.Response(
+                200,
+                json={"data": [{"setid": "setid-1", "title": "Lisinopril Tablet"}]},
+            )
+        if request.url.path == "/dailymed/services/v2/spls/setid-1.xml":
+            xml_calls += 1
+            return httpx.Response(200, text=_SPL_XML)
+        return httpx.Response(404)
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://dailymed.nlm.nih.gov",
+    ) as http_client:
+        cached_count = await ensure_dailymed_cached_for_groundings(
+            db_session,
+            kb_scope_id=scope_id,
+            groundings=[
+                MedicationGrounding(
+                    medication_id=medication_id,
+                    medication_name="Lisinopril",
+                    normalized_name="lisinopril",
+                    rxcui="29046",
+                    confidence=0.92,
+                ),
+                MedicationGrounding(
+                    medication_id=uuid4(),
+                    medication_name="Lisinopril Duplicate",
+                    normalized_name="lisinopril",
+                    rxcui="29046",
+                    confidence=0.91,
+                )
+            ],
+            client=DailyMedClient(http_client=http_client),
+            embedder=_embed,
+        )
+
+    document = await db_session.scalar(
+        select(KnowledgeDocument).where(KnowledgeDocument.source_uri == "dailymed://setid-1")
+    )
+    assert document is not None
+    chunk_count = await db_session.scalar(
+        select(func.count())
+        .select_from(KnowledgeChunk)
+        .where(KnowledgeChunk.document_id == document.id)
+    )
+
+    assert cached_count == 1
+    assert search_calls == 1
+    assert xml_calls == 1
+    assert document.status == "ready"
+    assert document.uploaded_by == scope_id
+    assert chunk_count == 1
+
+
+_SPL_XML = """
+<document xmlns="urn:hl7-org:v3">
+  <component>
+    <structuredBody>
+      <component>
+        <section>
+          <title>Warnings and Precautions</title>
+          <text><paragraph>Monitor for symptomatic hypotension.</paragraph></text>
+        </section>
+      </component>
+    </structuredBody>
+  </component>
+</document>
+"""

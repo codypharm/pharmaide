@@ -30,11 +30,13 @@ from app.agents.analysis_schemas import (
     KBCitation,
 )
 from app.agents.kb_reranker import build_reranker_agent, rerank_citations_with_agent
+from app.agents.knowledge_sources.dailymed import DailyMedClient
 from app.agents.nodes.retrieve_kb import KnowledgeRetriever
 from app.agents.nodes.summarize import build_summary_agent, build_summary_with_schedule_agent
 from app.config import get_settings
 from app.db.models import AuditLogEntry, Treatment, TreatmentAnalysis
 from app.errors import run_graph
+from app.services.dailymed_cache import ensure_dailymed_cached_for_groundings
 from app.services.embeddings import build_embedding_client, embed_texts
 from app.services.kb_retrieval import Citation, retrieve
 
@@ -301,7 +303,11 @@ def _configured_kb_retriever(
         OpenAIResponsesModel("gpt-5-mini", provider=OpenAIProvider(api_key=secret))
     )
 
-    async def configured_retriever(query: str, treatment_id: UUID | None) -> list[KBCitation]:
+    async def configured_retriever(
+        query: str,
+        treatment_id: UUID | None,
+        state: AnalysisState,
+    ) -> list[KBCitation]:
         embedding_client = build_embedding_client(openai_api_key)
 
         async def embedder(texts: Sequence[str]) -> list[list[float]]:
@@ -320,7 +326,18 @@ def _configured_kb_retriever(
             )
 
         try:
-            async with session_factory() as session, session.begin():
+            async with (
+                httpx.AsyncClient() as dailymed_http_client,
+                session_factory() as session,
+                session.begin(),
+            ):
+                await ensure_dailymed_cached_for_groundings(
+                    session,
+                    kb_scope_id=kb_scope_id,
+                    groundings=state.get("groundings", []),
+                    client=DailyMedClient(http_client=dailymed_http_client),
+                    embedder=embedder,
+                )
                 citations = await retrieve(
                     session,
                     query,

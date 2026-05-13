@@ -13,7 +13,9 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.analysis_schemas import MedicationGrounding
 from app.agents.knowledge_sources import KnowledgeSource, KnowledgeSourceChunk
+from app.agents.knowledge_sources.dailymed import DailyMedClient, DailyMedSource
 from app.db.models import AuditLogEntry, KnowledgeChunk, KnowledgeDocument
 from app.services.kb_ingestion import EmbeddingVector, vector_literal
 
@@ -101,6 +103,67 @@ async def ensure_dailymed_cached(
     )
     await session.flush()
     return document
+
+
+async def ensure_dailymed_cached_for_groundings(
+    session: AsyncSession,
+    *,
+    kb_scope_id: UUID,
+    groundings: Sequence[MedicationGrounding],
+    client: DailyMedClient,
+    embedder: Embedder,
+) -> int:
+    """Cache DailyMed labels for grounded drugs before KB retrieval runs.
+
+    DailyMed is best-effort evidence, not a blocker. A failed lookup for one
+    drug should not prevent retrieval from pharmacist-uploaded clinical assets.
+    """
+    cached_count = 0
+    requested_count = 0
+    seen_rxcuis: set[str] = set()
+    for grounding in groundings:
+        rxcui = grounding.rxcui.strip() if grounding.rxcui else ""
+        if not rxcui or rxcui in seen_rxcuis:
+            continue
+        seen_rxcuis.add(rxcui)
+
+        requested_count += 1
+        drug_name = grounding.normalized_name or grounding.medication_name
+        try:
+            label = await client.find_label(rxcui=rxcui, drug_name=drug_name)
+            if label is None:
+                continue
+
+            await ensure_dailymed_cached(
+                session,
+                kb_scope_id=kb_scope_id,
+                source=DailyMedSource(
+                    client=client,
+                    rxcui=rxcui,
+                    drug_name=drug_name,
+                    label=label,
+                ),
+                source_uri=f"dailymed://{label.setid}",
+                title=label.title,
+                embedder=embedder,
+            )
+        except Exception:
+            log.warning(
+                "dailymed_grounding_cache_failed",
+                rxcui=rxcui,
+                medication_id=str(grounding.medication_id),
+                exc_info=True,
+            )
+            continue
+
+        cached_count += 1
+
+    log.info(
+        "dailymed_grounding_cache_prepared",
+        requested_count=requested_count,
+        cached_count=cached_count,
+    )
+    return cached_count
 
 
 async def _cached_document(

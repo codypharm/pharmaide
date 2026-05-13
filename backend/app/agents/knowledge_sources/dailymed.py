@@ -97,9 +97,13 @@ class DailyMedSource:
     client: DailyMedClient
     rxcui: str | None
     drug_name: str
+    label: DailyMedLabel | None = None
 
     async def list_chunks(self, _document_id: UUID) -> AsyncIterator[KnowledgeSourceChunk]:
-        label = await self.client.find_label(rxcui=self.rxcui, drug_name=self.drug_name)
+        label = self.label or await self.client.find_label(
+            rxcui=self.rxcui,
+            drug_name=self.drug_name,
+        )
         if label is None:
             raise DailyMedLookupError(f"DailyMed label not found for {self.drug_name}")
 

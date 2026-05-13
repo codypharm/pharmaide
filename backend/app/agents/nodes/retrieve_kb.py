@@ -7,7 +7,7 @@ import structlog
 
 from app.agents.analysis_schemas import AnalysisState, KBCitation
 
-KnowledgeRetriever = Callable[[str, UUID | None], Awaitable[list[KBCitation]]]
+KnowledgeRetriever = Callable[[str, UUID | None, AnalysisState], Awaitable[list[KBCitation]]]
 
 log = structlog.get_logger(__name__)
 
@@ -26,7 +26,7 @@ async def retrieve_kb_citations(
 
     query = _query_from_state(state)
     try:
-        citations = await retriever(query, state.get("treatment_id"))
+        citations = await retriever(query, state.get("treatment_id"), state)
     except Exception:
         result = state.copy()
         result["kb_citations"] = []

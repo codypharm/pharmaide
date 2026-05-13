@@ -91,10 +91,15 @@ async def test_analysis_graph_retrieves_kb_citations_before_summary(
         )
     )
 
-    async def kb_retriever(query: str, treatment_id: UUID | None) -> list[KBCitation]:
+    async def kb_retriever(
+        query: str,
+        treatment_id: UUID | None,
+        state: AnalysisState,
+    ) -> list[KBCitation]:
         assert treatment_id == UUID("33333333-3333-3333-3333-333333333333")
         assert "Lisinopril" in query
         assert "Warfarin" in query
+        assert [grounding.rxcui for grounding in state["groundings"]] == ["29046", "11289"]
         return [
             KBCitation(
                 chunk_id=UUID("44444444-4444-4444-4444-444444444444"),
