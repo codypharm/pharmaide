@@ -17,6 +17,7 @@ import {
   triggerAnalysis,
   type AnalysisResult,
   type DDIWarning,
+  type KBCitation,
   type MedicationGrounding,
   type ReminderSlot,
   type TreatmentDetail,
@@ -389,6 +390,7 @@ function AnalysisResultView({ result }: { result: AnalysisResult }) {
   return (
     <div className="mt-6 space-y-6">
       <ClinicalSummary result={result} />
+      <SourcesList citations={result.kb_citations ?? []} />
       <GroundingsList groundings={result.groundings} />
       <InteractionsList warnings={result.ddi_warnings} />
       <SchedulePreview
@@ -423,6 +425,38 @@ function ClinicalSummary({ result }: { result: AnalysisResult }) {
         </div>
       ) : (
         <EmptyAnalysisText>No clinical summary was produced.</EmptyAnalysisText>
+      )}
+    </div>
+  );
+}
+
+function SourcesList({ citations }: { citations: KBCitation[] }) {
+  return (
+    <div className="border-t border-slate-200 pt-5">
+      <SubsectionTitle>Sources</SubsectionTitle>
+      {citations.length > 0 ? (
+        <div className="mt-3 grid gap-3 lg:grid-cols-2">
+          {citations.map((citation) => (
+            <div
+              key={citation.chunk_id}
+              className="border border-slate-200 bg-slate-50 px-4 py-3"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-bold text-slate-900">
+                    {citation.document_title}
+                  </p>
+                  <p className="mt-1 text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Relevance {formatRelevance(citation.score)}
+                  </p>
+                </div>
+              </div>
+              <p className="mt-3 text-sm leading-6 text-slate-700">{citation.text}</p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <EmptyAnalysisText>No uploaded clinical assets were cited.</EmptyAnalysisText>
       )}
     </div>
   );
@@ -529,6 +563,11 @@ function SchedulePreview({
       )}
     </div>
   );
+}
+
+function formatRelevance(score: number): string {
+  const boundedScore = Math.max(0, Math.min(1, score));
+  return `${Math.round(boundedScore * 100)}%`;
 }
 
 function formatReminderTiming(offset: string): string {

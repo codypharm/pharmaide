@@ -68,6 +68,16 @@ const COMPLETED_ANALYSIS: TreatmentAnalysisRow = {
         human_label: `Day 1, ${String(index + 1).padStart(2, "0")}:00`,
       })),
     },
+    kb_citations: [
+      {
+        chunk_id: "77777777-7777-7777-7777-777777777777",
+        document_id: "88888888-8888-8888-8888-888888888888",
+        document_title: "Clinic Hypertension Protocol",
+        source_uri: "local://kb/hypertension.pdf",
+        text: "ACE inhibitors require monitoring for cough and dizziness.",
+        score: 0.91,
+      },
+    ],
     reasoning: {
       summary: "Patient should be monitored for cough and dizziness.",
       red_flags: ["Escalate worsening dizziness."],
@@ -212,6 +222,12 @@ describe("TreatmentDetailPage", () => {
       await screen.findByText("Patient should be monitored for cough and dizziness."),
     ).toBeTruthy();
     expect(screen.getByText("Escalate worsening dizziness.")).toBeTruthy();
+    expect(screen.getByText("Sources")).toBeTruthy();
+    expect(screen.getByText("Clinic Hypertension Protocol")).toBeTruthy();
+    expect(screen.getByText("Relevance 91%")).toBeTruthy();
+    expect(
+      screen.getByText("ACE inhibitors require monitoring for cough and dizziness."),
+    ).toBeTruthy();
     expect(screen.getAllByText(/Lisinopril/).length).toBeGreaterThan(1);
     expect(screen.getByText(/RxCUI 29046/)).toBeTruthy();
     expect(screen.getByText("Monitor INR closely.")).toBeTruthy();

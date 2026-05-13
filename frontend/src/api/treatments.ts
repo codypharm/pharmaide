@@ -137,10 +137,20 @@ export type ClinicalReasoning = {
   confidence: number;
 };
 
+export type KBCitation = {
+  chunk_id: string;
+  document_id: string;
+  document_title: string;
+  source_uri: string;
+  text: string;
+  score: number;
+};
+
 export type AnalysisResult = {
   groundings: MedicationGrounding[];
   ddi_warnings: DDIWarning[];
   schedule: Schedule | null;
+  kb_citations: KBCitation[];
   reasoning: ClinicalReasoning | null;
   degraded: boolean;
   partial_results: boolean;
