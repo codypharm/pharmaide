@@ -450,7 +450,8 @@ function SourcesList({ citations }: { citations: KBCitation[] }) {
                     {citation.document_title}
                   </Link>
                   <p className="mt-1 text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Relevance {formatRelevance(citation.score)}
+                    {sourceTypeLabel(citation.source_type)} · Relevance{" "}
+                    {formatRelevance(citation.score)}
                   </p>
                 </div>
               </div>
@@ -571,6 +572,11 @@ function SchedulePreview({
 function formatRelevance(score: number): string {
   const boundedScore = Math.max(0, Math.min(1, score));
   return `${Math.round(boundedScore * 100)}%`;
+}
+
+function sourceTypeLabel(sourceType: KBCitation["source_type"]): string {
+  if (sourceType === "dailymed") return "Verified medical reference";
+  return "Clinic asset";
 }
 
 function formatReminderTiming(offset: string): string {

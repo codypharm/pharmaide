@@ -140,6 +140,7 @@ export type ClinicalReasoning = {
 export type KBCitation = {
   chunk_id: string;
   document_id: string;
+  source_type: "user_upload" | "dailymed";
   document_title: string;
   source_uri: string;
   text: string;

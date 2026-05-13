@@ -359,6 +359,7 @@ def _kb_citation_from_retrieval(citation: Citation) -> KBCitation:
     return KBCitation(
         chunk_id=citation.chunk_id,
         document_id=citation.document_id,
+        source_type=citation.source_type,
         document_title=citation.document_title,
         source_uri=citation.source_uri,
         text=citation.text,

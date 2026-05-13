@@ -208,7 +208,7 @@ async def _document_rows(
         select(KnowledgeDocument, func.count(KnowledgeChunk.id))
         .outerjoin(KnowledgeChunk, KnowledgeChunk.document_id == KnowledgeDocument.id)
         .where(
-            _visible_document_filter(actor_id),
+            _listed_document_filter(actor_id),
             KnowledgeDocument.status != "removed",
         )
         .group_by(KnowledgeDocument.id)
@@ -253,7 +253,7 @@ def _document_view(row: tuple[KnowledgeDocument, int]) -> KnowledgeDocumentView:
 
 
 def _visible_document_filter(actor_id: UUID):
-    """Scope uploaded files to the workspace and DailyMed to the global cache."""
+    """Allow direct access to workspace uploads and cited DailyMed references."""
     return or_(
         and_(
             KnowledgeDocument.source_type == "user_upload",
@@ -263,6 +263,14 @@ def _visible_document_filter(actor_id: UUID):
             KnowledgeDocument.source_type == "dailymed",
             KnowledgeDocument.uploaded_by == GLOBAL_DAILYMED_SCOPE_ID,
         ),
+    )
+
+
+def _listed_document_filter(actor_id: UUID):
+    """The management list shows only pharmacist/workspace-managed uploads."""
+    return and_(
+        KnowledgeDocument.source_type == "user_upload",
+        KnowledgeDocument.uploaded_by == actor_id,
     )
 
 

@@ -185,7 +185,8 @@ def _kb_citations_section(state: AnalysisState) -> str:
     return "\n".join(
         (
             f"- chunk_id={citation.chunk_id} document_title={citation.document_title} "
-            f"score={citation.score} source_uri={citation.source_uri}\n  text={citation.text}"
+            f"source_type={citation.source_type} score={citation.score} "
+            f"source_uri={citation.source_uri}\n  text={citation.text}"
         )
         for citation in citations
     )

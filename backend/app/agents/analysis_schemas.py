@@ -12,6 +12,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 DDISeverity = Literal["minor", "moderate", "major"]
+KnowledgeSourceType = Literal["user_upload", "dailymed"]
 
 
 class AnalysisEnvelope(BaseModel):
@@ -73,6 +74,7 @@ class KBCitation(AnalysisEnvelope):
 
     chunk_id: UUID
     document_id: UUID
+    source_type: KnowledgeSourceType = "user_upload"
     document_title: str = Field(min_length=1)
     source_uri: str = Field(min_length=1)
     text: str = Field(min_length=1)

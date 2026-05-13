@@ -8,7 +8,7 @@ claims; downstream reasoning still happens in the analysis graph.
 """
 
 from collections.abc import Sequence
-from typing import Protocol
+from typing import Literal, Protocol
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -20,6 +20,7 @@ class CitationLike(Protocol):
     """Citation attributes required to build the reranking prompt."""
 
     chunk_id: UUID
+    source_type: Literal["user_upload", "dailymed"]
     document_title: str
     text: str
     score: float
@@ -58,6 +59,7 @@ Select the citations most relevant to the pharmacist's clinical query.
 Return only candidate chunk IDs that appear in the prompt.
 Do not invent citations, medications, patient facts, or clinical conclusions.
 Prefer passages with specific actionable clinical details over broad background text.
+Prefer clinic-uploaded assets over public references when both are similarly relevant.
 """
 
 
@@ -104,7 +106,8 @@ def _candidate_section(candidates: Sequence[CitationLike]) -> str:
     return "\n".join(
         (
             f"- chunk_id={candidate.chunk_id} document_title={candidate.document_title} "
-            f"retrieval_score={candidate.score}\n  text={candidate.text}"
+            f"source_type={candidate.source_type} retrieval_score={candidate.score}\n"
+            f"  text={candidate.text}"
         )
         for candidate in candidates
     )

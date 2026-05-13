@@ -239,6 +239,7 @@ async def test_analyze_treatment_runs_graph_and_persists_completed_result(
         {
             "chunk_id": "44444444-4444-4444-4444-444444444444",
             "document_id": "55555555-5555-5555-5555-555555555555",
+            "source_type": "user_upload",
             "document_title": "Anticoagulation Protocol",
             "source_uri": "local://kb/anticoagulation.pdf",
             "text": "Warfarin requires INR monitoring.",

@@ -7,9 +7,10 @@ call DailyMed directly.
 """
 
 from collections.abc import Awaitable, Callable, Sequence
+from datetime import UTC, datetime, timedelta
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.analysis_schemas import MedicationGrounding
@@ -20,6 +21,7 @@ from app.services.kb_ingestion import EmbeddingVector, vector_literal
 from app.services.kb_scope import GLOBAL_DAILYMED_SCOPE_ID
 
 Embedder = Callable[[Sequence[str]], Awaitable[list[EmbeddingVector]]]
+DAILYMED_CACHE_MAX_AGE_DAYS = 90
 
 log = structlog.get_logger(__name__)
 
@@ -31,10 +33,19 @@ async def ensure_dailymed_cached(
     source_uri: str,
     title: str,
     embedder: Embedder,
+    max_age_days: int = DAILYMED_CACHE_MAX_AGE_DAYS,
 ) -> KnowledgeDocument:
     """Create a ready global DailyMed KB document if this label is not cached."""
     cached = await _cached_document(session, source_uri=source_uri)
     if cached is not None:
+        if _cache_is_stale(cached.updated_at, max_age_days=max_age_days):
+            return await _refresh_cached_document(
+                session,
+                document=cached,
+                source=source,
+                source_uri=source_uri,
+                embedder=embedder,
+            )
         log.info("dailymed_cache_hit", document_id=str(cached.id), source_uri=source_uri)
         return cached
 
@@ -110,6 +121,7 @@ async def ensure_dailymed_cached_for_groundings(
     groundings: Sequence[MedicationGrounding],
     client: DailyMedClient,
     embedder: Embedder,
+    max_age_days: int = DAILYMED_CACHE_MAX_AGE_DAYS,
 ) -> int:
     """Cache DailyMed labels for grounded drugs before KB retrieval runs.
 
@@ -143,6 +155,7 @@ async def ensure_dailymed_cached_for_groundings(
                 source_uri=f"dailymed://{label.setid}",
                 title=label.title,
                 embedder=embedder,
+                max_age_days=max_age_days,
             )
         except Exception:
             log.warning(
@@ -161,6 +174,63 @@ async def ensure_dailymed_cached_for_groundings(
         cached_count=cached_count,
     )
     return cached_count
+
+
+async def _refresh_cached_document(
+    session: AsyncSession,
+    *,
+    document: KnowledgeDocument,
+    source: KnowledgeSource,
+    source_uri: str,
+    embedder: Embedder,
+) -> KnowledgeDocument:
+    """Refresh stale DailyMed chunks without discarding the old cache on failure."""
+    try:
+        source_chunks = [chunk async for chunk in source.list_chunks(document.id)]
+        embeddings = await embedder([chunk.content for chunk in source_chunks])
+        _validate_embedding_count(source_chunks, embeddings)
+    except Exception:
+        log.warning(
+            "dailymed_cache_refresh_failed",
+            document_id=str(document.id),
+            source_uri=source_uri,
+            exc_info=True,
+        )
+        return document
+
+    await session.execute(delete(KnowledgeChunk).where(KnowledgeChunk.document_id == document.id))
+    _persist_chunks(
+        session,
+        document=document,
+        source_chunks=source_chunks,
+        embeddings=embeddings,
+    )
+    document.status = "ready"
+    document.error_text = None
+    document.updated_at = func.clock_timestamp()
+    tokens_total = sum(chunk.tokens for chunk in source_chunks)
+    session.add(
+        AuditLogEntry(
+            event_type="kb_doc_refreshed",
+            resource_type="kb_document",
+            resource_id=document.id,
+            payload={
+                "document_id": str(document.id),
+                "source_type": "dailymed",
+                "chunk_count": len(source_chunks),
+                "tokens_total": tokens_total,
+            },
+        )
+    )
+    log.info(
+        "dailymed_cache_refreshed",
+        document_id=str(document.id),
+        source_uri=source_uri,
+        chunk_count=len(source_chunks),
+        tokens_total=tokens_total,
+    )
+    await session.flush()
+    return document
 
 
 async def _cached_document(
@@ -199,6 +269,12 @@ async def _cached_document(
     await session.flush()
     log.info("dailymed_cache_promoted_to_global", document_id=str(legacy_document.id))
     return legacy_document
+
+
+def _cache_is_stale(updated_at: datetime, *, max_age_days: int) -> bool:
+    if max_age_days <= 0:
+        return True
+    return updated_at <= datetime.now(UTC) - timedelta(days=max_age_days)
 
 
 def _validate_embedding_count(

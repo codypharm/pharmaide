@@ -8,6 +8,8 @@ out of audit payloads and structured logs.
 
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, replace
+from math import ceil
+from typing import Literal
 from uuid import UUID
 
 import structlog
@@ -30,6 +32,7 @@ _RETRIEVAL_SQL = text(
     SELECT
         c.id AS chunk_id,
         c.document_id AS document_id,
+        d.source_type AS source_type,
         d.title AS document_title,
         d.source_uri AS source_uri,
         c.content AS text,
@@ -38,8 +41,8 @@ _RETRIEVAL_SQL = text(
     JOIN kb_documents d ON d.id = c.document_id
     WHERE d.status = 'ready'
       AND (
-        (d.source_type = 'user_upload' AND d.uploaded_by = :uploaded_by)
-        OR (d.source_type = 'dailymed' AND d.uploaded_by = :global_dailymed_scope_id)
+        (:source_type = 'user_upload' AND d.source_type = 'user_upload' AND d.uploaded_by = :uploaded_by)
+        OR (:source_type = 'dailymed' AND d.source_type = 'dailymed' AND d.uploaded_by = :global_dailymed_scope_id)
       )
     ORDER BY c.embedding <=> CAST(:query_vector AS vector(3072)), c.created_at, c.id
     LIMIT :limit
@@ -53,6 +56,7 @@ class Citation:
 
     chunk_id: UUID
     document_id: UUID
+    source_type: Literal["user_upload", "dailymed"]
     document_title: str
     source_uri: str
     text: str
@@ -80,7 +84,7 @@ async def retrieve(
     limit = _normalize_limit(k)
     candidate_limit = _candidate_limit(limit, candidate_k, reranker=reranker)
     query_embedding = await _embed_query(normalized_query, embedder)
-    candidates = await _query_citations(
+    candidates = await _query_balanced_citations(
         session,
         query_embedding,
         candidate_limit,
@@ -134,12 +138,37 @@ def _candidate_limit(
     return limit * 4
 
 
-async def _query_citations(
+async def _query_balanced_citations(
     session: AsyncSession,
     query_embedding: Sequence[float],
     limit: int,
     *,
     uploaded_by: UUID,
+) -> list[Citation]:
+    user_uploads = await _query_source_citations(
+        session,
+        query_embedding,
+        limit,
+        uploaded_by=uploaded_by,
+        source_type="user_upload",
+    )
+    dailymed = await _query_source_citations(
+        session,
+        query_embedding,
+        limit,
+        uploaded_by=uploaded_by,
+        source_type="dailymed",
+    )
+    return _balanced_citations(user_uploads, dailymed, limit)
+
+
+async def _query_source_citations(
+    session: AsyncSession,
+    query_embedding: Sequence[float],
+    limit: int,
+    *,
+    uploaded_by: UUID,
+    source_type: Literal["user_upload", "dailymed"],
 ) -> list[Citation]:
     result = await session.execute(
         _RETRIEVAL_SQL,
@@ -148,12 +177,14 @@ async def _query_citations(
             "limit": limit,
             "uploaded_by": uploaded_by,
             "global_dailymed_scope_id": GLOBAL_DAILYMED_SCOPE_ID,
+            "source_type": source_type,
         },
     )
     return [
         Citation(
             chunk_id=row.chunk_id,
             document_id=row.document_id,
+            source_type=row.source_type,
             document_title=row.document_title,
             source_uri=row.source_uri,
             text=row.text,
@@ -161,6 +192,31 @@ async def _query_citations(
         )
         for row in result
     ]
+
+
+def _balanced_citations(
+    user_uploads: Sequence[Citation],
+    dailymed: Sequence[Citation],
+    limit: int,
+) -> list[Citation]:
+    if not user_uploads:
+        return list(dailymed[:limit])
+    if not dailymed:
+        return list(user_uploads[:limit])
+
+    dailymed_cap = max(1, limit - ceil(limit * 0.7))
+    user_target = max(1, limit - dailymed_cap)
+    selected = [*user_uploads[:user_target], *dailymed[:dailymed_cap]]
+    remaining_capacity = limit - len(selected)
+    if remaining_capacity > 0:
+        selected.extend(
+            sorted(
+                [*user_uploads[user_target:], *dailymed[dailymed_cap:]],
+                key=lambda citation: citation.score,
+                reverse=True,
+            )[:remaining_capacity]
+        )
+    return sorted(selected, key=lambda citation: citation.score, reverse=True)
 
 
 async def _rerank_if_requested(

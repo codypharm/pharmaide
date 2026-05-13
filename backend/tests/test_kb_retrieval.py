@@ -95,6 +95,7 @@ async def test_retrieve_returns_nearest_ready_chunks_and_non_phi_audit(
     ]
     assert citations[0].score > citations[1].score
     assert citations[0].document_id == ready_document.id
+    assert citations[0].source_type == "user_upload"
     assert citations[0].document_title == "Anticoagulation Protocol"
     assert citations[0].source_uri == "local://kb/anticoagulation.pdf"
     assert audit is not None
@@ -249,6 +250,67 @@ async def test_retrieve_only_returns_chunks_uploaded_by_scope(
         "Workspace pharmacist protocol.",
         "Public DailyMed label can be retrieved by any workspace.",
     }
+    assert {citation.source_type for citation in citations} == {"user_upload", "dailymed"}
+
+
+async def test_retrieve_reserves_space_for_clinic_assets_when_dailymed_is_closer(
+    db_session: AsyncSession,
+) -> None:
+    scope_id = uuid4()
+    clinic_document = KnowledgeDocument(
+        source_type="user_upload",
+        source_uri="local://kb/clinic.pdf",
+        title="Clinic Protocol",
+        mime="application/pdf",
+        status="ready",
+        uploaded_by=scope_id,
+    )
+    dailymed_document = KnowledgeDocument(
+        source_type="dailymed",
+        source_uri="dailymed://setid-1",
+        title="DailyMed Label",
+        mime="application/spl+xml",
+        status="ready",
+        uploaded_by=GLOBAL_DAILYMED_SCOPE_ID,
+    )
+    db_session.add_all([clinic_document, dailymed_document])
+    await db_session.flush()
+    db_session.add_all(
+        [
+            KnowledgeChunk(
+                document_id=clinic_document.id,
+                ordinal=0,
+                content="Clinic-specific monitoring instruction.",
+                embedding=_vector_literal(_embedding(1)),
+                tokens=4,
+            ),
+            KnowledgeChunk(
+                document_id=dailymed_document.id,
+                ordinal=0,
+                content="DailyMed closest label warning.",
+                embedding=_vector_literal(_embedding(0)),
+                tokens=4,
+            ),
+            KnowledgeChunk(
+                document_id=dailymed_document.id,
+                ordinal=1,
+                content="DailyMed second label warning.",
+                embedding=_vector_literal(_embedding(0)),
+                tokens=4,
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    citations = await retrieve(
+        db_session,
+        "monitoring",
+        embedder=_embed_query,
+        k=2,
+        uploaded_by=scope_id,
+    )
+
+    assert {citation.source_type for citation in citations} == {"user_upload", "dailymed"}
 
 
 async def test_retrieve_without_kb_scope_returns_no_citations(

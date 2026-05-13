@@ -162,11 +162,9 @@ async def test_list_and_get_knowledge_documents_return_metadata_with_chunk_count
 
     assert list_response.status_code == 200
     items_by_title = {item["title"]: item for item in list_response.json()["items"]}
-    assert set(items_by_title) == {"Anticoagulation Protocol", "Lisinopril Tablet"}
+    assert set(items_by_title) == {"Anticoagulation Protocol"}
     assert items_by_title["Anticoagulation Protocol"]["source_type"] == "user_upload"
     assert items_by_title["Anticoagulation Protocol"]["chunk_count"] == 2
-    assert items_by_title["Lisinopril Tablet"]["source_type"] == "dailymed"
-    assert items_by_title["Lisinopril Tablet"]["chunk_count"] == 1
     assert get_response.status_code == 200
     assert get_response.json()["chunk_count"] == 2
     assert dailymed_response.status_code == 200
