@@ -138,7 +138,7 @@ async def _mark_ingested(
                     document_id=document_id,
                     ordinal=ordinal,
                     content=chunk.content,
-                    embedding=_vector_literal(embedding),
+                    embedding=vector_literal(embedding),
                     tokens=chunk.tokens,
                 )
             )
@@ -223,7 +223,7 @@ async def _get_document_for_update(
     return result.scalar_one_or_none()
 
 
-def _vector_literal(embedding: Sequence[float]) -> str:
+def vector_literal(embedding: Sequence[float]) -> str:
     """Render a pgvector literal; never log the vector contents."""
     return f"[{','.join(str(value) for value in embedding)}]"
 
