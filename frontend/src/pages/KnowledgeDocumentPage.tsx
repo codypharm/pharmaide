@@ -1,4 +1,4 @@
-import { AlertCircle, ArrowLeft, Database, FileText, Loader2 } from "lucide-react";
+import { AlertCircle, ArrowLeft, Database, FileText, Loader2, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
@@ -87,20 +87,28 @@ function DocumentCard({ document }: { document: KnowledgeDocumentView }) {
       <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-6">
         <div className="flex items-start gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-500">
-            <FileText size={20} />
+            {document.source_type === "dailymed" ? (
+              <ShieldCheck size={20} />
+            ) : (
+              <FileText size={20} />
+            )}
           </div>
           <div>
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
               Source
             </p>
             <h3 className="mt-1 text-lg font-bold text-slate-900">{document.title}</h3>
-            <p className="mt-1 text-sm text-slate-500">{document.mime}</p>
+            <p className="mt-1 text-sm text-slate-500">
+              {sourceTypeLabel(document.source_type)}
+              {document.source_type === "user_upload" ? ` · ${document.mime}` : ""}
+            </p>
           </div>
         </div>
         <StatusPill status={document.status} />
       </div>
       <div className="grid gap-4 p-6 sm:grid-cols-2 lg:grid-cols-3">
         <Field label="Availability" value={statusLabel(document.status)} />
+        <Field label="Reference type" value={sourceTypeLabel(document.source_type)} />
         <Field label="Uploaded" value={formatDateTime(document.created_at)} />
         <Field label="Updated" value={formatDateTime(document.updated_at)} />
       </div>
@@ -175,6 +183,11 @@ function statusLabel(status: KnowledgeDocumentView["status"]): string {
   if (status === "ingesting") return "Processing";
   if (status === "failed") return "Needs review";
   return "Removed";
+}
+
+function sourceTypeLabel(sourceType: KnowledgeDocumentView["source_type"]): string {
+  if (sourceType === "dailymed") return "Verified medical reference";
+  return "Uploaded file";
 }
 
 function formatDateTime(iso: string): string {

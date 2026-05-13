@@ -5,6 +5,7 @@ import { deleteJson, getJson, postMultipart } from "./client";
 export const PRE_AUTH_KB_SCOPE_ID = "00000000-0000-4000-8000-000000000001";
 
 export type KnowledgeDocumentStatus = "ingesting" | "ready" | "failed" | "removed";
+export type KnowledgeDocumentSourceType = "user_upload" | "dailymed";
 
 export type KnowledgeDocumentCreated = {
   document_id: string;
@@ -13,6 +14,7 @@ export type KnowledgeDocumentCreated = {
 
 export type KnowledgeDocumentView = {
   id: string;
+  source_type: KnowledgeDocumentSourceType;
   title: string;
   mime: string;
   status: KnowledgeDocumentStatus;

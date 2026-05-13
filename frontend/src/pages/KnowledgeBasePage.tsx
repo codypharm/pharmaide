@@ -5,6 +5,7 @@ import {
   FileText,
   Loader2,
   RefreshCw,
+  ShieldCheck,
   Trash2,
   Upload,
   X,
@@ -258,7 +259,8 @@ function DocumentsTable({
             {items.map((document, index) => {
               const isDeleting = busyDocumentId === document.id;
               const isProcessing = document.status === "ingesting";
-              const deleteDisabled = isDeleting || isProcessing;
+              const isReadOnly = document.source_type !== "user_upload";
+              const deleteDisabled = isDeleting || isProcessing || isReadOnly;
 
               return (
                 <tr
@@ -270,7 +272,9 @@ function DocumentsTable({
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-center text-slate-500">
-                        {document.mime.includes("csv") ? (
+                        {document.source_type === "dailymed" ? (
+                          <ShieldCheck size={18} />
+                        ) : document.mime.includes("csv") ? (
                           <FileSpreadsheet size={18} />
                         ) : (
                           <FileText size={18} />
@@ -278,7 +282,10 @@ function DocumentsTable({
                       </div>
                       <div>
                         <p className="font-bold text-slate-900">{document.title}</p>
-                        <p className="text-xs text-slate-500">{document.mime}</p>
+                        <p className="text-xs text-slate-500">
+                          {sourceTypeLabel(document.source_type)}
+                          {document.source_type === "user_upload" ? ` · ${document.mime}` : ""}
+                        </p>
                       </div>
                     </div>
                   </td>
@@ -289,19 +296,28 @@ function DocumentsTable({
                     {formatDateTime(document.updated_at)}
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <button
-                      type="button"
-                      aria-label={`Delete ${document.title}`}
-                      disabled={deleteDisabled}
-                      onClick={() => onDelete(document)}
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-red-700 hover:bg-red-50 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400 disabled:cursor-not-allowed cursor-pointer"
-                    >
-                      {isDeleting ? (
-                        <Loader2 size={16} className="animate-spin" />
-                      ) : (
-                        <Trash2 size={16} />
-                      )}
-                    </button>
+                    {isReadOnly ? (
+                      <span
+                        aria-label={`${document.title} is a verified reference`}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-blue-700"
+                      >
+                        <ShieldCheck size={16} />
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        aria-label={`Delete ${document.title}`}
+                        disabled={deleteDisabled}
+                        onClick={() => onDelete(document)}
+                        className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-red-700 hover:bg-red-50 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400 disabled:cursor-not-allowed cursor-pointer"
+                      >
+                        {isDeleting ? (
+                          <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                          <Trash2 size={16} />
+                        )}
+                      </button>
+                    )}
                   </td>
                 </tr>
               );
@@ -522,6 +538,11 @@ function statusLabel(status: KnowledgeDocumentView["status"]): string {
   if (status === "ingesting") return "Processing";
   if (status === "failed") return "Needs review";
   return "Removed";
+}
+
+function sourceTypeLabel(sourceType: KnowledgeDocumentView["source_type"]): string {
+  if (sourceType === "dailymed") return "Verified medical reference";
+  return "Uploaded file";
 }
 
 function formatDateTime(iso: string): string {

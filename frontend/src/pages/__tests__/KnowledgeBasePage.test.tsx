@@ -18,6 +18,7 @@ vi.mock("sonner", () => ({
 
 const DOC: KnowledgeDocumentView = {
   id: "doc-1",
+  source_type: "user_upload",
   title: "Anticoagulation Protocol",
   mime: "application/pdf",
   status: "ready",
@@ -193,5 +194,27 @@ describe("KnowledgeBasePage", () => {
       description: "Anticoagulation Protocol",
     });
     await waitFor(() => expect(screen.getByText(/no clinical assets uploaded/i)).toBeTruthy());
+  });
+
+  it("renders DailyMed references as read-only verified material", async () => {
+    const dailymedDoc: KnowledgeDocumentView = {
+      ...DOC,
+      id: "doc-dailymed",
+      source_type: "dailymed",
+      title: "Lisinopril Tablet",
+      mime: "application/spl+xml",
+    };
+    vi.spyOn(knowledgeApi, "listKnowledgeDocuments").mockResolvedValue({
+      items: [dailymedDoc],
+    });
+
+    renderPage();
+
+    await screen.findByText("Lisinopril Tablet");
+    expect(screen.getByText("Verified medical reference")).toBeTruthy();
+    expect(
+      screen.getByLabelText(/lisinopril tablet is a verified reference/i),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /delete lisinopril tablet/i })).toBeNull();
   });
 });

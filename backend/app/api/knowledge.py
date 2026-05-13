@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 import structlog
@@ -45,6 +45,7 @@ class KnowledgeDocumentCreated(BaseModel):
 
 class KnowledgeDocumentView(BaseModel):
     id: UUID
+    source_type: Literal["user_upload", "dailymed"]
     title: str
     mime: str
     status: str
@@ -166,6 +167,8 @@ async def delete_document(
     document = row.scalar_one_or_none()
     if document is None:
         raise HTTPException(status_code=404, detail={"error": "knowledge_document_not_found"})
+    if document.source_type != "user_upload":
+        raise HTTPException(status_code=409, detail={"error": "knowledge_document_read_only"})
 
     stored_file_removed = _remove_stored_upload(settings.knowledge_upload_dir, document)
     chunk_count_removed = await _remove_document_chunks(session, document_id)
@@ -238,6 +241,7 @@ def _document_view(row: tuple[KnowledgeDocument, int]) -> KnowledgeDocumentView:
     document, chunk_count = row
     return KnowledgeDocumentView(
         id=document.id,
+        source_type=document.source_type,
         title=document.title,
         mime=document.mime,
         status=document.status,

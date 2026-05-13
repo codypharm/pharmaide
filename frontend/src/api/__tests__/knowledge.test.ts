@@ -56,6 +56,7 @@ describe("listKnowledgeDocuments", () => {
         items: [
           {
             id: "doc1",
+            source_type: "user_upload",
             title: "Anticoagulation Protocol",
             mime: "application/pdf",
             status: "ready",
@@ -89,6 +90,7 @@ describe("getKnowledgeDocument", () => {
       status: 200,
       body: {
         id: "doc1",
+        source_type: "user_upload",
         title: "Anticoagulation Protocol",
         mime: "application/pdf",
         status: "ready",

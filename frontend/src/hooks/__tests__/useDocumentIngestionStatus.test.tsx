@@ -13,6 +13,7 @@ const SCOPE = { scopeId: PRE_AUTH_KB_SCOPE_ID };
 function documentRow(status: KnowledgeDocumentStatus): KnowledgeDocumentView {
   return {
     id: "doc-1",
+    source_type: "user_upload",
     title: "Formulary",
     mime: "text/csv",
     status,

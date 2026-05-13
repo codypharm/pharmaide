@@ -9,6 +9,7 @@ import KnowledgeDocumentPage from "../KnowledgeDocumentPage";
 
 const DOC: KnowledgeDocumentView = {
   id: "doc-1",
+  source_type: "user_upload",
   title: "Clinic Hypertension Protocol",
   mime: "application/pdf",
   status: "ready",
@@ -39,7 +40,7 @@ describe("KnowledgeDocumentPage", () => {
 
     await waitFor(() => expect(screen.getByText("Clinic Hypertension Protocol")).toBeTruthy());
     expect(screen.getAllByText("File ready").length).toBeGreaterThan(0);
-    expect(screen.getByText("application/pdf")).toBeTruthy();
+    expect(screen.getAllByText(/uploaded file/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: /back to assets/i })).toHaveAttribute(
       "href",
       "/dashboard/knowledge",
@@ -47,6 +48,21 @@ describe("KnowledgeDocumentPage", () => {
     expect(spy).toHaveBeenCalledWith("doc-1", {
       scopeId: knowledgeApi.PRE_AUTH_KB_SCOPE_ID,
     });
+  });
+
+  it("renders DailyMed references as verified material", async () => {
+    vi.spyOn(knowledgeApi, "getKnowledgeDocument").mockResolvedValue({
+      ...DOC,
+      source_type: "dailymed",
+      title: "Lisinopril Tablet",
+      mime: "application/spl+xml",
+    });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Lisinopril Tablet")).toBeTruthy());
+    expect(screen.getAllByText("Verified medical reference").length).toBeGreaterThan(0);
+    expect(screen.queryByText("application/spl+xml")).toBeNull();
   });
 
   it("renders a not found state when the clinical asset is missing", async () => {

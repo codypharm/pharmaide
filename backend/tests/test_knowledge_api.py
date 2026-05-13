@@ -144,6 +144,7 @@ async def test_list_and_get_knowledge_documents_return_metadata_with_chunk_count
     assert list_response.json()["items"] == [
         {
             "id": str(document.id),
+            "source_type": "user_upload",
             "title": "Anticoagulation Protocol",
             "mime": "application/pdf",
             "status": "ready",
@@ -155,6 +156,50 @@ async def test_list_and_get_knowledge_documents_return_metadata_with_chunk_count
     assert get_response.status_code == 200
     assert get_response.json()["chunk_count"] == 2
     assert cross_scope_response.status_code == 404
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_delete_knowledge_document_rejects_read_only_dailymed_reference(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    owner_id = uuid4()
+    document = KnowledgeDocument(
+        source_type="dailymed",
+        source_uri="dailymed://setid-1",
+        title="Lisinopril Tablet",
+        mime="application/spl+xml",
+        status="ready",
+        uploaded_by=owner_id,
+    )
+    db_session.add(document)
+    await db_session.flush()
+    db_session.add(
+        KnowledgeChunk(
+            document_id=document.id,
+            ordinal=0,
+            content="DailyMed warning.",
+            embedding=_vector_literal(0.0),
+            tokens=2,
+        )
+    )
+    await db_session.flush()
+
+    response = await app_client.delete(
+        f"/knowledge/documents/{document.id}",
+        headers={"X-Pharmaide-User-Id": str(owner_id)},
+    )
+    chunk_count = await db_session.scalar(
+        select(func.count())
+        .select_from(KnowledgeChunk)
+        .where(KnowledgeChunk.document_id == document.id)
+    )
+
+    await db_session.refresh(document)
+    assert response.status_code == 409
+    assert response.json()["detail"] == {"error": "knowledge_document_read_only"}
+    assert document.status == "ready"
+    assert chunk_count == 1
 
 
 @pytest.mark.usefixtures("postgres_container")
