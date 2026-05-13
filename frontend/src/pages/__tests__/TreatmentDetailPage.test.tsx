@@ -147,6 +147,10 @@ describe("TreatmentDetailPage", () => {
     expect(screen.getByText("Monitor for cough")).toBeTruthy();
     expect(screen.getByText("Lisinopril")).toBeTruthy();
     expect(screen.getByText("10 mg")).toBeTruthy();
+    expect(screen.getByRole("link", { name: /back/i })).toHaveAttribute(
+      "href",
+      "/dashboard/ingestions",
+    );
   });
 
   it("shows a 'not found' empty state when the treatment is missing", async () => {
@@ -224,6 +228,10 @@ describe("TreatmentDetailPage", () => {
     expect(screen.getByText("Escalate worsening dizziness.")).toBeTruthy();
     expect(screen.getByText("Sources")).toBeTruthy();
     expect(screen.getByText("Clinic Hypertension Protocol")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Clinic Hypertension Protocol" })).toHaveAttribute(
+      "href",
+      "/dashboard/knowledge/88888888-8888-8888-8888-888888888888",
+    );
     expect(screen.getByText("Relevance 91%")).toBeTruthy();
     expect(
       screen.getByText("ACE inhibitors require monitoring for cough and dizziness."),

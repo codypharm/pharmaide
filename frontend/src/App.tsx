@@ -6,6 +6,7 @@ import TriageQueuePage from "./pages/TriageQueuePage";
 import PatientManagementPage from "./pages/PatientManagementPage";
 import AdherenceHeatmapsPage from "./pages/AdherenceHeatmapsPage";
 import KnowledgeBasePage from "./pages/KnowledgeBasePage";
+import KnowledgeDocumentPage from "./pages/KnowledgeDocumentPage";
 import SystemAuditsPage from "./pages/SystemAuditsPage";
 import NewTreatmentPage from "./pages/NewTreatmentPage";
 import IngestionsPage from "./pages/IngestionsPage";
@@ -24,6 +25,7 @@ function App() {
           <Route path="surveillance" element={<PatientManagementPage />} />
           <Route path="heatmaps" element={<AdherenceHeatmapsPage />} />
           <Route path="knowledge" element={<KnowledgeBasePage />} />
+          <Route path="knowledge/:id" element={<KnowledgeDocumentPage />} />
           <Route path="audits" element={<SystemAuditsPage />} />
           <Route path="new-treatment" element={<NewTreatmentPage />} />
           <Route path="ingestions" element={<IngestionsPage />} />

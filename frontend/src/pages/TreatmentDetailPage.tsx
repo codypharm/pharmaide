@@ -161,7 +161,7 @@ function Header() {
         </div>
       </div>
       <Link
-        to="/dashboard/new-treatment"
+        to="/dashboard/ingestions"
         className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-colors shadow-sm flex items-center gap-2"
       >
         <ArrowLeft size={16} />
@@ -443,9 +443,12 @@ function SourcesList({ citations }: { citations: KBCitation[] }) {
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-bold text-slate-900">
+                  <Link
+                    to={`/dashboard/knowledge/${citation.document_id}`}
+                    className="text-sm font-bold text-slate-900 hover:text-blue-700"
+                  >
                     {citation.document_title}
-                  </p>
+                  </Link>
                   <p className="mt-1 text-xs font-bold uppercase tracking-wider text-slate-500">
                     Relevance {formatRelevance(citation.score)}
                   </p>
