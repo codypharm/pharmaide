@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
-import { ClipboardList, ChevronRight, Loader2, AlertCircle, Plus } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  ChevronRight,
+  ClipboardList,
+  FilePlus2,
+  Loader2,
+  Plus,
+} from "lucide-react";
 
 import { ApiError } from "../api/client";
 import { listTreatments, type TreatmentListItem } from "../api/treatments";
@@ -124,18 +132,49 @@ function LoadingCard() {
 
 function EmptyCard() {
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-10 text-center">
-      <h3 className="text-lg font-bold text-slate-900 mb-2">No treatments yet</h3>
-      <p className="text-sm text-slate-500 mb-4">
-        Register a treatment to see it show up here.
-      </p>
-      <Link
-        to="/dashboard/new-treatment"
-        className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50"
-      >
-        <Plus size={16} />
-        New Treatment
-      </Link>
+    <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px]">
+        <div className="p-8 flex items-start gap-4">
+          <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center shrink-0">
+            <FilePlus2 size={24} />
+          </div>
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              No data available
+            </p>
+            <h3 className="text-xl font-bold text-slate-900 mt-2">No treatments registered</h3>
+            <p className="text-sm text-slate-500 mt-2 max-w-2xl">
+              Create the first treatment when a prescription is ready for pharmacist review.
+            </p>
+            <Link
+              to="/dashboard/new-treatment"
+              className="mt-5 inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 cursor-pointer"
+            >
+              <Plus size={16} />
+              New Treatment
+            </Link>
+          </div>
+        </div>
+        <div className="border-t lg:border-t-0 lg:border-l border-slate-200 bg-slate-50/60 p-6">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            Once added
+          </p>
+          <div className="mt-4 space-y-3 text-sm text-slate-600">
+            <EmptyStatePoint text="Patient and prescription details appear here." />
+            <EmptyStatePoint text="Reasoning can be started from the treatment detail page." />
+            <EmptyStatePoint text="Privacy mode masks patient identifiers in this list." />
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function EmptyStatePoint({ text }: { text: string }) {
+  return (
+    <div className="flex items-start gap-2">
+      <CheckCircle2 size={16} className="text-blue-700 mt-0.5 shrink-0" />
+      <span>{text}</span>
     </div>
   );
 }

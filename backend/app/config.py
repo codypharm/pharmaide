@@ -7,7 +7,7 @@ checkpointer paths, debug gates) reads the same values everywhere.
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -44,6 +44,28 @@ class Settings(BaseSettings):
     # point this adapter at blob storage while keeping the DB metadata contract.
     knowledge_upload_dir: str = "./data/kb_uploads"
     knowledge_max_upload_bytes: int = Field(default=25 * 1024 * 1024, gt=0)
+
+    @field_validator("knowledge_max_upload_bytes", mode="before")
+    @classmethod
+    def parse_upload_size(cls, value: object) -> object:
+        """Accept byte counts and operator-friendly size strings like 25MB."""
+        if not isinstance(value, str):
+            return value
+        normalized = value.strip().lower().replace(" ", "")
+        if normalized.isdigit():
+            return int(normalized)
+        units = {
+            "kb": 1024,
+            "kib": 1024,
+            "mb": 1024 * 1024,
+            "mib": 1024 * 1024,
+        }
+        for suffix, multiplier in units.items():
+            if normalized.endswith(suffix):
+                number = normalized[: -len(suffix)]
+                if number.isdigit():
+                    return int(number) * multiplier
+        return value
 
 
 # lru_cache so Settings is parsed once per process. Cheap insurance against

@@ -53,3 +53,13 @@ def test_settings_reads_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.max_concurrent_analyses_per_user == 5
     assert settings.knowledge_upload_dir == "/tmp/kb"
     assert settings.knowledge_max_upload_bytes == 1024
+
+
+def test_settings_accepts_human_readable_knowledge_upload_size(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PHARMAIDE_KNOWLEDGE_MAX_UPLOAD_BYTES", "25MB")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.knowledge_max_upload_bytes == 25 * 1024 * 1024

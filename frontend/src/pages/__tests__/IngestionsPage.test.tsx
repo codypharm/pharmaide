@@ -66,7 +66,9 @@ describe("IngestionsPage", () => {
 
     renderPage();
 
-    await waitFor(() => expect(screen.getByText(/no treatments yet/i)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/no data available/i)).toBeTruthy());
+    expect(screen.getByText(/no treatments registered/i)).toBeTruthy();
+    expect(screen.getAllByRole("link", { name: /new treatment/i }).length).toBeGreaterThan(0);
   });
 
   it("shows an error state on API failure", async () => {

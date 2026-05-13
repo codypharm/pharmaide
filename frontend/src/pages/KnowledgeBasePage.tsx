@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { ApiError } from "../api/client";
+import { ApiError, NotFoundError } from "../api/client";
 import {
   PRE_AUTH_KB_SCOPE_ID,
   deleteKnowledgeDocument,
@@ -25,7 +25,12 @@ const KB_SCOPE = { scopeId: PRE_AUTH_KB_SCOPE_ID };
 type FetchState =
   | { kind: "loading" }
   | { kind: "ok"; items: KnowledgeDocumentView[] }
-  | { kind: "error"; requestId: string | null };
+  | { kind: "error"; error: KnowledgeLoadError };
+
+type KnowledgeLoadError =
+  | { kind: "api"; requestId: string | null }
+  | { kind: "missing_route"; requestId: string | null }
+  | { kind: "network" };
 
 export default function KnowledgeBasePage() {
   const [state, setState] = useState<FetchState>({ kind: "loading" });
@@ -42,10 +47,7 @@ export default function KnowledgeBasePage() {
       });
       setState({ kind: "ok", items: result.items });
     } catch (err) {
-      setState({
-        kind: "error",
-        requestId: err instanceof ApiError ? err.requestId : null,
-      });
+      setState({ kind: "error", error: knowledgeLoadError(err) });
     }
   }
 
@@ -90,7 +92,7 @@ export default function KnowledgeBasePage() {
         />
 
         {state.kind === "loading" && <LoadingCard />}
-        {state.kind === "error" && <ErrorCard requestId={state.requestId} onRetry={refresh} />}
+        {state.kind === "error" && <ErrorCard error={state.error} onRetry={refresh} />}
         {state.kind === "ok" && (
           <>
             <SummaryBand documents={items} />
@@ -294,31 +296,60 @@ function LoadingCard() {
 
 function EmptyCard() {
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-10 text-center">
-      <h3 className="text-lg font-bold text-slate-900 mb-2">No clinical assets uploaded</h3>
-      <p className="text-sm text-slate-500">
-        Upload a PDF, TXT, or CSV protocol to make it available for grounded analysis.
-      </p>
-    </div>
+    <section className="bg-white border border-slate-200 rounded-xl p-8">
+      <div className="flex items-start gap-4">
+        <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center shrink-0">
+          <Upload size={24} />
+        </div>
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            No data available
+          </p>
+          <h3 className="text-xl font-bold text-slate-900 mt-2">No clinical assets uploaded</h3>
+          <p className="text-sm text-slate-500 mt-2 max-w-2xl">
+            Upload clinic protocols, formularies, or reference files for this workspace.
+          </p>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <FileTypeChip label="PDF" />
+            <FileTypeChip label="TXT" />
+            <FileTypeChip label="CSV" />
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FileTypeChip({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-bold text-slate-700">
+      {label}
+    </span>
   );
 }
 
 function ErrorCard({
-  requestId,
+  error,
   onRetry,
 }: {
-  requestId: string | null;
+  error: KnowledgeLoadError;
   onRetry: () => void;
 }) {
+  const copy = errorCopy(error);
   return (
-    <div className="bg-white border border-red-200 rounded-xl p-6 flex items-start justify-between gap-4">
+    <div className="bg-white border border-slate-200 rounded-xl p-6 flex items-start justify-between gap-4">
       <div className="flex items-start gap-3">
-        <AlertCircle size={20} className="text-red-700 mt-0.5" />
+        <AlertCircle size={20} className="text-amber-700 mt-0.5" />
         <div>
-          <p className="font-bold text-slate-900">Could not load clinical assets.</p>
+          <p className="font-bold text-slate-900">{copy.title}</p>
           <p className="text-sm text-slate-500 mt-1">
-            Please retry. Reference ID:{" "}
-            <code className="text-slate-700">{requestId ?? "unknown"}</code>
+            {copy.detail}
+            {copy.requestId && (
+              <>
+                {" "}
+                Reference ID: <code className="text-slate-700">{copy.requestId}</code>
+              </>
+            )}
           </p>
         </div>
       </div>
@@ -332,6 +363,42 @@ function ErrorCard({
       </button>
     </div>
   );
+}
+
+function knowledgeLoadError(err: unknown): KnowledgeLoadError {
+  if (err instanceof NotFoundError) {
+    return { kind: "missing_route", requestId: err.requestId };
+  }
+  if (err instanceof ApiError) {
+    return { kind: "api", requestId: err.requestId };
+  }
+  return { kind: "network" };
+}
+
+function errorCopy(error: KnowledgeLoadError): {
+  title: string;
+  detail: string;
+  requestId: string | null;
+} {
+  if (error.kind === "missing_route") {
+    return {
+      title: "Clinical assets are being prepared.",
+      detail: "Try again shortly, or continue reviewing treatments without uploaded reference material.",
+      requestId: error.requestId,
+    };
+  }
+  if (error.kind === "network") {
+    return {
+      title: "Clinical assets are temporarily unavailable.",
+      detail: "Try again shortly, or continue without uploaded reference material.",
+      requestId: null,
+    };
+  }
+  return {
+    title: "Clinical assets are temporarily unavailable.",
+    detail: "Try again shortly.",
+    requestId: error.requestId,
+  };
 }
 
 function statusLabel(status: KnowledgeDocumentView["status"]): string {

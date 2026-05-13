@@ -4,7 +4,9 @@
 
 services:
   postgres:
-    image: postgres:17-alpine
+    # Knowledge-base migrations need pgvector locally. Production uses the
+    # deployed database's VECTOR-compatible surface instead of this container.
+    image: pgvector/pgvector:pg17
     container_name: pharmaide-postgres
     environment:
       POSTGRES_USER: pharmaide

@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError } from "../../api/client";
+import { ApiError, NotFoundError } from "../../api/client";
 import * as knowledgeApi from "../../api/knowledge";
 import type { KnowledgeDocumentList, KnowledgeDocumentView } from "../../api/knowledge";
 import KnowledgeBasePage from "../KnowledgeBasePage";
@@ -58,6 +58,7 @@ describe("KnowledgeBasePage", () => {
     renderPage();
 
     await waitFor(() => expect(screen.getByText(/no clinical assets uploaded/i)).toBeTruthy());
+    expect(screen.queryByText(/retrievable chunks/i)).toBeNull();
   });
 
   it("shows an error state when documents cannot be loaded", async () => {
@@ -67,8 +68,30 @@ describe("KnowledgeBasePage", () => {
 
     renderPage();
 
-    await waitFor(() => expect(screen.getByText(/could not load clinical assets/i)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/clinical assets are temporarily unavailable/i)).toBeTruthy());
     expect(screen.getByText(/req_kb/)).toBeTruthy();
+  });
+
+  it("shows a pharmacist-safe preparation message when the route is unavailable", async () => {
+    vi.spyOn(knowledgeApi, "listKnowledgeDocuments").mockRejectedValue(
+      new NotFoundError("req_missing", { detail: { error: "not_found" } }, "not_found"),
+    );
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText(/clinical assets are being prepared/i)).toBeTruthy());
+    expect(screen.getByText(/continue reviewing treatments/i)).toBeTruthy();
+  });
+
+  it("shows a pharmacist-safe unavailable message when the request fails before an API response", async () => {
+    vi.spyOn(knowledgeApi, "listKnowledgeDocuments").mockRejectedValue(
+      new TypeError("Failed to fetch"),
+    );
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText(/clinical assets are temporarily unavailable/i)).toBeTruthy());
+    expect(screen.getByText(/continue without uploaded reference material/i)).toBeTruthy();
   });
 
   it("uploads a selected document and refreshes the list", async () => {
