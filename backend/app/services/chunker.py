@@ -1,7 +1,7 @@
 """Token-aware chunking for knowledge-base segments.
 
-This module intentionally does not use a generic recursive text splitter as the
-primary strategy. PharmaAide ingests more than prose:
+This module intentionally keeps splitting local instead of routing all content
+through a generic recursive text splitter. PharmaAide ingests more than prose:
 
 - PDF text already carries document/page context.
 - CSV rows must stay tied to their column headers.
@@ -9,32 +9,29 @@ primary strategy. PharmaAide ingests more than prose:
   every chunk.
 
 Because of that, the chunker works on already-shaped ``TextSegment`` inputs,
-renders their context prefix, counts tokens with ``tiktoken``, and applies a
-deterministic token window.
+renders their context prefix, recursively tries clinical-friendly boundaries
+for prose, counts tokens with ``tiktoken``, and keeps deterministic token
+windows as the final fallback.
 
 Why this base approach:
 
 - token limits should be enforced on model-relevant tokens, not characters
   or words
 - CSV and metadata-rich records need different behavior from prose
-- fixed token windows are easier to reason about for embeddings and retrieval
+- deterministic fallback windows are easier to reason about for embeddings and
+  retrieval
 
-Text segments now try paragraph-preserving pre-splitting first. When paragraph
-blocks fit inside the token budget, they are emitted intact. Only oversized
-blocks fall back to token-window chunking with overlap. PDF page segments and
-CSV-row segments still go straight to deterministic token windowing.
+Text segments recursively try paragraph, line, and sentence-like boundaries
+before falling back to token-window chunking with overlap. PDF page segments
+enter the chunker as ``kind="text"``, so extracted page text gets the same
+boundary-aware treatment.
 
-Text and PDF token windows use overlap because prose benefits from continuity
-across windows. CSV-row segments do not overlap because the row labels already
-preserve meaning and duplicated overlap would just repeat structured values.
-
-Text segments already use paragraph-preserving pre-splitting before token
-windowing. PDF segments still use direct token windowing today; if retrieval
-quality shows page text should respect paragraph or section boundaries more
-closely, add the same pre-splitting stage for PDF segments rather than
-replacing the token-aware chunker.
+CSV-row segments are handled separately: chunks are built from labeled lines so
+column names stay attached to values. Oversized CSV fields repeat the field
+label in each continuation chunk instead of emitting unlabeled fragments.
 """
 
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
@@ -46,6 +43,7 @@ from app.services.kb_segments import TextSegment, render_segment
 
 DEFAULT_MAX_TOKENS = 500
 DEFAULT_OVERLAP_TOKENS = 50
+TEXT_BOUNDARIES = ("\n\n", "\n", ". ", "; ", "? ", "! ")
 
 log = structlog.get_logger(__name__)
 
@@ -121,10 +119,8 @@ def _chunk_segment(
     if not body_text.strip():
         return []
 
-    # Plain text benefits from respecting paragraph boundaries where possible.
-    # Structured row segments skip this path and go straight to token windows.
     if segment.kind == "text":
-        paragraph_chunks = _chunk_text_paragraphs(
+        return _chunk_text_boundaries(
             segment,
             prefix_text=prefix_text,
             body_text=body_text,
@@ -132,8 +128,15 @@ def _chunk_segment(
             available_body_tokens=available_body_tokens,
             overlap_tokens=overlap_tokens,
         )
-        if paragraph_chunks is not None:
-            return paragraph_chunks
+
+    if segment.kind == "csv_row":
+        return _chunk_csv_row(
+            segment,
+            prefix_text=prefix_text,
+            body_text=body_text,
+            encoder=encoder,
+            available_body_tokens=available_body_tokens,
+        )
 
     return _chunk_body_tokens(
         segment,
@@ -164,7 +167,7 @@ def _has_context(segment: TextSegment) -> bool:
     )
 
 
-def _chunk_text_paragraphs(
+def _chunk_text_boundaries(
     segment: TextSegment,
     *,
     prefix_text: str,
@@ -172,63 +175,187 @@ def _chunk_text_paragraphs(
     encoder: TokenEncoder,
     available_body_tokens: int,
     overlap_tokens: int,
-) -> list[ChunkDraft] | None:
-    paragraphs = [paragraph.strip() for paragraph in body_text.split("\n\n") if paragraph.strip()]
-    if len(paragraphs) <= 1:
-        return None
+) -> list[ChunkDraft]:
+    return _chunk_by_boundaries(
+        segment,
+        prefix_text=prefix_text,
+        body_text=body_text,
+        encoder=encoder,
+        available_body_tokens=available_body_tokens,
+        overlap_tokens=overlap_tokens,
+        boundaries=TEXT_BOUNDARIES,
+    )
 
+
+def _chunk_by_boundaries(
+    segment: TextSegment,
+    *,
+    prefix_text: str,
+    body_text: str,
+    encoder: TokenEncoder,
+    available_body_tokens: int,
+    overlap_tokens: int,
+    boundaries: Sequence[str],
+) -> list[ChunkDraft]:
+    body_text = body_text.strip()
+    if len(list(encoder.encode(body_text))) <= available_body_tokens:
+        return [_build_chunk(segment, prefix_text, body_text, encoder)]
+    if not boundaries:
+        return _chunk_body_tokens(
+            segment,
+            prefix_text=prefix_text,
+            body_text=body_text,
+            encoder=encoder,
+            available_body_tokens=available_body_tokens,
+            overlap_tokens=overlap_tokens,
+        )
+
+    boundary, *remaining_boundaries = boundaries
+    blocks = _split_boundary_blocks(body_text, boundary)
+    if len(blocks) <= 1:
+        return _chunk_by_boundaries(
+            segment,
+            prefix_text=prefix_text,
+            body_text=body_text,
+            encoder=encoder,
+            available_body_tokens=available_body_tokens,
+            overlap_tokens=overlap_tokens,
+            boundaries=remaining_boundaries,
+        )
+
+    return _pack_boundary_blocks(
+        segment,
+        prefix_text=prefix_text,
+        blocks=blocks,
+        joiner=_boundary_joiner(boundary),
+        encoder=encoder,
+        available_body_tokens=available_body_tokens,
+        overlap_tokens=overlap_tokens,
+        remaining_boundaries=remaining_boundaries,
+    )
+
+
+def _pack_boundary_blocks(
+    segment: TextSegment,
+    *,
+    prefix_text: str,
+    blocks: Sequence[str],
+    joiner: str,
+    encoder: TokenEncoder,
+    available_body_tokens: int,
+    overlap_tokens: int,
+    remaining_boundaries: Sequence[str],
+) -> list[ChunkDraft]:
     chunks: list[ChunkDraft] = []
-    current_paragraphs: list[str] = []
+    current_blocks: list[str] = []
     current_tokens = 0
-    separator_tokens = len(list(encoder.encode("\n\n")))
+    separator_tokens = len(list(encoder.encode(joiner)))
 
-    for paragraph in paragraphs:
-        paragraph_token_count = len(list(encoder.encode(paragraph)))
-        if paragraph_token_count > available_body_tokens:
-            if current_paragraphs:
+    for block in blocks:
+        block_token_count = len(list(encoder.encode(block)))
+        if block_token_count > available_body_tokens:
+            if current_blocks:
                 chunks.append(
-                    _build_chunk(
-                        segment,
-                        prefix_text,
-                        "\n\n".join(current_paragraphs),
-                        encoder,
-                    )
+                    _build_chunk(segment, prefix_text, joiner.join(current_blocks), encoder)
                 )
-                current_paragraphs = []
+                current_blocks = []
                 current_tokens = 0
             chunks.extend(
-                _chunk_body_tokens(
+                _chunk_by_boundaries(
                     segment,
                     prefix_text=prefix_text,
-                    body_text=paragraph,
+                    body_text=block,
                     encoder=encoder,
                     available_body_tokens=available_body_tokens,
                     overlap_tokens=overlap_tokens,
+                    boundaries=remaining_boundaries,
                 )
             )
             continue
 
-        candidate_tokens = paragraph_token_count
-        if current_paragraphs:
+        candidate_tokens = block_token_count
+        if current_blocks:
             candidate_tokens += current_tokens + separator_tokens
         if candidate_tokens > available_body_tokens:
-            chunks.append(
-                _build_chunk(
-                    segment,
-                    prefix_text,
-                    "\n\n".join(current_paragraphs),
-                    encoder,
-                )
-            )
-            current_paragraphs = [paragraph]
-            current_tokens = paragraph_token_count
+            chunks.append(_build_chunk(segment, prefix_text, joiner.join(current_blocks), encoder))
+            current_blocks = [block]
+            current_tokens = block_token_count
             continue
 
-        current_paragraphs.append(paragraph)
+        current_blocks.append(block)
         current_tokens = candidate_tokens
 
-    if current_paragraphs:
-        chunks.append(_build_chunk(segment, prefix_text, "\n\n".join(current_paragraphs), encoder))
+    if current_blocks:
+        chunks.append(_build_chunk(segment, prefix_text, joiner.join(current_blocks), encoder))
+    return chunks
+
+
+def _chunk_csv_row(
+    segment: TextSegment,
+    *,
+    prefix_text: str,
+    body_text: str,
+    encoder: TokenEncoder,
+    available_body_tokens: int,
+) -> list[ChunkDraft]:
+    lines = [line.strip() for line in body_text.split("\n") if line.strip()]
+    chunks: list[ChunkDraft] = []
+    for line in lines:
+        if len(list(encoder.encode(line))) <= available_body_tokens:
+            chunks.append(_build_chunk(segment, prefix_text, line, encoder))
+            continue
+        chunks.extend(
+            _chunk_oversized_csv_line(
+                segment,
+                prefix_text=prefix_text,
+                line=line,
+                encoder=encoder,
+                available_body_tokens=available_body_tokens,
+            )
+        )
+    return chunks
+
+
+def _chunk_oversized_csv_line(
+    segment: TextSegment,
+    *,
+    prefix_text: str,
+    line: str,
+    encoder: TokenEncoder,
+    available_body_tokens: int,
+) -> list[ChunkDraft]:
+    label, separator, value = line.partition(":")
+    if not separator:
+        return _chunk_body_tokens(
+            segment,
+            prefix_text=prefix_text,
+            body_text=line,
+            encoder=encoder,
+            available_body_tokens=available_body_tokens,
+            overlap_tokens=0,
+        )
+
+    label_prefix = f"{label.strip()}: "
+    label_tokens = list(encoder.encode(label_prefix))
+    value_budget = available_body_tokens - len(label_tokens)
+    if value_budget <= 0:
+        return _chunk_body_tokens(
+            segment,
+            prefix_text=prefix_text,
+            body_text=line,
+            encoder=encoder,
+            available_body_tokens=available_body_tokens,
+            overlap_tokens=0,
+        )
+
+    value_tokens = list(encoder.encode(value.strip()))
+    chunks: list[ChunkDraft] = []
+    for start in range(0, len(value_tokens), value_budget):
+        chunk_value = encoder.decode(value_tokens[start : start + value_budget]).strip()
+        if chunk_value:
+            chunks.append(
+                _build_chunk(segment, prefix_text, f"{label_prefix}{chunk_value}", encoder)
+            )
     return chunks
 
 
@@ -258,6 +385,20 @@ def _chunk_body_tokens(
         if end == len(body_tokens):
             break
     return chunks
+
+
+def _split_boundary_blocks(text: str, boundary: str) -> list[str]:
+    if boundary in ("\n\n", "\n"):
+        return [block.strip() for block in text.split(boundary) if block.strip()]
+
+    pattern = re.compile(rf"(?<={re.escape(boundary.strip())})\s+")
+    return [block.strip() for block in pattern.split(text) if block.strip()]
+
+
+def _boundary_joiner(boundary: str) -> str:
+    if boundary in ("\n\n", "\n"):
+        return boundary
+    return " "
 
 
 def _build_chunk(

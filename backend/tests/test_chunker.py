@@ -55,7 +55,12 @@ def test_chunk_segments_does_not_overlap_csv_rows() -> None:
         [
             TextSegment(
                 kind="csv_row",
-                content="drug: Warfarin dose: 5 mg monitoring: INR weekly warning: avoid NSAIDs",
+                content=(
+                    "drug: Warfarin\n"
+                    "dose: 5 mg\n"
+                    "monitoring: INR weekly\n"
+                    "warning: avoid NSAIDs"
+                ),
                 document_title="Formulary",
                 row_number=7,
             )
@@ -67,8 +72,8 @@ def test_chunk_segments_does_not_overlap_csv_rows() -> None:
 
     assert chunks == [
         ChunkDraft(
-            content="Document: Formulary\nRow: 7\n\ndrug: Warfarin dose: 5",
-            tokens=8,
+            content="Document: Formulary\nRow: 7\n\ndrug: Warfarin",
+            tokens=6,
             kind="csv_row",
             document_title="Formulary",
             section_title=None,
@@ -76,8 +81,17 @@ def test_chunk_segments_does_not_overlap_csv_rows() -> None:
             row_number=7,
         ),
         ChunkDraft(
-            content="Document: Formulary\nRow: 7\n\nmg monitoring: INR weekly",
-            tokens=8,
+            content="Document: Formulary\nRow: 7\n\ndose: 5 mg",
+            tokens=7,
+            kind="csv_row",
+            document_title="Formulary",
+            section_title=None,
+            page_number=None,
+            row_number=7,
+        ),
+        ChunkDraft(
+            content="Document: Formulary\nRow: 7\n\nmonitoring: INR weekly",
+            tokens=7,
             kind="csv_row",
             document_title="Formulary",
             section_title=None,
@@ -92,6 +106,43 @@ def test_chunk_segments_does_not_overlap_csv_rows() -> None:
             section_title=None,
             page_number=None,
             row_number=7,
+        ),
+    ]
+
+
+def test_chunk_segments_repeats_csv_label_for_oversized_field() -> None:
+    chunks = chunk_segments(
+        [
+            TextSegment(
+                kind="csv_row",
+                content="notes: alpha beta gamma delta epsilon zeta",
+                document_title="Formulary",
+                row_number=8,
+            )
+        ],
+        encoder=_WordEncoder(),
+        max_tokens=8,
+        overlap_tokens=2,
+    )
+
+    assert chunks == [
+        ChunkDraft(
+            content="Document: Formulary\nRow: 8\n\nnotes: alpha beta gamma",
+            tokens=8,
+            kind="csv_row",
+            document_title="Formulary",
+            section_title=None,
+            page_number=None,
+            row_number=8,
+        ),
+        ChunkDraft(
+            content="Document: Formulary\nRow: 8\n\nnotes: delta epsilon zeta",
+            tokens=8,
+            kind="csv_row",
+            document_title="Formulary",
+            section_title=None,
+            page_number=None,
+            row_number=8,
         ),
     ]
 
@@ -138,6 +189,97 @@ def test_chunk_segments_keeps_paragraph_boundaries_when_blocks_fit() -> None:
             tokens=6,
             kind="text",
             document_title="Doc",
+            section_title=None,
+            page_number=None,
+            row_number=None,
+        ),
+    ]
+
+
+def test_chunk_segments_uses_line_boundaries_before_token_windows() -> None:
+    chunks = chunk_segments(
+        [
+            TextSegment(
+                kind="text",
+                content="alpha one two\nbeta three four\ngamma five six",
+                document_title="PDF Guide",
+                page_number=4,
+            )
+        ],
+        encoder=_WordEncoder(),
+        max_tokens=10,
+        overlap_tokens=2,
+    )
+
+    assert chunks == [
+        ChunkDraft(
+            content="Document: PDF Guide\nPage: 4\n\nalpha one two",
+            tokens=8,
+            kind="text",
+            document_title="PDF Guide",
+            section_title=None,
+            page_number=4,
+            row_number=None,
+        ),
+        ChunkDraft(
+            content="Document: PDF Guide\nPage: 4\n\nbeta three four",
+            tokens=8,
+            kind="text",
+            document_title="PDF Guide",
+            section_title=None,
+            page_number=4,
+            row_number=None,
+        ),
+        ChunkDraft(
+            content="Document: PDF Guide\nPage: 4\n\ngamma five six",
+            tokens=8,
+            kind="text",
+            document_title="PDF Guide",
+            section_title=None,
+            page_number=4,
+            row_number=None,
+        ),
+    ]
+
+
+def test_chunk_segments_uses_sentence_boundaries_before_token_windows() -> None:
+    chunks = chunk_segments(
+        [
+            TextSegment(
+                kind="text",
+                content="Take with food. Monitor INR weekly. Avoid NSAIDs.",
+                document_title="PDF Guide",
+            )
+        ],
+        encoder=_WordEncoder(),
+        max_tokens=7,
+        overlap_tokens=2,
+    )
+
+    assert chunks == [
+        ChunkDraft(
+            content="Document: PDF Guide\n\nTake with food.",
+            tokens=6,
+            kind="text",
+            document_title="PDF Guide",
+            section_title=None,
+            page_number=None,
+            row_number=None,
+        ),
+        ChunkDraft(
+            content="Document: PDF Guide\n\nMonitor INR weekly.",
+            tokens=6,
+            kind="text",
+            document_title="PDF Guide",
+            section_title=None,
+            page_number=None,
+            row_number=None,
+        ),
+        ChunkDraft(
+            content="Document: PDF Guide\n\nAvoid NSAIDs.",
+            tokens=5,
+            kind="text",
+            document_title="PDF Guide",
             section_title=None,
             page_number=None,
             row_number=None,
