@@ -36,7 +36,13 @@ def _async_url(sync_url: str) -> str:
 
 @pytest.fixture(scope="session")
 def postgres_container() -> Iterator[PostgresContainer]:
-    container = PostgresContainer("postgres:17-alpine", username="pharmaide", password="pharmaide")
+    # Knowledge-base migrations use pgvector locally; production CockroachDB
+    # exposes the compatible VECTOR type without installing this extension.
+    container = PostgresContainer(
+        "pgvector/pgvector:pg17",
+        username="pharmaide",
+        password="pharmaide",
+    )
     container.start()
     try:
         async_url = _async_url(container.get_connection_url())

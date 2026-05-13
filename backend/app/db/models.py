@@ -18,8 +18,23 @@ from uuid import UUID
 from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, Text, Uuid, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import UserDefinedType
 
 from app.db.base import Base
+
+EMBEDDING_DIMENSIONS = 1536
+
+
+class Vector(UserDefinedType[str]):
+    """SQLAlchemy type for pgvector/Cockroach VECTOR columns."""
+
+    cache_ok = True
+
+    def __init__(self, dimensions: int) -> None:
+        self.dimensions = dimensions
+
+    def get_col_spec(self, **_: object) -> str:
+        return f"VECTOR({self.dimensions})"
 
 
 class Patient(Base):
@@ -160,3 +175,56 @@ class AuditLogEntry(Base):
     )
 
     __table_args__ = (Index("idx_audit_log_resource", "resource_type", "resource_id"),)
+
+
+class KnowledgeDocument(Base):
+    __tablename__ = "kb_documents"
+
+    id: Mapped[UUID] = mapped_column(
+        Uuid, primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    source_type: Mapped[str] = mapped_column(Text, nullable=False)
+    source_uri: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    mime: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    uploaded_by: Mapped[UUID | None] = mapped_column(Uuid)
+    # Ingestion failures need a pharmacist-safe operational message without
+    # forcing a second migration when the async ingestion worker lands.
+    error_text: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+    )
+
+    chunks: Mapped[list["KnowledgeChunk"]] = relationship(
+        back_populates="document", cascade="all, delete-orphan", order_by="KnowledgeChunk.ordinal"
+    )
+
+
+class KnowledgeChunk(Base):
+    __tablename__ = "kb_chunks"
+
+    id: Mapped[UUID] = mapped_column(
+        Uuid, primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    document_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey("kb_documents.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding: Mapped[str] = mapped_column(Vector(EMBEDDING_DIMENSIONS), nullable=False)
+    tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+    )
+
+    document: Mapped[KnowledgeDocument] = relationship(back_populates="chunks")
+
+    __table_args__ = (
+        Index("idx_kb_chunks_document_ordinal", "document_id", "ordinal"),
+    )
