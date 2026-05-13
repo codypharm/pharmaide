@@ -3,8 +3,11 @@
 from typing import Any
 
 import pypdfium2 as pdfium
+import structlog
 
 from app.services.kb_segments import TextSegment, clean_text
+
+log = structlog.get_logger(__name__)
 
 
 def parse_pdf_segments(data: bytes, *, title: str | None = None) -> list[TextSegment]:
@@ -12,9 +15,10 @@ def parse_pdf_segments(data: bytes, *, title: str | None = None) -> list[TextSeg
     document = pdfium.PdfDocument(data)
     document_title = clean_text(title) if title else None
     segments: list[TextSegment] = []
+    page_count = len(document)
 
     try:
-        for page_index in range(len(document)):
+        for page_index in range(page_count):
             page = document[page_index]
             try:
                 text_page = page.get_textpage()
@@ -39,6 +43,15 @@ def parse_pdf_segments(data: bytes, *, title: str | None = None) -> list[TextSeg
     finally:
         _close_if_present(document)
 
+    log.info(
+        "kb_pdf_parsed",
+        page_count=page_count,
+        segment_count=len(segments),
+        title_present=title is not None,
+        non_empty_pages=[
+            segment.page_number for segment in segments if segment.page_number is not None
+        ],
+    )
     return segments
 
 

@@ -94,3 +94,52 @@ def test_chunk_segments_does_not_overlap_csv_rows() -> None:
             row_number=7,
         ),
     ]
+
+
+def test_chunk_segments_keeps_paragraph_boundaries_when_blocks_fit() -> None:
+    chunks = chunk_segments(
+        [
+            TextSegment(
+                kind="text",
+                content=(
+                    "alpha one two three\n\n"
+                    "beta four five six\n\n"
+                    "gamma seven eight nine"
+                ),
+                document_title="Doc",
+            )
+        ],
+        encoder=_WordEncoder(),
+        max_tokens=9,
+        overlap_tokens=2,
+    )
+
+    assert chunks == [
+        ChunkDraft(
+            content="Document: Doc\n\nalpha one two three",
+            tokens=6,
+            kind="text",
+            document_title="Doc",
+            section_title=None,
+            page_number=None,
+            row_number=None,
+        ),
+        ChunkDraft(
+            content="Document: Doc\n\nbeta four five six",
+            tokens=6,
+            kind="text",
+            document_title="Doc",
+            section_title=None,
+            page_number=None,
+            row_number=None,
+        ),
+        ChunkDraft(
+            content="Document: Doc\n\ngamma seven eight nine",
+            tokens=6,
+            kind="text",
+            document_title="Doc",
+            section_title=None,
+            page_number=None,
+            row_number=None,
+        ),
+    ]
