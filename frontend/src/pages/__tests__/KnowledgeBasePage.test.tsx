@@ -128,9 +128,12 @@ describe("KnowledgeBasePage", () => {
   it("refreshes while an uploaded document is still processing", async () => {
     vi.useFakeTimers();
     const processingDoc = { ...DOC, status: "ingesting" as const, chunk_count: 0 };
-    const spy = vi.spyOn(knowledgeApi, "listKnowledgeDocuments")
+    const listSpy = vi.spyOn(knowledgeApi, "listKnowledgeDocuments")
       .mockResolvedValueOnce({ items: [processingDoc] })
       .mockResolvedValueOnce({ items: [{ ...DOC, status: "ready" }] });
+    const getSpy = vi.spyOn(knowledgeApi, "getKnowledgeDocument")
+      .mockResolvedValueOnce(processingDoc)
+      .mockResolvedValueOnce({ ...DOC, status: "ready" });
 
     renderPage();
 
@@ -142,8 +145,12 @@ describe("KnowledgeBasePage", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3000);
     });
+    await act(async () => {
+      await Promise.resolve();
+    });
 
-    expect(spy).toHaveBeenCalledTimes(2);
+    expect(getSpy).toHaveBeenCalledTimes(2);
+    expect(listSpy).toHaveBeenCalledTimes(2);
     expect(screen.getAllByText("File ready").length).toBeGreaterThan(0);
   });
 
@@ -151,6 +158,7 @@ describe("KnowledgeBasePage", () => {
     const user = userEvent.setup();
     const processingDoc = { ...DOC, status: "ingesting" as const, chunk_count: 0 };
     vi.spyOn(knowledgeApi, "listKnowledgeDocuments").mockResolvedValue({ items: [processingDoc] });
+    vi.spyOn(knowledgeApi, "getKnowledgeDocument").mockResolvedValue(processingDoc);
 
     renderPage();
 

@@ -9,7 +9,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { ApiError, NotFoundError } from "../api/client";
@@ -20,9 +20,9 @@ import {
   uploadKnowledgeDocument,
   type KnowledgeDocumentView,
 } from "../api/knowledge";
+import { useDocumentIngestionStatus } from "../hooks/useDocumentIngestionStatus";
 
 const PAGE_SIZE = 50;
-const PROCESSING_REFRESH_MS = 3000;
 const KB_SCOPE = { scopeId: PRE_AUTH_KB_SCOPE_ID };
 
 type FetchState =
@@ -42,7 +42,7 @@ export default function KnowledgeBasePage() {
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     try {
       const result = await listKnowledgeDocuments({
         ...KB_SCOPE,
@@ -53,25 +53,11 @@ export default function KnowledgeBasePage() {
     } catch (err) {
       setState({ kind: "error", error: knowledgeLoadError(err) });
     }
-  }
+  }, []);
 
   useEffect(() => {
     void refresh();
-  }, []);
-
-  const hasProcessingAssets =
-    state.kind === "ok" && state.items.some((document) => document.status === "ingesting");
-
-  useEffect(() => {
-    if (!hasProcessingAssets) return;
-
-    // Upload processing is asynchronous, so keep the page current until files settle.
-    const intervalId = window.setInterval(() => {
-      void refresh();
-    }, PROCESSING_REFRESH_MS);
-
-    return () => window.clearInterval(intervalId);
-  }, [hasProcessingAssets]);
+  }, [refresh]);
 
   async function handleUpload(file: File | undefined) {
     if (!file || isUploading) return;
@@ -136,9 +122,36 @@ export default function KnowledgeBasePage() {
             onConfirm={() => void handleDelete(pendingDelete)}
           />
         )}
+        {items
+          .filter((document) => document.status === "ingesting")
+          .map((document) => (
+            <DocumentIngestionWatcher
+              key={document.id}
+              document={document}
+              onSettled={refresh}
+            />
+          ))}
       </div>
     </div>
   );
+}
+
+function DocumentIngestionWatcher({
+  document,
+  onSettled,
+}: {
+  document: KnowledgeDocumentView;
+  onSettled: () => Promise<void>;
+}) {
+  const { data } = useDocumentIngestionStatus(document.id, KB_SCOPE);
+
+  useEffect(() => {
+    if (data && data.status !== "ingesting") {
+      void onSettled();
+    }
+  }, [data, onSettled]);
+
+  return null;
 }
 
 function Header({
