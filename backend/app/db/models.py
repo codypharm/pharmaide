@@ -203,6 +203,16 @@ class KnowledgeDocument(Base):
         back_populates="document", cascade="all, delete-orphan", order_by="KnowledgeChunk.ordinal"
     )
 
+    __table_args__ = (
+        Index(
+            "uq_kb_documents_source_owner_uri",
+            "source_type",
+            "source_uri",
+            "uploaded_by",
+            unique=True,
+        ),
+    )
+
 
 class KnowledgeChunk(Base):
     __tablename__ = "kb_chunks"

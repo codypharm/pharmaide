@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 
 import structlog
 from sqlalchemy import delete, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.analysis_schemas import MedicationGrounding
@@ -36,18 +37,16 @@ async def ensure_dailymed_cached(
     max_age_days: int = DAILYMED_CACHE_MAX_AGE_DAYS,
 ) -> KnowledgeDocument:
     """Create a ready global DailyMed KB document if this label is not cached."""
-    cached = await _cached_document(session, source_uri=source_uri)
+    cached = await _cache_document(session, source_uri=source_uri)
     if cached is not None:
-        if _cache_is_stale(cached.updated_at, max_age_days=max_age_days):
-            return await _refresh_cached_document(
-                session,
-                document=cached,
-                source=source,
-                source_uri=source_uri,
-                embedder=embedder,
-            )
-        log.info("dailymed_cache_hit", document_id=str(cached.id), source_uri=source_uri)
-        return cached
+        return await _use_cached_document(
+            session,
+            document=cached,
+            source=source,
+            source_uri=source_uri,
+            embedder=embedder,
+            max_age_days=max_age_days,
+        )
 
     document = KnowledgeDocument(
         source_type="dailymed",
@@ -57,8 +56,27 @@ async def ensure_dailymed_cached(
         status="ingesting",
         uploaded_by=GLOBAL_DAILYMED_SCOPE_ID,
     )
-    session.add(document)
-    await session.flush()
+    try:
+        async with session.begin_nested():
+            session.add(document)
+            await session.flush()
+    except IntegrityError:
+        cached = await _cache_document(session, source_uri=source_uri)
+        if cached is None:
+            raise
+        log.info(
+            "dailymed_cache_insert_race_lost",
+            document_id=str(cached.id),
+            source_uri=source_uri,
+        )
+        return await _use_cached_document(
+            session,
+            document=cached,
+            source=source,
+            source_uri=source_uri,
+            embedder=embedder,
+            max_age_days=max_age_days,
+        )
 
     try:
         source_chunks = [chunk async for chunk in source.list_chunks(document.id)]
@@ -176,6 +194,31 @@ async def ensure_dailymed_cached_for_groundings(
     return cached_count
 
 
+async def _use_cached_document(
+    session: AsyncSession,
+    *,
+    document: KnowledgeDocument,
+    source: KnowledgeSource,
+    source_uri: str,
+    embedder: Embedder,
+    max_age_days: int,
+) -> KnowledgeDocument:
+    if document.status == "ready" and not _cache_is_stale(
+        document.updated_at,
+        max_age_days=max_age_days,
+    ):
+        log.info("dailymed_cache_hit", document_id=str(document.id), source_uri=source_uri)
+        return document
+
+    return await _refresh_cached_document(
+        session,
+        document=document,
+        source=source,
+        source_uri=source_uri,
+        embedder=embedder,
+    )
+
+
 async def _refresh_cached_document(
     session: AsyncSession,
     *,
@@ -233,7 +276,7 @@ async def _refresh_cached_document(
     return document
 
 
-async def _cached_document(
+async def _cache_document(
     session: AsyncSession,
     *,
     source_uri: str,
@@ -243,7 +286,6 @@ async def _cached_document(
             KnowledgeDocument.source_type == "dailymed",
             KnowledgeDocument.source_uri == source_uri,
             KnowledgeDocument.uploaded_by == GLOBAL_DAILYMED_SCOPE_ID,
-            KnowledgeDocument.status == "ready",
         )
     )
     global_document = global_result.scalar_one_or_none()

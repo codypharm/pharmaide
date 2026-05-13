@@ -5,7 +5,9 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import httpx
+import pytest
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.analysis_schemas import MedicationGrounding
@@ -114,6 +116,86 @@ async def test_ensure_dailymed_cached_returns_existing_ready_document_without_re
 
     assert document.id == existing.id
     assert source.calls == 0
+    assert document_count == 1
+
+
+async def test_dailymed_cache_owner_uri_is_unique(
+    db_session: AsyncSession,
+) -> None:
+    first = KnowledgeDocument(
+        source_type="dailymed",
+        source_uri="dailymed://setid-1",
+        title="Lisinopril Tablet",
+        mime="application/spl+xml",
+        status="ready",
+        uploaded_by=GLOBAL_DAILYMED_SCOPE_ID,
+    )
+    db_session.add(first)
+    await db_session.flush()
+
+    duplicate = KnowledgeDocument(
+        source_type="dailymed",
+        source_uri="dailymed://setid-1",
+        title="Lisinopril Tablet Duplicate",
+        mime="application/spl+xml",
+        status="ready",
+        uploaded_by=GLOBAL_DAILYMED_SCOPE_ID,
+    )
+
+    with pytest.raises(IntegrityError):
+        async with db_session.begin_nested():
+            db_session.add(duplicate)
+            await db_session.flush()
+
+    document_count = await db_session.scalar(
+        select(func.count())
+        .select_from(KnowledgeDocument)
+        .where(
+            KnowledgeDocument.source_type == "dailymed",
+            KnowledgeDocument.source_uri == "dailymed://setid-1",
+            KnowledgeDocument.uploaded_by == GLOBAL_DAILYMED_SCOPE_ID,
+        )
+    )
+    assert document_count == 1
+
+
+async def test_ensure_dailymed_cached_finishes_existing_in_progress_global_document(
+    db_session: AsyncSession,
+) -> None:
+    existing = KnowledgeDocument(
+        source_type="dailymed",
+        source_uri="dailymed://setid-1",
+        title="Lisinopril Tablet",
+        mime="application/spl+xml",
+        status="ingesting",
+        uploaded_by=GLOBAL_DAILYMED_SCOPE_ID,
+    )
+    db_session.add(existing)
+    await db_session.flush()
+    source = _DailyMedMemorySource()
+
+    document = await ensure_dailymed_cached(
+        db_session,
+        source=source,
+        source_uri="dailymed://setid-1",
+        title="Lisinopril Tablet",
+        embedder=_embed,
+    )
+    chunk_count = await db_session.scalar(
+        select(func.count())
+        .select_from(KnowledgeChunk)
+        .where(KnowledgeChunk.document_id == existing.id)
+    )
+    document_count = await db_session.scalar(
+        select(func.count())
+        .select_from(KnowledgeDocument)
+        .where(KnowledgeDocument.source_uri == "dailymed://setid-1")
+    )
+
+    assert document.id == existing.id
+    assert document.status == "ready"
+    assert source.calls == 1
+    assert chunk_count == 1
     assert document_count == 1
 
 
