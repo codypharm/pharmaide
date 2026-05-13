@@ -196,7 +196,7 @@ describe("KnowledgeBasePage", () => {
     await waitFor(() => expect(screen.getByText(/no clinical assets uploaded/i)).toBeTruthy());
   });
 
-  it("renders DailyMed references as read-only verified material", async () => {
+  it("does not show DailyMed references in the clinical asset management list", async () => {
     const dailymedDoc: KnowledgeDocumentView = {
       ...DOC,
       id: "doc-dailymed",
@@ -210,11 +210,8 @@ describe("KnowledgeBasePage", () => {
 
     renderPage();
 
-    await screen.findByText("Lisinopril Tablet");
-    expect(screen.getByText("Verified medical reference")).toBeTruthy();
-    expect(
-      screen.getByLabelText(/lisinopril tablet is a verified reference/i),
-    ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /delete lisinopril tablet/i })).toBeNull();
+    await screen.findByText(/no clinical assets uploaded/i);
+    expect(screen.queryByText("Lisinopril Tablet")).toBeNull();
+    expect(screen.queryByText("Verified medical reference")).toBeNull();
   });
 });

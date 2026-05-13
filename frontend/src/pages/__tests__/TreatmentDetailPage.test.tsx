@@ -72,10 +72,20 @@ const COMPLETED_ANALYSIS: TreatmentAnalysisRow = {
       {
         chunk_id: "77777777-7777-7777-7777-777777777777",
         document_id: "88888888-8888-8888-8888-888888888888",
+        source_type: "user_upload",
         document_title: "Clinic Hypertension Protocol",
         source_uri: "local://kb/hypertension.pdf",
         text: "ACE inhibitors require monitoring for cough and dizziness.",
         score: 0.91,
+      },
+      {
+        chunk_id: "99999999-9999-9999-9999-999999999999",
+        document_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        source_type: "dailymed",
+        document_title: "Lisinopril Tablet",
+        source_uri: "dailymed://setid-1",
+        text: "DailyMed label includes dizziness warnings.",
+        score: 0.83,
       },
     ],
     reasoning: {
@@ -232,7 +242,8 @@ describe("TreatmentDetailPage", () => {
       "href",
       "/dashboard/knowledge/88888888-8888-8888-8888-888888888888",
     );
-    expect(screen.getByText("Relevance 91%")).toBeTruthy();
+    expect(screen.getByText("Clinic asset · Relevance 91%")).toBeTruthy();
+    expect(screen.getByText("Verified medical reference · Relevance 83%")).toBeTruthy();
     expect(
       screen.getByText("ACE inhibitors require monitoring for cough and dizziness."),
     ).toBeTruthy();

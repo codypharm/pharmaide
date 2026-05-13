@@ -41,8 +41,16 @@ _RETRIEVAL_SQL = text(
     JOIN kb_documents d ON d.id = c.document_id
     WHERE d.status = 'ready'
       AND (
-        (:source_type = 'user_upload' AND d.source_type = 'user_upload' AND d.uploaded_by = :uploaded_by)
-        OR (:source_type = 'dailymed' AND d.source_type = 'dailymed' AND d.uploaded_by = :global_dailymed_scope_id)
+        (
+            :source_type = 'user_upload'
+            AND d.source_type = 'user_upload'
+            AND d.uploaded_by = :uploaded_by
+        )
+        OR (
+            :source_type = 'dailymed'
+            AND d.source_type = 'dailymed'
+            AND d.uploaded_by = :global_dailymed_scope_id
+        )
       )
     ORDER BY c.embedding <=> CAST(:query_vector AS vector(3072)), c.created_at, c.id
     LIMIT :limit

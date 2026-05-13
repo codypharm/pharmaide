@@ -274,6 +274,7 @@ async def test_summarize_treatment_prompt_includes_kb_citations() -> None:
 
     assert "kb_citations:" in seen["prompt"]
     assert "Anticoagulation Protocol" in seen["prompt"]
+    assert "source_type=user_upload" in seen["prompt"]
     assert "Warfarin requires INR monitoring." in seen["prompt"]
 
 

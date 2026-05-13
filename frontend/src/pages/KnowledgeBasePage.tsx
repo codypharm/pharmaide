@@ -86,7 +86,10 @@ export default function KnowledgeBasePage() {
     }
   }
 
-  const items = state.kind === "ok" ? state.items : [];
+  const items =
+    state.kind === "ok"
+      ? state.items.filter((document) => document.source_type === "user_upload")
+      : [];
 
   return (
     <div className="h-full overflow-y-auto p-8">

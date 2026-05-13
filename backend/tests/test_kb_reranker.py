@@ -1,6 +1,7 @@
 """Knowledge-base reranker agent behavior."""
 
 from dataclasses import dataclass
+from typing import Literal
 from uuid import UUID
 
 from pydantic_ai import Agent
@@ -26,6 +27,7 @@ SECOND_CHUNK_ID = UUID("22222222-2222-2222-2222-222222222222")
 @dataclass(frozen=True)
 class _Candidate:
     chunk_id: UUID
+    source_type: Literal["user_upload", "dailymed"]
     document_title: str
     text: str
     score: float
@@ -68,12 +70,14 @@ async def test_rerank_citations_with_agent_uses_validated_candidate_ids() -> Non
         [
             _Candidate(
                 chunk_id=FIRST_CHUNK_ID,
+                source_type="dailymed",
                 document_title="General Protocol",
                 text="General diabetes counselling.",
                 score=0.88,
             ),
             _Candidate(
                 chunk_id=SECOND_CHUNK_ID,
+                source_type="user_upload",
                 document_title="Metformin Protocol",
                 text="Patients on metformin should report severe diarrhoea.",
                 score=0.71,
@@ -88,6 +92,7 @@ async def test_rerank_citations_with_agent_uses_validated_candidate_ids() -> Non
     assert "use only the candidate citations" in seen["instructions"].lower()
     assert "do not invent citations" in seen["instructions"].lower()
     assert "metformin diarrhoea" in seen["prompt"]
+    assert "source_type=user_upload" in seen["prompt"]
     assert str(FIRST_CHUNK_ID) in seen["prompt"]
     assert str(SECOND_CHUNK_ID) in seen["prompt"]
 
