@@ -22,7 +22,7 @@ from sqlalchemy.types import UserDefinedType
 
 from app.db.base import Base
 
-EMBEDDING_DIMENSIONS = 1536
+EMBEDDING_DIMENSIONS = 3072
 
 
 class Vector(UserDefinedType[str]):

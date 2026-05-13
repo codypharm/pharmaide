@@ -30,14 +30,15 @@ async def test_kb_document_and_chunk_tables_are_migrated(
     assert fetched is not None
     assert fetched.title == "Clinic protocol"
 
-    chunks_column = await db_session.scalar(
+    chunks_column_type = await db_session.scalar(
         text(
             """
-            SELECT data_type
-            FROM information_schema.columns
-            WHERE table_name = 'kb_chunks'
-              AND column_name = 'embedding'
+            SELECT format_type(attribute.atttypid, attribute.atttypmod)
+            FROM pg_attribute AS attribute
+            JOIN pg_class AS class ON class.oid = attribute.attrelid
+            WHERE class.relname = 'kb_chunks'
+              AND attribute.attname = 'embedding'
             """
         )
     )
-    assert chunks_column == "USER-DEFINED"
+    assert chunks_column_type == "vector(3072)"
