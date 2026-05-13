@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     # actor id instead of the X-Pharmaide-User-Id development header.
     max_concurrent_analyses_per_user: int = Field(default=3, gt=0, le=50)
 
+    # Local development storage for uploaded KB source files. Production should
+    # point this adapter at blob storage while keeping the DB metadata contract.
+    knowledge_upload_dir: str = "./data/kb_uploads"
+    knowledge_max_upload_bytes: int = Field(default=25 * 1024 * 1024, gt=0)
+
 
 # lru_cache so Settings is parsed once per process. Cheap insurance against
 # re-reading the .env file on every Depends(get_settings) call.
