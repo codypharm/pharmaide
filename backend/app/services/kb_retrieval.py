@@ -7,17 +7,19 @@ out of audit payloads and structured logs.
 """
 
 from collections.abc import Awaitable, Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from uuid import UUID
 
 import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.kb_reranker import RerankResult
 from app.db.models import EMBEDDING_DIMENSIONS, AuditLogEntry
 
 EmbeddingVector = list[float]
 Embedder = Callable[[Sequence[str]], Awaitable[list[EmbeddingVector]]]
+Reranker = Callable[[str, Sequence["Citation"], int], Awaitable[RerankResult]]
 
 log = structlog.get_logger(__name__)
 SYSTEM_RESOURCE_ID = UUID("00000000-0000-0000-0000-000000000000")
@@ -57,7 +59,9 @@ async def retrieve(
     query: str,
     *,
     embedder: Embedder,
+    reranker: Reranker | None = None,
     k: int = 5,
+    candidate_k: int | None = None,
     treatment_id: UUID | None = None,
 ) -> list[Citation]:
     """Return the top-K ready KB chunks for a clinical query."""
@@ -66,13 +70,21 @@ async def retrieve(
         return []
 
     limit = _normalize_limit(k)
+    candidate_limit = _candidate_limit(limit, candidate_k, reranker=reranker)
     query_embedding = await _embed_query(normalized_query, embedder)
-    citations = await _query_citations(session, query_embedding, limit)
+    candidates = await _query_citations(session, query_embedding, candidate_limit)
+    citations = await _rerank_if_requested(
+        normalized_query,
+        candidates,
+        limit,
+        reranker=reranker,
+    )
     await _audit_retrieval(session, citations, treatment_id=treatment_id)
     log.info(
         "kb_retrieval_completed",
         chunk_count=len(citations),
         top_score=citations[0].score if citations else None,
+        reranked=reranker is not None,
         treatment_id=str(treatment_id) if treatment_id else None,
     )
     return citations
@@ -91,6 +103,22 @@ def _normalize_limit(k: int) -> int:
     if k < 1:
         raise ValueError("retrieval limit must be positive")
     return k
+
+
+def _candidate_limit(
+    limit: int,
+    candidate_k: int | None,
+    *,
+    reranker: Reranker | None,
+) -> int:
+    if candidate_k is not None and candidate_k < limit:
+        raise ValueError("candidate limit must be greater than or equal to retrieval limit")
+    if candidate_k is not None:
+        return candidate_k
+    if reranker is None:
+        return limit
+    # Reranking needs recall headroom; the final k remains small for the graph.
+    return limit * 4
 
 
 async def _query_citations(
@@ -116,6 +144,37 @@ async def _query_citations(
         )
         for row in result
     ]
+
+
+async def _rerank_if_requested(
+    query: str,
+    candidates: Sequence[Citation],
+    limit: int,
+    *,
+    reranker: Reranker | None,
+) -> list[Citation]:
+    if reranker is None:
+        return list(candidates[:limit])
+    if not candidates:
+        return []
+
+    result = await reranker(query, candidates, limit)
+    return _apply_rerank_result(candidates, result, limit)
+
+
+def _apply_rerank_result(
+    candidates: Sequence[Citation],
+    result: RerankResult,
+    limit: int,
+) -> list[Citation]:
+    candidates_by_id = {candidate.chunk_id: candidate for candidate in candidates}
+    reranked: list[Citation] = []
+    for selected in result.citations[:limit]:
+        candidate = candidates_by_id.get(selected.chunk_id)
+        if candidate is None:
+            raise ValueError("reranker returned a chunk_id outside the candidate set")
+        reranked.append(replace(candidate, score=selected.relevance_score))
+    return reranked
 
 
 async def _audit_retrieval(

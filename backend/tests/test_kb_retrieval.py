@@ -6,8 +6,9 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.kb_reranker import RerankedCitation, RerankResult
 from app.db.models import EMBEDDING_DIMENSIONS, AuditLogEntry, KnowledgeChunk, KnowledgeDocument
-from app.services.kb_retrieval import retrieve
+from app.services.kb_retrieval import Citation, retrieve
 
 
 def _embedding(axis: int) -> list[float]:
@@ -99,6 +100,76 @@ async def test_retrieve_returns_nearest_ready_chunks_and_non_phi_audit(
         "chunk_count": 2,
         "top_score": citations[0].score,
     }
+
+
+async def test_retrieve_can_rerank_a_wider_candidate_set(
+    db_session: AsyncSession,
+) -> None:
+    document = KnowledgeDocument(
+        source_type="user_upload",
+        source_uri="local://kb/diabetes.pdf",
+        title="Diabetes Protocol",
+        mime="application/pdf",
+        status="ready",
+    )
+    db_session.add(document)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            KnowledgeChunk(
+                document_id=document.id,
+                ordinal=0,
+                content="General diabetes counselling information.",
+                embedding=_vector_literal(_embedding(0)),
+                tokens=5,
+            ),
+            KnowledgeChunk(
+                document_id=document.id,
+                ordinal=1,
+                content="Metformin may cause gastrointestinal side effects.",
+                embedding=_vector_literal(_embedding(1)),
+                tokens=7,
+            ),
+            KnowledgeChunk(
+                document_id=document.id,
+                ordinal=2,
+                content="Patients on metformin should report severe diarrhoea.",
+                embedding=_vector_literal(_embedding(2)),
+                tokens=8,
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    async def _rerank(
+        query: str,
+        candidates: Sequence[Citation],
+        limit: int,
+    ) -> RerankResult:
+        assert query == "metformin diarrhoea"
+        assert limit == 2
+        assert len(candidates) == 3
+        return RerankResult(
+            citations=[
+                RerankedCitation(chunk_id=candidates[2].chunk_id, relevance_score=0.97),
+                RerankedCitation(chunk_id=candidates[1].chunk_id, relevance_score=0.81),
+            ]
+        )
+
+    citations = await retrieve(
+        db_session,
+        "metformin diarrhoea",
+        embedder=_embed_query,
+        k=2,
+        candidate_k=3,
+        reranker=_rerank,
+    )
+
+    assert [citation.text for citation in citations] == [
+        "Patients on metformin should report severe diarrhoea.",
+        "Metformin may cause gastrointestinal side effects.",
+    ]
+    assert [citation.score for citation in citations] == [0.97, 0.81]
 
 
 async def test_retrieve_rejects_empty_query_without_embedding(
