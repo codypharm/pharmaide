@@ -8,7 +8,7 @@ persistence path.
 """
 
 from collections.abc import Awaitable, Callable, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import structlog
@@ -47,6 +47,47 @@ async def ingest_document(
     except Exception:
         log.exception("kb_doc_ingestion_error", document_id=str(document_id))
         await _mark_failed(session_factory, document_id, duration_ms=_duration_ms(started_at))
+
+
+async def mark_stale_ingestions_failed(
+    session: AsyncSession,
+    *,
+    stale_after_minutes: int,
+) -> int:
+    """Recover orphaned in-process ingestion rows after a server reload."""
+    cutoff = datetime.now(UTC) - timedelta(minutes=stale_after_minutes)
+    result = await session.execute(
+        select(KnowledgeDocument)
+        .where(
+            KnowledgeDocument.status == "ingesting",
+            KnowledgeDocument.updated_at < cutoff,
+        )
+        .with_for_update()
+    )
+    documents = list(result.scalars())
+    for document in documents:
+        document.status = "failed"
+        document.error_text = "ingestion_stale"
+        document.updated_at = func.clock_timestamp()
+        session.add(
+            AuditLogEntry(
+                event_type="kb_doc_ingestion_failed",
+                resource_type="kb_document",
+                resource_id=document.id,
+                payload={
+                    "document_id": str(document.id),
+                    "error": "ingestion_stale",
+                },
+            )
+        )
+
+    if documents:
+        log.warning(
+            "kb_doc_stale_ingestions_failed",
+            document_count=len(documents),
+            stale_after_minutes=stale_after_minutes,
+        )
+    return len(documents)
 
 
 async def _collect_source_chunks(

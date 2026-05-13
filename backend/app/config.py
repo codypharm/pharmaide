@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     # point this adapter at blob storage while keeping the DB metadata contract.
     knowledge_upload_dir: str = "./data/kb_uploads"
     knowledge_max_upload_bytes: int = Field(default=25 * 1024 * 1024, gt=0)
+    knowledge_ingestion_stale_minutes: int = Field(default=30, gt=0, le=24 * 60)
 
     @field_validator("knowledge_max_upload_bytes", mode="before")
     @classmethod

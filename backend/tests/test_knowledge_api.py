@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -154,6 +155,65 @@ async def test_list_and_get_knowledge_documents_return_metadata_with_chunk_count
     assert get_response.status_code == 200
     assert get_response.json()["chunk_count"] == 2
     assert cross_scope_response.status_code == 404
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_list_knowledge_documents_marks_stale_processing_assets_failed(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    test_app: FastAPI,
+) -> None:
+    test_app.dependency_overrides[get_settings] = lambda: Settings(
+        _env_file=None,
+        knowledge_ingestion_stale_minutes=5,
+    )
+    owner_id = uuid4()
+    stale_document = KnowledgeDocument(
+        source_type="user_upload",
+        source_uri="local://kb/stale.csv",
+        title="Stale Upload",
+        mime="text/csv",
+        status="ingesting",
+        uploaded_by=owner_id,
+        updated_at=datetime.now(UTC) - timedelta(minutes=10),
+    )
+    fresh_document = KnowledgeDocument(
+        source_type="user_upload",
+        source_uri="local://kb/fresh.csv",
+        title="Fresh Upload",
+        mime="text/csv",
+        status="ingesting",
+        uploaded_by=owner_id,
+        updated_at=datetime.now(UTC),
+    )
+    db_session.add_all([stale_document, fresh_document])
+    await db_session.flush()
+
+    response = await app_client.get(
+        "/knowledge/documents",
+        headers={"X-Pharmaide-User-Id": str(owner_id)},
+    )
+
+    await db_session.refresh(stale_document)
+    await db_session.refresh(fresh_document)
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.resource_id == stale_document.id,
+            AuditLogEntry.event_type == "kb_doc_ingestion_failed",
+        )
+    )
+    statuses = {item["title"]: item["status"] for item in response.json()["items"]}
+
+    assert response.status_code == 200
+    assert statuses == {"Stale Upload": "failed", "Fresh Upload": "ingesting"}
+    assert stale_document.status == "failed"
+    assert stale_document.error_text == "ingestion_stale"
+    assert fresh_document.status == "ingesting"
+    assert audit is not None
+    assert audit.payload == {
+        "document_id": str(stale_document.id),
+        "error": "ingestion_stale",
+    }
 
 
 @pytest.mark.usefixtures("postgres_container")

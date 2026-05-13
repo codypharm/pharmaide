@@ -19,7 +19,7 @@ from app.db.engine import get_session, get_session_factory
 from app.db.models import AuditLogEntry, KnowledgeChunk, KnowledgeDocument
 from app.services import task_runner
 from app.services.embeddings import build_embedding_client, embed_texts
-from app.services.kb_ingestion import ingest_document
+from app.services.kb_ingestion import ingest_document, mark_stale_ingestions_failed
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 SessionFactoryDep = Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)]
@@ -119,10 +119,15 @@ async def upload_document(
 @router.get("/documents", response_model=KnowledgeDocumentList)
 async def list_documents(
     session: SessionDep,
+    settings: SettingsDep,
     actor_id: ActorDep,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> KnowledgeDocumentList:
+    await mark_stale_ingestions_failed(
+        session,
+        stale_after_minutes=settings.knowledge_ingestion_stale_minutes,
+    )
     rows = await _document_rows(session, actor_id=actor_id, limit=limit, offset=offset)
     return KnowledgeDocumentList(items=[_document_view(row) for row in rows])
 
@@ -131,8 +136,13 @@ async def list_documents(
 async def get_document(
     document_id: UUID,
     session: SessionDep,
+    settings: SettingsDep,
     actor_id: ActorDep,
 ) -> KnowledgeDocumentView:
+    await mark_stale_ingestions_failed(
+        session,
+        stale_after_minutes=settings.knowledge_ingestion_stale_minutes,
+    )
     row = await _document_row(session, document_id=document_id, actor_id=actor_id)
     if row is None:
         raise HTTPException(status_code=404, detail={"error": "knowledge_document_not_found"})
