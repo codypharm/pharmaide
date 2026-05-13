@@ -3,7 +3,10 @@
 from collections.abc import AsyncIterator
 from uuid import UUID
 
+import pytest
+
 from app.agents.knowledge_sources import KnowledgeSource, KnowledgeSourceChunk
+from app.agents.knowledge_sources.dailymed import DailyMedSource, DailyMedSourceNotConfigured
 from app.agents.knowledge_sources.user_upload import UserUploadSource
 
 
@@ -52,3 +55,10 @@ async def test_user_upload_source_reads_stored_text_upload(tmp_path) -> None:
     assert "Warfarin requires INR monitoring." in chunks[0].content
     assert chunks[0].source_uri == "local://kb/protocol.txt"
     assert chunks[0].document_title == "Anticoagulation Protocol"
+
+
+async def test_dailymed_source_is_visible_but_not_configured() -> None:
+    source: KnowledgeSource = DailyMedSource()
+
+    with pytest.raises(DailyMedSourceNotConfigured):
+        _ = [chunk async for chunk in source.list_chunks(UUID(int=1))]
