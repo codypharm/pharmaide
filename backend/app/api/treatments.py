@@ -53,12 +53,32 @@ router = APIRouter()
     response_model=CreateTreatmentResponse,
 )
 async def post_treatment(
-    body: CreateTreatmentRequest, session: SessionDep
+    body: CreateTreatmentRequest,
+    session_factory: SessionFactoryDep,
+    settings: SettingsDep,
+    user_id: Annotated[str, Header(alias="X-Pharmaide-User-Id", min_length=1)] = "anonymous",
 ) -> CreateTreatmentResponse:
     try:
-        return await create_treatment(session, body)
+        # Create the treatment and reserve its first analysis in one request
+        # transaction so every client gets the same startup behavior.
+        async with session_factory() as session, session.begin():
+            created = await create_treatment(session, body)
+            analysis_id = await create_pending_analysis(session, created.treatment_id)
     except MRNConflict as exc:
         raise HTTPException(status_code=409, detail={"error": "mrn_already_exists"}) from exc
+    timeout_seconds = settings.analysis_timeout_seconds
+    try:
+        _schedule_analysis(
+            session_factory,
+            settings,
+            analysis_id,
+            timeout_seconds=timeout_seconds,
+            user_id=user_id,
+        )
+    except task_runner.RateLimitExceeded:
+        await mark_analysis_failed(session_factory, analysis_id, "analysis_rate_limited")
+
+    return created.model_copy(update={"analysis_id": analysis_id})
 
 
 @router.get(
@@ -108,17 +128,12 @@ async def post_treatment_analysis(
         raise HTTPException(status_code=409, detail={"error": "analysis_in_progress"}) from exc
     timeout_seconds = timeout if timeout is not None else settings.analysis_timeout_seconds
     try:
-        task_runner.schedule(
-            analyze_treatment,
+        _schedule_analysis(
             session_factory,
+            settings,
             analysis_id,
-            timeout_seconds,
-            checkpoint_db_path=settings.checkpoint_db_path,
-            rxnorm_base_url=settings.rxnorm_base_url,
-            openai_api_key=settings.openai_api_key,
-            kb_scope_id=_parse_optional_uuid(user_id),
+            timeout_seconds=timeout_seconds,
             user_id=user_id,
-            max_concurrent_per_user=settings.max_concurrent_analyses_per_user,
         )
     except task_runner.RateLimitExceeded as exc:
         await mark_analysis_failed(session_factory, analysis_id, "analysis_rate_limited")
@@ -152,3 +167,26 @@ def _parse_optional_uuid(value: str) -> UUID | None:
         return UUID(value)
     except ValueError:
         return None
+
+
+def _schedule_analysis(
+    session_factory: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    analysis_id: UUID,
+    *,
+    timeout_seconds: int,
+    user_id: str,
+) -> None:
+    """Schedule analysis with the same runtime options for create and rerun."""
+    task_runner.schedule(
+        analyze_treatment,
+        session_factory,
+        analysis_id,
+        timeout_seconds,
+        checkpoint_db_path=settings.checkpoint_db_path,
+        rxnorm_base_url=settings.rxnorm_base_url,
+        openai_api_key=settings.openai_api_key,
+        kb_scope_id=_parse_optional_uuid(user_id),
+        user_id=user_id,
+        max_concurrent_per_user=settings.max_concurrent_analyses_per_user,
+    )

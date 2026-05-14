@@ -30,6 +30,7 @@ export type TreatmentCreatePayload = {
 export type CreateTreatmentResponse = {
   treatment_id: string;
   patient_id: string;
+  analysis_id: string | null;
 };
 
 export function createTreatment(

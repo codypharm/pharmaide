@@ -10,7 +10,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { ApiError, ConflictError, ValidationError } from "../api/client";
 import { ExtractionError, extractPrescription, type ExtractedPrescription } from "../api/prescriptions";
-import { createTreatment, triggerAnalysis } from "../api/treatments";
+import { createTreatment } from "../api/treatments";
 
 type IngestionMethod = "structured" | "manual" | "vision";
 
@@ -206,10 +206,8 @@ export default function NewTreatmentPage() {
         ingestion_method: "structured",
       });
 
-      await startInitialAnalysis(result.treatment_id);
-
       toast.success("Treatment created", {
-        description: `Treatment ID: ${result.treatment_id.slice(0, 8)}… · Patient ID: ${result.patient_id.slice(0, 8)}…`,
+        description: treatmentCreatedDescription(result),
         duration: 8000,
         action: {
           label: "View",
@@ -854,20 +852,17 @@ export default function NewTreatmentPage() {
   );
 }
 
-async function startInitialAnalysis(treatmentId: string): Promise<void> {
-  try {
-    await triggerAnalysis(treatmentId);
-  } catch (err) {
-    if (err instanceof ConflictError) {
-      return;
-    }
-
-    // The treatment is already persisted, so analysis startup is a fallback
-    // concern; the Reasoning tab still exposes manual Run Analysis.
-    toast.warning("Treatment created, analysis not started", {
-      description: "Open the Reasoning tab and run analysis manually if it does not start shortly.",
-    });
-  }
+function treatmentCreatedDescription(result: {
+  treatment_id: string;
+  patient_id: string;
+  analysis_id: string | null;
+}): string {
+  const treatment = `Treatment ID: ${result.treatment_id.slice(0, 8)}…`;
+  const patient = `Patient ID: ${result.patient_id.slice(0, 8)}…`;
+  const analysis = result.analysis_id
+    ? `Analysis ID: ${result.analysis_id.slice(0, 8)}…`
+    : "Analysis pending";
+  return `${treatment} · ${patient} · ${analysis}`;
 }
 
 function toMedicationDrafts(prescription: ExtractedPrescription): Medication[] {

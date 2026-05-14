@@ -48,6 +48,7 @@ class CreateTreatmentRequest(BaseModel):
 class CreateTreatmentResponse(BaseModel):
     treatment_id: UUID
     patient_id: UUID
+    analysis_id: UUID | None = None
 
 
 class AnalyzeTreatmentResponse(BaseModel):

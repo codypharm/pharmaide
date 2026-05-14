@@ -12,13 +12,21 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import AuditLogEntry, Medication, Patient, Treatment
+from app.db.models import AuditLogEntry, Medication, Patient, Treatment, TreatmentAnalysis
+from app.services import task_runner
 
 
 @pytest.mark.usefixtures("postgres_container")
 async def test_post_treatments_creates_full_lineage(
-    app_client: AsyncClient, db_session: AsyncSession
+    app_client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    scheduled: list[tuple[object, tuple[object, ...], dict[str, object]]] = []
+
+    def capture_schedule(coro_fn: object, *args: object, **kwargs: object) -> None:
+        scheduled.append((coro_fn, args, kwargs))
+
+    monkeypatch.setattr(task_runner, "schedule", capture_schedule)
+
     body = {
         "patient": {
             "name": "Eleanor Vance",
@@ -52,9 +60,11 @@ async def test_post_treatments_creates_full_lineage(
     payload = response.json()
     assert "treatment_id" in payload
     assert "patient_id" in payload
+    assert "analysis_id" in payload
 
     patient_id = UUID(payload["patient_id"])
     treatment_id = UUID(payload["treatment_id"])
+    analysis_id = UUID(payload["analysis_id"])
 
     patient = await db_session.get(Patient, patient_id)
     assert patient is not None
@@ -67,6 +77,16 @@ async def test_post_treatments_creates_full_lineage(
     assert treatment.patient_id == patient_id
     assert treatment.status == "pending"
     assert treatment.clinical_objective == "Monitor for ACE-inhibitor cough"
+
+    analysis = await db_session.get(TreatmentAnalysis, analysis_id)
+    assert analysis is not None
+    assert analysis.treatment_id == treatment_id
+    assert analysis.status == "pending"
+    assert len(scheduled) == 1
+    assert scheduled[0][1][1] == analysis_id
+    assert scheduled[0][2]["checkpoint_db_path"] == "./pharmaide.db"
+    assert scheduled[0][2]["rxnorm_base_url"] == "https://rxnav.nlm.nih.gov/REST"
+    assert "openai_api_key" in scheduled[0][2]
 
     meds_result = await db_session.execute(
         select(Medication)

@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import NewTreatmentPage from "../NewTreatmentPage";
-import { ApiError, ConflictError } from "../../api/client";
+import { ApiError } from "../../api/client";
 import * as prescriptionsApi from "../../api/prescriptions";
 import { ExtractionError } from "../../api/prescriptions";
 import * as treatmentsApi from "../../api/treatments";
@@ -299,35 +299,34 @@ describe("NewTreatmentPage", () => {
     expect(screen.getByText(/manual regimen entry/i)).toBeInTheDocument();
   });
 
-  it("starts the first analysis automatically after creating a treatment", async () => {
+  it("shows the server-created analysis id after creating a treatment", async () => {
     vi.spyOn(treatmentsApi, "createTreatment").mockResolvedValue({
       treatment_id: "treatment-1",
       patient_id: "patient-1",
+      analysis_id: "analysis-1",
     });
-    const trigger = vi
-      .spyOn(treatmentsApi, "triggerAnalysis")
-      .mockResolvedValue({ analysis_id: "analysis-1" });
+    const trigger = vi.spyOn(treatmentsApi, "triggerAnalysis");
 
     renderPage();
     await submitValidTreatment();
 
     await waitFor(() => {
-      expect(trigger).toHaveBeenCalledWith("treatment-1");
+      expect(toast.success).toHaveBeenCalledWith(
+        "Treatment created",
+        expect.objectContaining({
+          description: expect.stringContaining("Analysis ID: analysis"),
+        }),
+      );
     });
+    expect(trigger).not.toHaveBeenCalled();
   });
 
-  it("does not treat duplicate active analysis as a create failure", async () => {
+  it("handles missing analysis id as pending backend startup", async () => {
     vi.spyOn(treatmentsApi, "createTreatment").mockResolvedValue({
       treatment_id: "treatment-1",
       patient_id: "patient-1",
+      analysis_id: null,
     });
-    vi.spyOn(treatmentsApi, "triggerAnalysis").mockRejectedValue(
-      new ConflictError(
-        "req_conflict",
-        { detail: { error: "analysis_in_progress" } },
-        "analysis_in_progress",
-      ),
-    );
 
     renderPage();
     await submitValidTreatment();
@@ -337,9 +336,9 @@ describe("NewTreatmentPage", () => {
         "Treatment created",
         expect.objectContaining({
           action: expect.objectContaining({ label: "View" }),
+          description: expect.stringContaining("Analysis pending"),
         }),
       );
     });
-    expect(toast.warning).not.toHaveBeenCalled();
   });
 });

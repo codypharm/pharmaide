@@ -1,6 +1,7 @@
 """POST /treatments/{id}/analyze endpoint."""
 
 import json
+from datetime import date
 from uuid import UUID, uuid4
 
 import pytest
@@ -10,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 import app.api.treatments as treatments_api
 from app.agents.analysis_schemas import AnalysisState
-from app.db.models import AuditLogEntry, TreatmentAnalysis
+from app.db.models import AuditLogEntry, Medication, Patient, Treatment, TreatmentAnalysis
 from app.services import task_runner
 
 
@@ -36,6 +37,39 @@ def _treatment_body(mrn: str) -> dict[str, object]:
     }
 
 
+async def _create_treatment_for_analysis_endpoint(
+    db_session: AsyncSession,
+    mrn: str,
+) -> UUID:
+    patient = Patient(
+        name="Eleanor Vance",
+        dob=date(1955, 10, 12),
+        mrn=mrn,
+        phone="+18005551212",
+    )
+    db_session.add(patient)
+    await db_session.flush()
+    treatment = Treatment(
+        patient_id=patient.id,
+        clinical_objective="Monitor for ACE-inhibitor cough",
+    )
+    db_session.add(treatment)
+    await db_session.flush()
+    db_session.add(
+        Medication(
+            treatment_id=treatment.id,
+            name="Lisinopril",
+            dosage="10 mg",
+            frequency="Once Daily (QD)",
+            duration="30 days",
+            objective=None,
+            ordinal=0,
+        )
+    )
+    await db_session.flush()
+    return treatment.id
+
+
 @pytest.mark.usefixtures("postgres_container")
 async def test_post_treatment_analyze_starts_analysis(
     app_client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
@@ -47,9 +81,7 @@ async def test_post_treatment_analyze_starts_analysis(
 
     monkeypatch.setattr(task_runner, "schedule", capture_schedule)
 
-    create_response = await app_client.post("/treatments", json=_treatment_body("ANALYZE-001"))
-    assert create_response.status_code == 201
-    treatment_id = UUID(create_response.json()["treatment_id"])
+    treatment_id = await _create_treatment_for_analysis_endpoint(db_session, "ANALYZE-001")
 
     response = await app_client.post(f"/treatments/{treatment_id}/analyze")
 
@@ -71,7 +103,7 @@ async def test_post_treatment_analyze_starts_analysis(
 
 @pytest.mark.usefixtures("postgres_container")
 async def test_post_treatment_analyze_passes_uuid_user_header_as_kb_scope(
-    app_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    app_client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     scheduled: list[tuple[object, tuple[object, ...], dict[str, object]]] = []
     scope_id = uuid4()
@@ -81,9 +113,7 @@ async def test_post_treatment_analyze_passes_uuid_user_header_as_kb_scope(
 
     monkeypatch.setattr(task_runner, "schedule", capture_schedule)
 
-    create_response = await app_client.post("/treatments", json=_treatment_body("ANALYZE-006"))
-    assert create_response.status_code == 201
-    treatment_id = UUID(create_response.json()["treatment_id"])
+    treatment_id = await _create_treatment_for_analysis_endpoint(db_session, "ANALYZE-006")
 
     response = await app_client.post(
         f"/treatments/{treatment_id}/analyze",
@@ -97,7 +127,7 @@ async def test_post_treatment_analyze_passes_uuid_user_header_as_kb_scope(
 
 @pytest.mark.usefixtures("postgres_container")
 async def test_post_treatment_analyze_passes_timeout_override(
-    app_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    app_client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     scheduled: list[tuple[object, tuple[object, ...]]] = []
 
@@ -106,9 +136,7 @@ async def test_post_treatment_analyze_passes_timeout_override(
 
     monkeypatch.setattr(task_runner, "schedule", capture_schedule)
 
-    create_response = await app_client.post("/treatments", json=_treatment_body("ANALYZE-004"))
-    assert create_response.status_code == 201
-    treatment_id = UUID(create_response.json()["treatment_id"])
+    treatment_id = await _create_treatment_for_analysis_endpoint(db_session, "ANALYZE-004")
 
     response = await app_client.post(f"/treatments/{treatment_id}/analyze?timeout=12")
 
@@ -119,16 +147,14 @@ async def test_post_treatment_analyze_passes_timeout_override(
 
 @pytest.mark.usefixtures("postgres_container")
 async def test_post_treatment_analyze_returns_429_when_user_is_rate_limited(
-    app_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    app_client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def reject_schedule(*_args: object, **_kwargs: object) -> None:
         raise task_runner.RateLimitExceeded("pharmacist-1")
 
     monkeypatch.setattr(task_runner, "schedule", reject_schedule)
 
-    create_response = await app_client.post("/treatments", json=_treatment_body("ANALYZE-005"))
-    assert create_response.status_code == 201
-    treatment_id = UUID(create_response.json()["treatment_id"])
+    treatment_id = await _create_treatment_for_analysis_endpoint(db_session, "ANALYZE-005")
 
     response = await app_client.post(
         f"/treatments/{treatment_id}/analyze",
@@ -169,9 +195,7 @@ async def test_post_treatment_analyze_background_task_starts_analysis(
 
     monkeypatch.setattr(treatments_api, "analyze_treatment", fake_analyze)
 
-    create_response = await app_client.post("/treatments", json=_treatment_body("ANALYZE-003"))
-    assert create_response.status_code == 201
-    treatment_id = UUID(create_response.json()["treatment_id"])
+    treatment_id = await _create_treatment_for_analysis_endpoint(db_session, "ANALYZE-003")
 
     response = await app_client.post(f"/treatments/{treatment_id}/analyze")
     assert response.status_code == 202, response.text
@@ -212,9 +236,7 @@ async def test_post_treatment_analyze_audits_successful_run_without_phi(
 
     monkeypatch.setattr("app.services.analysis._run_analysis_graph", fake_graph)
 
-    create_response = await app_client.post("/treatments", json=_treatment_body("ANALYZE-007"))
-    assert create_response.status_code == 201
-    treatment_id = UUID(create_response.json()["treatment_id"])
+    treatment_id = await _create_treatment_for_analysis_endpoint(db_session, "ANALYZE-007")
 
     response = await app_client.post(f"/treatments/{treatment_id}/analyze")
     assert response.status_code == 202, response.text
@@ -258,13 +280,11 @@ async def test_post_treatment_analyze_audits_successful_run_without_phi(
 
 @pytest.mark.usefixtures("postgres_container")
 async def test_post_treatment_analyze_rejects_duplicate_active_analysis(
-    app_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    app_client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(task_runner, "schedule", lambda *_args, **_kwargs: None)
 
-    create_response = await app_client.post("/treatments", json=_treatment_body("ANALYZE-002"))
-    assert create_response.status_code == 201
-    treatment_id = UUID(create_response.json()["treatment_id"])
+    treatment_id = await _create_treatment_for_analysis_endpoint(db_session, "ANALYZE-002")
 
     first_response = await app_client.post(f"/treatments/{treatment_id}/analyze")
     assert first_response.status_code == 202
@@ -283,9 +303,7 @@ async def test_post_treatment_analyze_force_supersedes_active_analysis(
 ) -> None:
     monkeypatch.setattr(task_runner, "schedule", lambda *_args, **_kwargs: None)
 
-    create_response = await app_client.post("/treatments", json=_treatment_body("ANALYZE-006"))
-    assert create_response.status_code == 201
-    treatment_id = UUID(create_response.json()["treatment_id"])
+    treatment_id = await _create_treatment_for_analysis_endpoint(db_session, "ANALYZE-006")
 
     first_response = await app_client.post(f"/treatments/{treatment_id}/analyze")
     assert first_response.status_code == 202
