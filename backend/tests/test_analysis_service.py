@@ -5,12 +5,15 @@ analysis row and audit trail, but does not run the graph yet.
 """
 
 import asyncio
+from collections.abc import Sequence
 from datetime import date
 from pathlib import Path
 from typing import Any, cast
+from uuid import UUID
 
 import httpx
 import pytest
+from pydantic import SecretStr
 from pydantic_ai.models.test import TestModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -18,13 +21,26 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.agents import analysis_graph as analysis_graph_module
 from app.agents.analysis_graph import AnalysisGraphFailure
 from app.agents.analysis_schemas import AnalysisState, KBCitation
+from app.agents.kb_reranker import RerankedCitation, RerankResult
+from app.agents.knowledge_sources.dailymed import DailyMedLabel
 from app.agents.nodes.summarize import build_summary_agent
-from app.db.models import AuditLogEntry, Medication, Patient, Treatment, TreatmentAnalysis
+from app.db.models import (
+    EMBEDDING_DIMENSIONS,
+    AuditLogEntry,
+    KnowledgeChunk,
+    KnowledgeDocument,
+    Medication,
+    Patient,
+    Treatment,
+    TreatmentAnalysis,
+)
 from app.services.analysis import (
     AnalysisInProgress,
     analyze_treatment,
     create_pending_analysis,
 )
+from app.services.kb_ingestion import vector_literal
+from app.services.kb_retrieval import Citation
 from app.services.rxnorm import clear_rxnorm_cache
 
 
@@ -265,6 +281,76 @@ async def test_analyze_treatment_runs_graph_and_persists_completed_result(
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_analyze_treatment_configured_retriever_persists_clinic_and_dailymed_citations(
+    db_session: AsyncSession,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clear_rxnorm_cache()
+    kb_scope_id = treatment_scope_id = UUID("11111111-1111-4111-8111-111111111111")
+    treatment = await _create_treatment(db_session)
+    first_medication = await _add_medication(
+        db_session,
+        treatment,
+        name="Lisinopril",
+        frequency="BID",
+        ordinal=0,
+    )
+    await _add_ready_kb_document(
+        db_session,
+        uploaded_by=treatment_scope_id,
+        title="Clinic Lisinopril Protocol",
+        source_uri="local://kb/lisinopril.pdf",
+        content="Clinic-specific lisinopril monitoring protocol.",
+    )
+    analysis_id = await create_pending_analysis(db_session, treatment.id)
+    session_factory = async_sessionmaker(db_session.bind, expire_on_commit=False)
+    summary_agent = build_summary_agent(
+        model=TestModel(
+            custom_output_args={
+                "summary": "Retrieved evidence was available for pharmacist review.",
+                "red_flags": [],
+                "confidence": 0.86,
+            }
+        )
+    )
+
+    monkeypatch.setattr("app.services.analysis.DailyMedClient", _FakeDailyMedClient)
+    monkeypatch.setattr("app.services.analysis.build_embedding_client", _build_fake_client)
+    monkeypatch.setattr("app.services.analysis.embed_texts", _fake_embed_texts)
+    monkeypatch.setattr("app.services.analysis.rerank_citations_with_agent", _fake_reranker)
+
+    await analyze_treatment(
+        session_factory,
+        analysis_id,
+        checkpoint_db_path=str(tmp_path / "analysis.db"),
+        rxnorm_base_url="https://rxnav.test/REST",
+        rxnorm_transport=httpx.MockTransport(_rxnorm_handler),
+        openai_api_key=SecretStr("test-openai-key"),
+        summary_agent=summary_agent,
+        kb_scope_id=kb_scope_id,
+    )
+
+    analysis = await db_session.get(TreatmentAnalysis, analysis_id)
+    assert analysis is not None
+    assert analysis.status == "completed"
+    assert analysis.result is not None
+    citations = analysis.result["kb_citations"]
+    assert len(citations) == 2
+    assert citations[0]["source_type"] == "user_upload"
+    assert citations[0]["document_title"] == "Clinic Lisinopril Protocol"
+    assert citations[0]["source_uri"] == "local://kb/lisinopril.pdf"
+    assert citations[0]["text"] == "Clinic-specific lisinopril monitoring protocol."
+    assert citations[0]["score"] == 0.95
+    assert citations[1]["source_type"] == "dailymed"
+    assert citations[1]["document_title"] == "Lisinopril Tablet"
+    assert citations[1]["source_uri"] == "dailymed://setid-1"
+    assert "Monitor for symptomatic hypotension." in citations[1]["text"]
+    assert citations[1]["score"] == 0.9
+    assert analysis.result["groundings"][0]["medication_id"] == str(first_medication.id)
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_analyze_treatment_persists_partial_result_after_graph_failure(
     db_session: AsyncSession,
     tmp_path: Path,
@@ -376,3 +462,112 @@ def _rxnorm_response(rxcui: str, name: str) -> httpx.Response:
             }
         },
     )
+
+
+def _embedding(axis: int) -> list[float]:
+    vector = [0.0] * EMBEDDING_DIMENSIONS
+    vector[axis] = 1.0
+    return vector
+
+
+async def _add_ready_kb_document(
+    db_session: AsyncSession,
+    *,
+    uploaded_by: UUID,
+    title: str,
+    source_uri: str,
+    content: str,
+) -> KnowledgeDocument:
+    document = KnowledgeDocument(
+        source_type="user_upload",
+        source_uri=source_uri,
+        title=title,
+        mime="application/pdf",
+        status="ready",
+        uploaded_by=uploaded_by,
+    )
+    db_session.add(document)
+    await db_session.flush()
+    db_session.add(
+        KnowledgeChunk(
+            document_id=document.id,
+            ordinal=0,
+            content=content,
+            embedding=vector_literal(_embedding(0)),
+            tokens=5,
+        )
+    )
+    await db_session.flush()
+    return document
+
+
+class _FakeEmbeddingClient:
+    async def close(self) -> None:
+        pass
+
+
+def _build_fake_client(_openai_api_key: SecretStr | None) -> _FakeEmbeddingClient:
+    return _FakeEmbeddingClient()
+
+
+async def _fake_embed_texts(
+    texts: Sequence[str],
+    *,
+    client: _FakeEmbeddingClient,
+) -> list[list[float]]:
+    del client
+    return [_embedding(0 if "lisinopril" in text.lower() else 1) for text in texts]
+
+
+async def _fake_reranker(
+    _query: str,
+    candidates: Sequence[Citation],
+    limit: int,
+    *,
+    agent: object,
+) -> RerankResult:
+    del agent
+    selected = sorted(
+        candidates,
+        key=lambda candidate: 0 if candidate.source_type == "user_upload" else 1,
+    )[:limit]
+    return RerankResult(
+        citations=[
+            RerankedCitation(
+                chunk_id=citation.chunk_id,
+                relevance_score=0.95 if citation.source_type == "user_upload" else 0.9,
+            )
+            for citation in selected
+        ]
+    )
+
+
+class _FakeDailyMedClient:
+    def __init__(self, *_args: object, **_kwargs: object) -> None:
+        pass
+
+    async def find_label(
+        self,
+        *,
+        rxcui: str | None = None,
+        drug_name: str | None = None,
+    ) -> DailyMedLabel | None:
+        if rxcui == "29046" or drug_name == "lisinopril":
+            return DailyMedLabel(setid="setid-1", title="Lisinopril Tablet")
+        return None
+
+    async def fetch_label_xml(self, _setid: str) -> str:
+        return """
+        <document xmlns="urn:hl7-org:v3">
+          <component>
+            <structuredBody>
+              <component>
+                <section>
+                  <title>Warnings and Precautions</title>
+                  <text><paragraph>Monitor for symptomatic hypotension.</paragraph></text>
+                </section>
+              </component>
+            </structuredBody>
+          </component>
+        </document>
+        """
