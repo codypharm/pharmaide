@@ -9,7 +9,6 @@ import {
   AlertCircle,
   Brain,
   MessageSquare,
-  PauseCircle,
   Play,
   Send,
   ShieldCheck,
@@ -17,7 +16,6 @@ import {
 
 import { ApiError, NotFoundError } from "../api/client";
 import {
-  createAdherenceEvent,
   createPatientCheckIn,
   getTreatment,
   listAdherenceEvents,
@@ -465,8 +463,6 @@ function ReasoningTab({ treatment }: { treatment: TreatmentDetail["treatment"] }
   const [isStarting, setIsStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [isConfirmingRerun, setIsConfirmingRerun] = useState(false);
-  const [recordingKey, setRecordingKey] = useState<string | null>(null);
-  const [recordError, setRecordError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -498,39 +494,6 @@ function ReasoningTab({ treatment }: { treatment: TreatmentDetail["treatment"] }
       setStartError("Could not start analysis.");
     } finally {
       setIsStarting(false);
-    }
-  }
-
-  async function handleRecordAdherence(
-    reminder: ReminderSlot,
-    status: AdherenceEventStatus,
-  ): Promise<void> {
-    // The graph emits relative reminder offsets, but adherence events are persisted
-    // against absolute instants so they can be audited and compared later.
-    const scheduledFor = scheduledForIso(treatment.treatment_start_at, reminder.offset_from_start);
-    const key = adherenceKey(reminder.medication_id, scheduledFor);
-    setRecordingKey(key);
-    setRecordError(null);
-    try {
-      const created = await createAdherenceEvent(treatmentId, {
-        medication_id: reminder.medication_id,
-        status,
-        source: "pharmacist",
-        scheduled_for: scheduledFor,
-        occurred_at: new Date().toISOString(),
-        note: null,
-      });
-      setAdherenceState((current) => ({
-        kind: "ok",
-        items: [created, ...current.items],
-      }));
-    } catch (err) {
-      const requestId = err instanceof ApiError ? err.requestId : null;
-      setRecordError(
-        `Could not record adherence action. Reference ID: ${requestId ?? "unknown"}`,
-      );
-    } finally {
-      setRecordingKey(null);
     }
   }
 
@@ -601,10 +564,7 @@ function ReasoningTab({ treatment }: { treatment: TreatmentDetail["treatment"] }
         <AnalysisResultView
           result={displayedAnalysis.result}
           adherenceState={adherenceState}
-          recordError={recordError}
-          recordingKey={recordingKey}
           treatmentStartAt={treatment.treatment_start_at}
-          onRecordAdherence={(reminder, status) => void handleRecordAdherence(reminder, status)}
         />
       ) : (
         <p className="mt-6 text-sm text-slate-500">
@@ -740,17 +700,11 @@ function AnalysisStatusHeader({
 function AnalysisResultView({
   result,
   adherenceState,
-  recordError,
-  recordingKey,
   treatmentStartAt,
-  onRecordAdherence,
 }: {
   result: AnalysisResult;
   adherenceState: AdherenceState;
-  recordError: string | null;
-  recordingKey: string | null;
   treatmentStartAt: string | null;
-  onRecordAdherence: (reminder: ReminderSlot, status: AdherenceEventStatus) => void;
 }) {
   return (
     <div className="mt-6 space-y-6">
@@ -763,10 +717,7 @@ function AnalysisResultView({
         groundings={result.groundings}
         reminders={result.schedule?.reminders ?? []}
         adherenceState={adherenceState}
-        recordError={recordError}
-        recordingKey={recordingKey}
         treatmentStartAt={treatmentStartAt}
-        onRecordAdherence={onRecordAdherence}
       />
     </div>
   );
@@ -948,18 +899,12 @@ function SchedulePreview({
   groundings,
   reminders,
   adherenceState,
-  recordError,
-  recordingKey,
   treatmentStartAt,
-  onRecordAdherence,
 }: {
   groundings: MedicationGrounding[];
   reminders: ReminderSlot[];
   adherenceState: AdherenceState;
-  recordError: string | null;
-  recordingKey: string | null;
   treatmentStartAt: string | null;
-  onRecordAdherence: (reminder: ReminderSlot, status: AdherenceEventStatus) => void;
 }) {
   const medicationNames = new Map(
     groundings.map((grounding) => [grounding.medication_id, grounding.medication_name]),
@@ -976,7 +921,6 @@ function SchedulePreview({
           {adherenceState.kind === "error" && (
             <p className="text-amber-700">Could not load adherence state.</p>
           )}
-          {recordError && <p className="text-red-700">{recordError}</p>}
         </div>
       )}
       {reminders.length > 0 ? (
@@ -985,7 +929,6 @@ function SchedulePreview({
             const scheduledFor = scheduledForIso(treatmentStartAt, reminder.offset_from_start);
             const key = adherenceKey(reminder.medication_id, scheduledFor);
             const event = adherenceByReminder.get(key);
-            const isRecording = recordingKey === key;
 
             return (
               <div
@@ -1012,15 +955,6 @@ function SchedulePreview({
                     Recorded by {sourceLabel(event.source)}
                   </p>
                 )}
-                <div className="mt-3">
-                  <AdherenceActionButton
-                    ariaLabel="Hold dose"
-                    label="Hold dose"
-                    isDisabled={event?.status === "held"}
-                    isBusy={isRecording}
-                    onClick={() => onRecordAdherence(reminder, "held")}
-                  />
-                </div>
               </div>
             );
           })}
@@ -1054,34 +988,6 @@ function AdherenceStatusChip({ event }: { event: AdherenceEventView | undefined 
     >
       {adherenceStatusLabel(event.status)}
     </span>
-  );
-}
-
-function AdherenceActionButton({
-  ariaLabel,
-  label,
-  isDisabled,
-  isBusy,
-  onClick,
-}: {
-  ariaLabel: string;
-  label: string;
-  isDisabled: boolean;
-  isBusy: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={ariaLabel}
-      title={ariaLabel}
-      disabled={isBusy || isDisabled}
-      onClick={onClick}
-      className="inline-flex min-h-9 w-full cursor-pointer items-center justify-center gap-1 rounded-md border border-amber-200 bg-white px-3 text-[11px] font-bold text-amber-900 hover:border-amber-300 hover:bg-amber-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
-    >
-      {isBusy ? <Loader2 size={13} className="animate-spin" /> : <PauseCircle size={13} />}
-      <span>{label}</span>
-    </button>
   );
 }
 
