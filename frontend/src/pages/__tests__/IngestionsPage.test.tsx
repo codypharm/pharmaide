@@ -16,6 +16,7 @@ function row(suffix: string): TreatmentListItem {
       dob: "1955-10-12",
       mrn: `MRN-${suffix}`,
       phone: "+18005551212",
+      allergies: [],
     },
     treatment: {
       id: `t-${suffix}`,

@@ -43,7 +43,14 @@ describe("listTreatments", () => {
       body: {
         items: [
           {
-            patient: { id: "p1", name: "Eleanor", dob: "1955-10-12", mrn: "M1", phone: "+1" },
+            patient: {
+              id: "p1",
+              name: "Eleanor",
+              dob: "1955-10-12",
+              mrn: "M1",
+              phone: "+1",
+              allergies: [],
+            },
             treatment: { id: "t1", patient_id: "p1", status: "pending", clinical_objective: null, created_at: "2026-05-11T12:00:00Z" },
             medication_count: 2,
             first_medication_name: "Lisinopril",

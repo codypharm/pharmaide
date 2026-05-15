@@ -10,6 +10,7 @@ export type PatientCreate = {
   dob: string; // YYYY-MM-DD
   mrn: string;
   phone: string; // E.164 form, e.g. +18005551212
+  allergies: string[];
 };
 
 export type MedicationCreate = {
@@ -47,6 +48,7 @@ export type PatientView = {
   dob: string;
   mrn: string;
   phone: string;
+  allergies: string[];
 };
 
 export type TreatmentView = {

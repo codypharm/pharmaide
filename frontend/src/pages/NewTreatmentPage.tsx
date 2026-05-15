@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent, type DragEvent } from "react";
+import { useState, type ChangeEvent, type DragEvent, type KeyboardEvent } from "react";
 import {
   FileText, Search, ZoomIn, ZoomOut,
   CheckCircle2, AlertCircle, MessageSquare,
@@ -35,7 +35,7 @@ interface Medication {
   duration: string;
 }
 
-type FieldErrors = Partial<Record<"name" | "dob" | "mrn" | "phone", string>>;
+type FieldErrors = Partial<Record<"name" | "dob" | "mrn" | "phone" | "allergies", string>>;
 type ExtractionFieldKey = string;
 type ExtractionErrorState = { message: string; requestId: string | null };
 
@@ -58,6 +58,8 @@ export default function NewTreatmentPage() {
   const [patientDob, setPatientDob] = useState("");
   const [patientMrn, setPatientMrn] = useState("");
   const [patientPhone, setPatientPhone] = useState("");
+  const [patientAllergies, setPatientAllergies] = useState<string[]>([]);
+  const [allergyDraft, setAllergyDraft] = useState("");
   const [clinicalObjective, setClinicalObjective] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -73,6 +75,7 @@ export default function NewTreatmentPage() {
   const [lowConfidenceFields, setLowConfidenceFields] = useState<Set<ExtractionFieldKey>>(
     () => new Set(),
   );
+  const currentPatientAllergies = appendPatientAllergies(patientAllergies, allergyDraft);
 
   const addMedication = () => {
     const newMed: Medication = {
@@ -88,6 +91,25 @@ export default function NewTreatmentPage() {
   const removeMedication = (id: string) => {
     if (medications.length > 1) {
       setMedications(medications.filter(m => m.id !== id));
+    }
+  };
+
+  const addPatientAllergy = () => {
+    const next = appendPatientAllergies(patientAllergies, allergyDraft);
+    if (next.length !== patientAllergies.length) {
+      setPatientAllergies(next);
+    }
+    setAllergyDraft("");
+  };
+
+  const removePatientAllergy = (allergy: string) => {
+    setPatientAllergies((allergies) => allergies.filter((entry) => entry !== allergy));
+  };
+
+  const handleAllergyKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter" || event.key === ",") {
+      event.preventDefault();
+      addPatientAllergy();
     }
   };
 
@@ -190,6 +212,7 @@ export default function NewTreatmentPage() {
           dob: patientDob,
           mrn: patientMrn.trim(),
           phone: patientPhone.trim(),
+          allergies: currentPatientAllergies,
         },
         treatment: {
           clinical_objective: clinicalObjective.trim() || null,
@@ -219,6 +242,8 @@ export default function NewTreatmentPage() {
       setPatientDob("");
       setPatientMrn("");
       setPatientPhone("");
+      setPatientAllergies([]);
+      setAllergyDraft("");
       setClinicalObjective("");
       setMedications([
         { id: crypto.randomUUID(), name: "", dosage: "", frequency: "", duration: "" },
@@ -235,7 +260,13 @@ export default function NewTreatmentPage() {
         for (const e of err.fieldErrors) {
           // loc is ["body", "patient", <field>] or ["body", <field>] etc.
           const field = e.loc[e.loc.length - 1];
-          if (field === "name" || field === "dob" || field === "mrn" || field === "phone") {
+          if (
+            field === "name" ||
+            field === "dob" ||
+            field === "mrn" ||
+            field === "phone" ||
+            field === "allergies"
+          ) {
             next[field] = e.msg;
           }
         }
@@ -407,6 +438,54 @@ export default function NewTreatmentPage() {
                   className={`px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none ${fieldErrors.phone ? "border-red-400" : extractionFieldClass(extractedFields, lowConfidenceFields, "patient.phone", "border-slate-200")}`}
                 />
                 {fieldErrors.phone && <span className="text-[11px] text-red-600">{fieldErrors.phone}</span>}
+              </div>
+              <div className="flex flex-col gap-1.5 col-span-2">
+                <label htmlFor="allergy-name" className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Allergy Name</label>
+                <div className="flex gap-2">
+                  <input
+                    id="allergy-name"
+                    value={allergyDraft}
+                    onChange={(e) => setAllergyDraft(e.target.value)}
+                    onKeyDown={handleAllergyKeyDown}
+                    placeholder="e.g. Penicillin"
+                    className={`min-w-0 flex-1 px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none ${fieldErrors.allergies ? "border-red-400" : "border-slate-200"}`}
+                  />
+                  <button
+                    type="button"
+                    onClick={addPatientAllergy}
+                    disabled={!allergyDraft.trim()}
+                    className="px-4 py-2 bg-slate-900 text-white rounded-xl text-[11px] font-bold uppercase tracking-widest hover:bg-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    Add Allergy
+                  </button>
+                </div>
+                {patientAllergies.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {patientAllergies.map((allergy) => (
+                      <span
+                        key={allergy}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-bold text-red-700"
+                      >
+                        {allergy}
+                        <button
+                          type="button"
+                          onClick={() => removePatientAllergy(allergy)}
+                          className="text-red-500 hover:text-red-800 cursor-pointer"
+                          aria-label={`Remove ${allergy}`}
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {fieldErrors.allergies ? (
+                  <span className="text-[11px] text-red-600">{fieldErrors.allergies}</span>
+                ) : (
+                  <span className="text-[11px] text-slate-500">
+                    Add one substance at a time. Keep reaction notes out of this field.
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -783,7 +862,7 @@ export default function NewTreatmentPage() {
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-start gap-3">
                   <AlertCircle size={16} className="text-slate-400 mt-0.5 shrink-0" />
                   <p className="text-xs text-slate-500 leading-relaxed font-medium italic">
-                    RxNorm grounding and allergy / interaction checks will run when the agent activates this treatment (Sprint 3).
+                    RxNorm grounding and interaction checks will run when the agent activates this treatment.
                   </p>
                 </div>
               </div>
@@ -840,7 +919,13 @@ export default function NewTreatmentPage() {
 
       {showConfirm && (
         <ConfirmTreatmentModal
-          patient={{ name: patientName, dob: patientDob, mrn: patientMrn, phone: patientPhone }}
+          patient={{
+            name: patientName,
+            dob: patientDob,
+            mrn: patientMrn,
+            phone: patientPhone,
+            allergies: currentPatientAllergies,
+          }}
           objective={clinicalObjective}
           medications={medications.filter(m => m.name.trim())}
           onCancel={() => setShowConfirm(false)}
@@ -1020,8 +1105,29 @@ function formatFileSize(bytes: number): string {
   return `${(kilobytes / 1024).toFixed(1)} MB`;
 }
 
+function appendPatientAllergies(existing: string[], draft: string): string[] {
+  const seen = new Set(existing.map((allergy) => allergy.toLocaleLowerCase()));
+  const additions = parsePatientAllergyDraft(draft).filter((allergy) => {
+    const key = allergy.toLocaleLowerCase();
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+  return [...existing, ...additions];
+}
+
+function parsePatientAllergyDraft(value: string): string[] {
+  // Match the backend contract: submit structured entries, never blank strings.
+  return value
+    .split(/[,\n]/)
+    .map((allergy) => allergy.trim())
+    .filter(Boolean);
+}
+
 interface ConfirmTreatmentModalProps {
-  patient: { name: string; dob: string; mrn: string; phone: string };
+  patient: { name: string; dob: string; mrn: string; phone: string; allergies: string[] };
   objective: string;
   medications: Medication[];
   onCancel: () => void;
@@ -1068,6 +1174,25 @@ function ConfirmTreatmentModal({
               <div><span className="text-slate-500">DOB:</span> <span className="font-mono text-slate-900">{patient.dob || "—"}</span></div>
               <div><span className="text-slate-500">MRN:</span> <span className="font-mono text-slate-900">{patient.mrn || "—"}</span></div>
               <div><span className="text-slate-500">Phone:</span> <span className="font-mono text-slate-900">{patient.phone || "—"}</span></div>
+            </div>
+            <div className="mt-3 bg-slate-50 border border-slate-100 rounded-xl p-4">
+              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">
+                Known Allergies
+              </div>
+              {patient.allergies.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {patient.allergies.map((allergy) => (
+                    <span
+                      key={allergy}
+                      className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-bold text-red-700"
+                    >
+                      {allergy}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs font-semibold text-slate-500">No allergies recorded.</p>
+              )}
             </div>
           </section>
 

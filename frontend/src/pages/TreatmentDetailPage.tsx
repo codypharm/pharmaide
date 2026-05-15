@@ -739,6 +739,25 @@ function PatientCard({
         <Field label="Date of Birth" value={p.dob} valueClassName={phi} />
         <Field label="Phone" value={p.phone} valueClassName={phi} />
       </div>
+      <div className="mt-6">
+        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
+          Known Allergies
+        </div>
+        {p.allergies.length > 0 ? (
+          <div className={`flex flex-wrap gap-2 ${phi}`}>
+            {p.allergies.map((allergy) => (
+              <span
+                key={allergy}
+                className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-bold text-red-700"
+              >
+                {allergy}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm font-semibold text-slate-500">No allergies recorded.</p>
+        )}
+      </div>
     </Section>
   );
 }

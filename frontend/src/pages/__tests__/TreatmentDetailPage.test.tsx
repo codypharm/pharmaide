@@ -15,6 +15,7 @@ const SAMPLE: TreatmentDetail = {
     dob: "1955-10-12",
     mrn: "PHA-AB12CD34",
     phone: "+18005551212",
+    allergies: ["Penicillin", "Sulfa"],
   },
   treatment: {
     id: "22222222-2222-2222-2222-222222222222",
@@ -163,6 +164,8 @@ describe("TreatmentDetailPage", () => {
     await waitFor(() => expect(screen.getByText("Eleanor Vance")).toBeTruthy());
     expect(screen.getByText("PHA-AB12CD34")).toBeTruthy();
     expect(screen.getByText("+18005551212")).toBeTruthy();
+    expect(screen.getByText("Penicillin")).toBeTruthy();
+    expect(screen.getByText("Sulfa")).toBeTruthy();
     expect(screen.getByText("Monitor for cough")).toBeTruthy();
     expect(screen.getByText("Lisinopril")).toBeTruthy();
     expect(screen.getByText("10 mg")).toBeTruthy();

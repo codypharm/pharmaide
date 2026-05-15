@@ -29,13 +29,19 @@ function renderPage() {
   );
 }
 
-async function submitValidTreatment() {
+async function submitValidTreatment({ allergies = "" }: { allergies?: string } = {}) {
   const user = userEvent.setup();
 
   await user.type(screen.getByLabelText(/full name/i), "Eleanor Vance");
   await user.type(screen.getByLabelText(/date of birth/i), "1955-10-12");
   await user.type(screen.getByLabelText(/mrn number/i), "PHA-AB12CD34");
   await user.type(screen.getByLabelText(/phone number/i), "+18005551212");
+  if (allergies) {
+    for (const allergy of allergies.split(/[,\n]/).map((entry) => entry.trim()).filter(Boolean)) {
+      await user.type(screen.getByLabelText(/allergy name/i), allergy);
+      await user.click(screen.getByRole("button", { name: /add allergy/i }));
+    }
+  }
   await user.type(screen.getByPlaceholderText(/e.g. amoxicillin/i), "Lisinopril");
   await user.type(screen.getByPlaceholderText(/e.g. 500mg/i), "10 mg");
   await user.type(screen.getByPlaceholderText(/twice daily/i), "Once Daily (QD)");
@@ -319,6 +325,41 @@ describe("NewTreatmentPage", () => {
       );
     });
     expect(trigger).not.toHaveBeenCalled();
+  });
+
+  it("adds and removes known allergy chips", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(screen.getByLabelText(/allergy name/i), "Penicillin");
+    await user.click(screen.getByRole("button", { name: /add allergy/i }));
+
+    expect(screen.getByText("Penicillin")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /remove penicillin/i }));
+
+    expect(screen.queryByText("Penicillin")).not.toBeInTheDocument();
+  });
+
+  it("submits known allergy chips with the treatment payload", async () => {
+    const create = vi.spyOn(treatmentsApi, "createTreatment").mockResolvedValue({
+      treatment_id: "treatment-1",
+      patient_id: "patient-1",
+      analysis_id: "analysis-1",
+    });
+
+    renderPage();
+    await submitValidTreatment({ allergies: " Penicillin\nSulfa, latex " });
+
+    await waitFor(() => {
+      expect(create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          patient: expect.objectContaining({
+            allergies: ["Penicillin", "Sulfa", "latex"],
+          }),
+        }),
+      );
+    });
   });
 
   it("handles missing analysis id as pending backend startup", async () => {
