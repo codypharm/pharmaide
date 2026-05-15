@@ -112,6 +112,7 @@ describe("PatientManagementPage", () => {
 
     await screen.findByText("Eleanor Vance");
     expect(screen.getByText(/PHA-AB12/)).toBeTruthy();
+    expect(screen.getByText(/First listed medication: Lisinopril/)).toBeTruthy();
     expect(screen.getAllByText("Lisinopril").length).toBeGreaterThan(0);
     expect(await screen.findByText("I feel dizzy today.")).toBeTruthy();
   });
