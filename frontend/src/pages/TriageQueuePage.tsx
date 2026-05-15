@@ -532,6 +532,7 @@ function ConversationPanel({
           Review the patient message and held assistant draft before changing queue status.
         </p>
       </div>
+      <FlagSummary item={item} heldDraft={heldDraft} />
       <ReviewFocusPanel item={item} messages={state.items} />
       <div className="grid gap-3">
         {state.items.map((message) => (
@@ -551,6 +552,49 @@ function ConversationPanel({
           onMoveItem={onMoveItem}
         />
       </div>
+    </div>
+  );
+}
+
+function FlagSummary({
+  item,
+  heldDraft,
+}: {
+  item: TriageItemView;
+  heldDraft: ConversationMessageView | undefined;
+}) {
+  const draftStatus = heldDraft?.status === "approved" ? "Approved" : "Held for review";
+  const actionNeeded =
+    heldDraft?.status === "approved" ? "Ready for delivery workflow" : "Approve draft or resolve manually";
+  const holdReason = heldDraft?.safety_hold_reason
+    ? REASON_LABELS[heldDraft.safety_hold_reason as TriageReason] ?? heldDraft.safety_hold_reason
+    : "Not recorded";
+
+  return (
+    <section className="rounded-xl border border-amber-200 bg-amber-50/70 p-4">
+      <p className="text-[11px] font-bold uppercase tracking-wider text-amber-700">
+        Flag Summary
+      </p>
+      <div className="mt-3 grid gap-3 md:grid-cols-4">
+        <FlagSummaryFact label="Source" value="Patient conversation" />
+        <FlagSummaryFact label="Reason" value={REASON_LABELS[item.reason]} />
+        <FlagSummaryFact label="Draft status" value={draftStatus} />
+        <FlagSummaryFact label="Action needed" value={actionNeeded} />
+      </div>
+      <p className="mt-3 text-xs font-semibold text-amber-800">
+        Hold reason: {holdReason}
+      </p>
+    </section>
+  );
+}
+
+function FlagSummaryFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700">
+        {label}
+      </p>
+      <p className="mt-1 text-sm font-bold text-slate-900">{value}</p>
     </div>
   );
 }

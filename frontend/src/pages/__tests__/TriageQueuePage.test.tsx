@@ -95,7 +95,7 @@ describe("TriageQueuePage", () => {
     await user.click(screen.getByRole("button", { name: /approve draft item/i }));
     await waitFor(() => expect(approveSpy).toHaveBeenCalledWith("triage-1"));
     expect(screen.getAllByText("Resolved").length).toBeGreaterThan(0);
-    expect(screen.getByText("Approved")).toBeTruthy();
+    expect(screen.getAllByText("Approved").length).toBeGreaterThan(0);
   });
 
   it("shows a calm empty state when no patients need review", async () => {
@@ -128,6 +128,10 @@ describe("TriageQueuePage", () => {
       }),
     );
     expect(screen.getByText("Pharmacist review")).toBeTruthy();
+    expect(screen.getByText("Flag Summary")).toBeTruthy();
+    expect(screen.getByText("Patient conversation")).toBeTruthy();
+    expect(screen.getByText("Held for review")).toBeTruthy();
+    expect(screen.getByText("Approve draft or resolve manually")).toBeTruthy();
     expect(screen.getByText("Patient message")).toBeTruthy();
     expect(screen.getByText("Held assistant draft")).toBeTruthy();
     expect(screen.getAllByText("I feel dizzy after the second dose.").length).toBeGreaterThan(0);
