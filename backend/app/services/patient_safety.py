@@ -15,7 +15,11 @@ from app.agents.safety_provider_factory import (
     build_configured_safety_providers,
 )
 from app.agents.safety_sandwich import can_send_to_patient, run_safety_sandwich
-from app.agents.safety_schemas import PatientDraftSafetyDecision
+from app.agents.safety_schemas import (
+    PatientDraftHoldReason,
+    PatientDraftSafetyDecision,
+    SafetyReview,
+)
 from app.services.safety_audit import audit_safety_review
 
 
@@ -45,9 +49,19 @@ async def review_patient_draft_safety(
             status="send",
             review=review,
             message_to_send=assistant_draft,
+            hold_reason=None,
         )
     return PatientDraftSafetyDecision(
         status="hold_for_pharmacist",
         review=review,
         message_to_send=None,
+        hold_reason=_hold_reason(review),
     )
+
+
+def _hold_reason(review: SafetyReview) -> PatientDraftHoldReason:
+    if review.input_guard.action != "allow":
+        return "input_guard"
+    if review.referee.action != "allow":
+        return "referee"
+    return "output_guard"

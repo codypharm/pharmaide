@@ -65,6 +65,7 @@ async def test_review_patient_draft_safety_returns_review_and_audits(
 
     assert decision.status == "send"
     assert decision.message_to_send == "Please follow the timing your pharmacist approved."
+    assert decision.hold_reason is None
     assert decision.review.input_guard.action == "allow"
     assert decision.review.referee.action == "allow"
     assert decision.review.output_guard.action == "allow"
@@ -96,6 +97,7 @@ async def test_review_patient_draft_safety_fails_closed_without_configured_key(
 
     assert decision.status == "hold_for_pharmacist"
     assert decision.message_to_send is None
+    assert decision.hold_reason == "input_guard"
     assert decision.review.input_guard.action == "block"
     assert decision.review.referee.action == "block"
     assert decision.review.output_guard.action == "block"
@@ -103,11 +105,44 @@ async def test_review_patient_draft_safety_fails_closed_without_configured_key(
     assert audit.payload["requires_pharmacist_review"] is True
 
 
-def _guard_payload(stage: str, action: str) -> dict[str, object]:
+async def test_review_patient_draft_safety_reports_output_guard_hold_reason(
+    db_session: AsyncSession,
+) -> None:
+    guard_provider = SequencedGuardProvider(
+        [
+            _guard_payload("input", "allow"),
+            _guard_payload("output", "block", categories=["unsafe_medical_advice"]),
+        ]
+    )
+    referee_provider = FakeRefereeProvider(_referee_payload("allow"))
+
+    decision = await review_patient_draft_safety(
+        db_session,
+        treatment_id=uuid4(),
+        patient_message="Can I take it later?",
+        assistant_draft="Unsafe draft.",
+        prescription_context="Lisinopril 10 mg once daily.",
+        providers=ConfiguredSafetyProviders(
+            guard_provider=guard_provider,
+            referee_provider=referee_provider,
+        ),
+    )
+
+    assert decision.status == "hold_for_pharmacist"
+    assert decision.message_to_send is None
+    assert decision.hold_reason == "output_guard"
+
+
+def _guard_payload(
+    stage: str,
+    action: str,
+    *,
+    categories: list[str] | None = None,
+) -> dict[str, object]:
     return {
         "stage": stage,
         "action": action,
-        "categories": [],
+        "categories": categories or [],
         "rationale": f"{stage} guard {action}.",
         "confidence": 0.9,
     }
