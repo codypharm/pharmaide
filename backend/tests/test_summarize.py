@@ -319,6 +319,72 @@ async def test_summarize_treatment_prompt_includes_clinical_safety_review() -> N
     assert "AI review suggests monitoring overlap." in seen["prompt"]
 
 
+async def test_summarize_treatment_preserves_safety_review_concerns_as_red_flags() -> None:
+    state = _state()
+    state["clinical_safety_review"] = ClinicalSafetyReview(
+        possible_interactions=["Review possible bleeding-risk overlap."],
+        monitoring_concerns=["Monitor for bruising."],
+        counseling_points=["Report unusual bleeding."],
+        missing_information=["Recent INR unavailable."],
+        confidence=0.42,
+        requires_pharmacist_review=True,
+    )
+    agent = build_summary_agent(
+        model=TestModel(
+            custom_output_args={
+                "summary": "The treatment was reviewed.",
+                "red_flags": [],
+                "confidence": 0.9,
+            }
+        )
+    )
+
+    summarized = await summarize_treatment(state, agent=agent)
+
+    assert summarized["reasoning"] == ClinicalReasoning(
+        summary="The treatment was reviewed.",
+        red_flags=[
+            "Clinical safety review found possible interaction concerns.",
+            "Clinical safety review found monitoring concerns.",
+            "Clinical safety review found missing information for pharmacist review.",
+        ],
+        confidence=0.42,
+    )
+
+
+async def test_summarize_treatment_guards_llm_schedule_reasoning_with_safety_review() -> None:
+    state = _state()
+    state["needs_llm_parse"] = True
+    state["clinical_safety_review"] = ClinicalSafetyReview(
+        possible_interactions=[],
+        monitoring_concerns=["Monitor for dizziness."],
+        counseling_points=[],
+        missing_information=[],
+        confidence=0.61,
+        requires_pharmacist_review=True,
+    )
+    agent = build_summary_with_schedule_agent(
+        model=TestModel(
+            custom_output_args={
+                "reasoning": {
+                    "summary": "Schedule proposal generated.",
+                    "red_flags": [],
+                    "confidence": 0.88,
+                },
+                "schedule": None,
+            }
+        )
+    )
+
+    summarized = await summarize_treatment(state, schedule_agent=agent)
+
+    assert summarized["reasoning"] == ClinicalReasoning(
+        summary="Schedule proposal generated.",
+        red_flags=["Clinical safety review found monitoring concerns."],
+        confidence=0.61,
+    )
+
+
 async def test_summarize_treatment_prompt_includes_patient_reported_updates() -> None:
     seen: dict[str, str] = {}
 

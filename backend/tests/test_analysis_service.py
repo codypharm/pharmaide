@@ -279,8 +279,12 @@ async def test_analyze_treatment_runs_graph_and_persists_completed_result(
     assert analysis.result is not None
     assert analysis.result["reasoning"] == {
         "summary": "Graph result ready for pharmacist review.",
-        "red_flags": ["DDI provider is not configured."],
-        "confidence": 0.81,
+        "red_flags": [
+            "DDI provider is not configured.",
+            "Clinical safety review found monitoring concerns.",
+            "Clinical safety review found missing information for pharmacist review.",
+        ],
+        "confidence": 0.64,
     }
     assert analysis.result["degraded"] is True
     assert analysis.result["ddi_warnings"] == []

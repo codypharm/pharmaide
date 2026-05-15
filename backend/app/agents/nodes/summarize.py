@@ -8,11 +8,18 @@ from app.agents.analysis_schemas import (
     AnalysisState,
     ClinicalReasoning,
     ClinicalReasoningWithSchedule,
+    ClinicalSafetyReview,
     ReminderSlot,
     Schedule,
 )
 
 log = structlog.get_logger(__name__)
+
+SAFETY_REVIEW_INTERACTION_FLAG = "Clinical safety review found possible interaction concerns."
+SAFETY_REVIEW_MONITORING_FLAG = "Clinical safety review found monitoring concerns."
+SAFETY_REVIEW_MISSING_INFO_FLAG = (
+    "Clinical safety review found missing information for pharmacist review."
+)
 
 SUMMARY_INSTRUCTIONS = """
 You are PharmaAide's pharmacist-review summary agent.
@@ -71,7 +78,7 @@ async def summarize_treatment(
 
     summary_agent = agent or build_summary_agent()
     result = await summary_agent.run(_summary_prompt(state))
-    reasoning = result.output
+    reasoning = _apply_clinical_safety_guard(state, result.output)
 
     next_state = state.copy()
     next_state["reasoning"] = reasoning
@@ -89,10 +96,11 @@ async def _summarize_with_schedule(
     output = result.output
 
     next_state = state.copy()
-    next_state["reasoning"] = output.reasoning
+    reasoning = _apply_clinical_safety_guard(state, output.reasoning)
+    next_state["reasoning"] = reasoning
     if output.schedule is not None:
         next_state["schedule"] = _merge_schedules(state.get("schedule"), output.schedule)
-    _log_reasoning_summary(next_state, output.reasoning)
+    _log_reasoning_summary(next_state, reasoning)
     return next_state
 
 
@@ -106,6 +114,47 @@ def _sort_reminders(reminders: list[ReminderSlot]) -> list[ReminderSlot]:
         reminders,
         key=lambda reminder: (reminder.offset_from_start, str(reminder.medication_id)),
     )
+
+
+def _apply_clinical_safety_guard(
+    state: AnalysisState,
+    reasoning: ClinicalReasoning,
+) -> ClinicalReasoning:
+    """Ensure pharmacist-facing summaries cannot drop safety-review concerns."""
+    review = state.get("clinical_safety_review")
+    if review is None:
+        return reasoning
+
+    safety_flags = _safety_review_red_flags(review)
+    if not safety_flags:
+        return reasoning
+
+    # The summary model sees the safety review in its prompt, but this guard is
+    # the durable boundary that keeps clinically important concerns visible.
+    return ClinicalReasoning(
+        summary=reasoning.summary,
+        red_flags=_append_unique(reasoning.red_flags, safety_flags),
+        confidence=min(reasoning.confidence, review.confidence),
+    )
+
+
+def _safety_review_red_flags(review: ClinicalSafetyReview) -> list[str]:
+    flags: list[str] = []
+    if review.possible_interactions:
+        flags.append(SAFETY_REVIEW_INTERACTION_FLAG)
+    if review.monitoring_concerns:
+        flags.append(SAFETY_REVIEW_MONITORING_FLAG)
+    if review.missing_information:
+        flags.append(SAFETY_REVIEW_MISSING_INFO_FLAG)
+    return flags
+
+
+def _append_unique(existing: list[str], additions: list[str]) -> list[str]:
+    result = list(existing)
+    for addition in additions:
+        if addition not in result:
+            result.append(addition)
+    return result
 
 
 def _summary_prompt(state: AnalysisState) -> str:
@@ -227,6 +276,7 @@ def _clinical_safety_review_section(state: AnalysisState) -> str:
 
 def _log_reasoning_summary(state: AnalysisState, reasoning: ClinicalReasoning) -> None:
     schedule = state.get("schedule")
+    safety_review = state.get("clinical_safety_review")
     # Resolve after test/runtime logging configuration so cached structlog
     # proxies do not pin an older renderer.
     current_log = structlog.get_logger(__name__)
@@ -239,6 +289,17 @@ def _log_reasoning_summary(state: AnalysisState, reasoning: ClinicalReasoning) -
         reminder_count=len(schedule.reminders) if schedule is not None else 0,
         red_flag_count=len(reasoning.red_flags),
         confidence=reasoning.confidence,
+        safety_review_concern_count=_safety_review_concern_count(safety_review),
         degraded=state.get("degraded", False),
         needs_llm_parse=state.get("needs_llm_parse", False),
+    )
+
+
+def _safety_review_concern_count(review: ClinicalSafetyReview | None) -> int:
+    if review is None:
+        return 0
+    return (
+        len(review.possible_interactions)
+        + len(review.monitoring_concerns)
+        + len(review.missing_information)
     )
