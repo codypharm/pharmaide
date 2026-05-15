@@ -116,6 +116,7 @@ def _summary_prompt(state: AnalysisState) -> str:
             f"degraded: {state.get('degraded', False)}",
             f"needs_llm_parse: {state.get('needs_llm_parse', False)}",
             f"medications:\n{_medications_section(state)}",
+            f"patient_check_ins:\n{_patient_check_ins_section(state)}",
             f"groundings:\n{_groundings_section(state)}",
             f"ddi_warnings:\n{_ddi_section(state)}",
             f"schedule:\n{_schedule_section(state)}",
@@ -136,6 +137,20 @@ def _medications_section(state: AnalysisState) -> str:
             f"objective={medication.get('objective') or 'unavailable'}"
         )
         for medication in medications
+    )
+
+
+def _patient_check_ins_section(state: AnalysisState) -> str:
+    check_ins = state.get("patient_check_ins", [])
+    if not check_ins:
+        return "- none"
+    return "\n".join(
+        (
+            f"- id={check_in.id} report_type={check_in.report_type} source={check_in.source} "
+            f"observed_at={check_in.observed_at or 'unavailable'} "
+            f"created_at={check_in.created_at}\n  message={check_in.message}"
+        )
+        for check_in in check_ins
     )
 
 
@@ -212,9 +227,13 @@ def _clinical_safety_review_section(state: AnalysisState) -> str:
 
 def _log_reasoning_summary(state: AnalysisState, reasoning: ClinicalReasoning) -> None:
     schedule = state.get("schedule")
-    log.info(
+    # Resolve after test/runtime logging configuration so cached structlog
+    # proxies do not pin an older renderer.
+    current_log = structlog.get_logger(__name__)
+    current_log.info(
         "clinical_reasoning_generated",
         medication_count=len(state.get("medications", [])),
+        patient_check_in_count=len(state.get("patient_check_ins", [])),
         grounding_count=len(state.get("groundings", [])),
         ddi_warning_count=len(state.get("ddi_warnings", [])),
         reminder_count=len(schedule.reminders) if schedule is not None else 0,

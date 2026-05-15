@@ -12,6 +12,7 @@ from typing import cast
 from uuid import UUID
 
 import httpx
+import structlog
 from pydantic import SecretStr
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIResponsesModel
@@ -29,6 +30,7 @@ from app.agents.analysis_schemas import (
     ClinicalReasoningWithSchedule,
     ClinicalSafetyReview,
     KBCitation,
+    PatientCheckInState,
 )
 from app.agents.kb_reranker import build_reranker_agent, rerank_citations_with_agent
 from app.agents.knowledge_sources.dailymed import DailyMedClient
@@ -36,7 +38,7 @@ from app.agents.nodes.clinical_safety_review import build_clinical_safety_agent
 from app.agents.nodes.retrieve_kb import KnowledgeRetriever
 from app.agents.nodes.summarize import build_summary_agent, build_summary_with_schedule_agent
 from app.config import get_settings
-from app.db.models import AuditLogEntry, Treatment, TreatmentAnalysis
+from app.db.models import AuditLogEntry, PatientCheckIn, Treatment, TreatmentAnalysis
 from app.errors import run_graph
 from app.services.dailymed_cache import ensure_dailymed_cached_for_groundings
 from app.services.embeddings import build_embedding_client, embed_texts
@@ -47,6 +49,9 @@ ConfiguredSummaryAgents = tuple[
     Agent[None, ClinicalReasoningWithSchedule] | None,
     Agent[None, ClinicalSafetyReview] | None,
 ]
+RECENT_CHECK_INS_LIMIT = 10
+
+log = structlog.get_logger(__name__)
 
 
 class AnalysisInProgress(Exception):
@@ -126,7 +131,8 @@ async def analyze_treatment(
             return
 
         thread_id = _ensure_thread_id(treatment)
-        state = _state_from_treatment(treatment)
+        check_ins = await _recent_check_ins_for_analysis(session, treatment.id)
+        state = _state_from_treatment(treatment, patient_check_ins=check_ins)
         analysis.status = "running"
         analysis.started_at = func.clock_timestamp()
         await session.flush()
@@ -139,10 +145,18 @@ async def analyze_treatment(
             payload={
                 "treatment_id": str(analysis.treatment_id),
                 "analysis_id": str(analysis.id),
+                "patient_check_in_count": len(check_ins),
             },
         )
         session.add(audit)
         await session.flush()
+        log.info(
+            "analysis_context_loaded",
+            treatment_id=str(treatment.id),
+            analysis_id=str(analysis.id),
+            medication_count=len(treatment.medications),
+            patient_check_in_count=len(check_ins),
+        )
 
     try:
         final_state = await asyncio.wait_for(
@@ -201,8 +215,29 @@ def _ensure_thread_id(treatment: Treatment) -> str:
     return treatment.langgraph_thread_id
 
 
-def _state_from_treatment(treatment: Treatment) -> AnalysisState:
-    """Build the minimum medication state the graph needs, without patient PHI."""
+async def _recent_check_ins_for_analysis(
+    session: AsyncSession,
+    treatment_id: UUID,
+) -> list[PatientCheckIn]:
+    result = await session.execute(
+        select(PatientCheckIn)
+        .where(PatientCheckIn.treatment_id == treatment_id)
+        .order_by(PatientCheckIn.created_at.desc())
+        .limit(RECENT_CHECK_INS_LIMIT)
+    )
+    return list(result.scalars())
+
+
+def _state_from_treatment(
+    treatment: Treatment,
+    *,
+    patient_check_ins: Sequence[PatientCheckIn],
+) -> AnalysisState:
+    """Build graph input without demographic identifiers.
+
+    Patient check-in messages can contain clinical detail, so keep them in
+    transient graph state rather than duplicating them into audit payloads.
+    """
     return {
         "treatment_id": treatment.id,
         "medications": [
@@ -215,6 +250,10 @@ def _state_from_treatment(treatment: Treatment) -> AnalysisState:
                 "objective": medication.objective or treatment.clinical_objective,
             }
             for medication in treatment.medications
+        ],
+        "patient_check_ins": [
+            PatientCheckInState.model_validate(check_in, from_attributes=True)
+            for check_in in patient_check_ins
         ],
         "degraded": False,
     }

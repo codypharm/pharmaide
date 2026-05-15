@@ -1,5 +1,6 @@
 """Clinical safety review node behavior."""
 
+from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
@@ -14,6 +15,7 @@ from app.agents.analysis_schemas import (
     ClinicalSafetyReview,
     KBCitation,
     MedicationGrounding,
+    PatientCheckInState,
 )
 from app.agents.nodes.clinical_safety_review import (
     build_clinical_safety_agent,
@@ -146,6 +148,53 @@ async def test_review_clinical_safety_prompt_forbids_database_claims() -> None:
     assert "not a licensed ddi database result" in seen["prompt"].lower()
     assert "Lisinopril" in seen["prompt"]
     assert "Monitor for symptomatic hypotension." in seen["prompt"]
+
+
+async def test_review_clinical_safety_prompt_includes_patient_reported_updates() -> None:
+    seen: dict[str, str] = {}
+
+    def model_function(_messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        seen["prompt"] = _user_prompt(_messages)
+        output_tool = info.output_tools[0]
+        return ModelResponse(
+            parts=[
+                ToolCallPart(
+                    output_tool.name,
+                    {
+                        "source_type": "model_review",
+                        "possible_interactions": [],
+                        "monitoring_concerns": ["Review worsening symptoms."],
+                        "counseling_points": [],
+                        "missing_information": [],
+                        "confidence": 0.68,
+                        "requires_pharmacist_review": True,
+                    },
+                )
+            ],
+            model_name="safety-review-check-ins-test",
+        )
+
+    state = _state()
+    state["patient_check_ins"] = [
+        PatientCheckInState(
+            id=UUID("66666666-6666-6666-6666-666666666666"),
+            report_type="side_effect",
+            source="pharmacist",
+            message="Patient reported dizziness after the morning dose.",
+            observed_at=datetime(2026, 5, 18, 9, 15, tzinfo=UTC),
+            created_at=datetime(2026, 5, 18, 10, 0, tzinfo=UTC),
+        )
+    ]
+    agent: Agent[None, ClinicalSafetyReview] = build_clinical_safety_agent(
+        model=FunctionModel(model_function)
+    )
+
+    await review_clinical_safety(state, agent=agent)
+
+    assert "patient_check_ins:" in seen["prompt"]
+    assert "report_type=side_effect" in seen["prompt"]
+    assert "source=pharmacist" in seen["prompt"]
+    assert "Patient reported dizziness after the morning dose." in seen["prompt"]
 
 
 async def test_review_clinical_safety_skips_when_agent_not_configured() -> None:

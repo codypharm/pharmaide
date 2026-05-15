@@ -1,7 +1,7 @@
 """Analysis graph clinical summary node behavior."""
 
 import json
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
@@ -24,6 +24,7 @@ from app.agents.analysis_schemas import (
     ClinicalSafetyReview,
     KBCitation,
     MedicationGrounding,
+    PatientCheckInState,
     ReminderSlot,
     Schedule,
 )
@@ -316,6 +317,47 @@ async def test_summarize_treatment_prompt_includes_clinical_safety_review() -> N
     assert "source_type=model_review" in seen["prompt"]
     assert "requires_pharmacist_review=True" in seen["prompt"]
     assert "AI review suggests monitoring overlap." in seen["prompt"]
+
+
+async def test_summarize_treatment_prompt_includes_patient_reported_updates() -> None:
+    seen: dict[str, str] = {}
+
+    def model_function(_messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        seen["prompt"] = _user_prompt(_messages)
+        output_tool = info.output_tools[0]
+        return ModelResponse(
+            parts=[
+                ToolCallPart(
+                    output_tool.name,
+                    {
+                        "summary": "Patient update was considered.",
+                        "red_flags": ["Patient reports no improvement."],
+                        "confidence": 0.79,
+                    },
+                )
+            ],
+            model_name="summary-check-ins-test",
+        )
+
+    state = _state()
+    state["patient_check_ins"] = [
+        PatientCheckInState(
+            id=UUID("66666666-6666-6666-6666-666666666666"),
+            report_type="not_improving",
+            source="patient",
+            message="Patient says symptoms are not improving after three days.",
+            observed_at=datetime(2026, 5, 18, 9, 15, tzinfo=UTC),
+            created_at=datetime(2026, 5, 18, 10, 0, tzinfo=UTC),
+        )
+    ]
+    agent: Agent[None, ClinicalReasoning] = build_summary_agent(model=FunctionModel(model_function))
+
+    await summarize_treatment(state, agent=agent)
+
+    assert "patient_check_ins:" in seen["prompt"]
+    assert "report_type=not_improving" in seen["prompt"]
+    assert "source=patient" in seen["prompt"]
+    assert "Patient says symptoms are not improving after three days." in seen["prompt"]
 
 
 async def test_summarize_treatment_prompt_requests_schedule_only_when_needed() -> None:

@@ -6,7 +6,7 @@ analysis row and audit trail, but does not run the graph yet.
 
 import asyncio
 from collections.abc import Sequence
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, cast
 from uuid import UUID
@@ -32,6 +32,7 @@ from app.db.models import (
     KnowledgeDocument,
     Medication,
     Patient,
+    PatientCheckIn,
     Treatment,
     TreatmentAnalysis,
 )
@@ -109,10 +110,22 @@ async def test_analyze_treatment_marks_pending_row_started_and_audits(
     db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     treatment = await _create_treatment(db_session)
+    db_session.add(
+        PatientCheckIn(
+            treatment_id=treatment.id,
+            report_type="not_improving",
+            source="patient",
+            message="Patient says symptoms are not improving.",
+            observed_at=datetime(2026, 5, 18, 9, 15, tzinfo=UTC),
+        )
+    )
+    await db_session.flush()
     analysis_id = await create_pending_analysis(db_session, treatment.id)
     session_factory = async_sessionmaker(db_session.bind, expire_on_commit=False)
+    seen: dict[str, AnalysisState] = {}
 
-    async def fake_graph(*_args: object, **_kwargs: object) -> AnalysisState:
+    async def fake_graph(state: AnalysisState, *_args: object, **_kwargs: object) -> AnalysisState:
+        seen["state"] = state
         return {"degraded": False}
 
     monkeypatch.setattr("app.services.analysis._run_analysis_graph", fake_graph)
@@ -123,6 +136,10 @@ async def test_analyze_treatment_marks_pending_row_started_and_audits(
     assert analysis is not None
     assert analysis.status == "completed"
     assert analysis.started_at is not None
+    assert seen["state"]["patient_check_ins"][0].report_type == "not_improving"
+    assert seen["state"]["patient_check_ins"][0].message == (
+        "Patient says symptoms are not improving."
+    )
 
     audit = (
         await db_session.execute(
@@ -138,6 +155,7 @@ async def test_analyze_treatment_marks_pending_row_started_and_audits(
     assert audit.payload == {
         "treatment_id": str(treatment.id),
         "analysis_id": str(analysis_id),
+        "patient_check_in_count": 1,
     }
 
 

@@ -5,7 +5,7 @@ Anything produced by an LLM must validate here before the rest of the app uses
 it, which keeps raw JSON out of the orchestration layer.
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Literal, NotRequired, TypedDict
 from uuid import UUID
 
@@ -14,6 +14,14 @@ from pydantic import BaseModel, ConfigDict, Field
 DDISeverity = Literal["minor", "moderate", "major"]
 KnowledgeSourceType = Literal["user_upload", "dailymed"]
 ClinicalSafetySourceType = Literal["model_review"]
+PatientCheckInReportType = Literal[
+    "not_improving",
+    "side_effect",
+    "feeling_better",
+    "general_update",
+    "missed_dose",
+]
+PatientCheckInSource = Literal["patient", "pharmacist", "system"]
 
 
 class AnalysisEnvelope(BaseModel):
@@ -98,6 +106,17 @@ class KBCitation(AnalysisEnvelope):
     score: float = Field(ge=0, le=1)
 
 
+class PatientCheckInState(AnalysisEnvelope):
+    """Patient-reported treatment status supplied as analysis context."""
+
+    id: UUID
+    report_type: PatientCheckInReportType
+    source: PatientCheckInSource
+    message: str = Field(min_length=1)
+    observed_at: datetime | None = None
+    created_at: datetime
+
+
 class AnalysisResult(AnalysisEnvelope):
     """Durable analysis payload stored on treatment_analyses.result."""
 
@@ -128,6 +147,7 @@ class AnalysisState(TypedDict, total=False):
 
     treatment_id: UUID
     medications: list[MedicationState]
+    patient_check_ins: NotRequired[list[PatientCheckInState]]
     groundings: list[MedicationGrounding]
     ddi_warnings: list[DDIWarning]
     schedule: Schedule | None

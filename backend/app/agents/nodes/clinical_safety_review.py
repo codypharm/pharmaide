@@ -78,6 +78,7 @@ def _safety_review_prompt(state: AnalysisState) -> str:
             "validated AnalysisState:",
             f"degraded: {state.get('degraded', False)}",
             f"medications:\n{_medications_section(state)}",
+            f"patient_check_ins:\n{_patient_check_ins_section(state)}",
             f"groundings:\n{_groundings_section(state)}",
             f"ddi_warnings:\n{_ddi_section(state)}",
             f"kb_citations:\n{_kb_citations_section(state)}",
@@ -96,6 +97,20 @@ def _medications_section(state: AnalysisState) -> str:
             f"objective={medication.get('objective') or 'unavailable'}"
         )
         for medication in medications
+    )
+
+
+def _patient_check_ins_section(state: AnalysisState) -> str:
+    check_ins = state.get("patient_check_ins", [])
+    if not check_ins:
+        return "- none"
+    return "\n".join(
+        (
+            f"- id={check_in.id} report_type={check_in.report_type} source={check_in.source} "
+            f"observed_at={check_in.observed_at or 'unavailable'} "
+            f"created_at={check_in.created_at}\n  message={check_in.message}"
+        )
+        for check_in in check_ins
     )
 
 

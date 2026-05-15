@@ -262,6 +262,7 @@ async def test_post_treatment_analyze_audits_successful_run_without_phi(
     assert started_payload == {
         "treatment_id": str(treatment_id),
         "analysis_id": str(analysis_id),
+        "patient_check_in_count": 0,
     }
     assert completed_payload == {
         "treatment_id": str(treatment_id),
