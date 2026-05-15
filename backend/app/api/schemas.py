@@ -266,6 +266,10 @@ class TriageItemList(BaseModel):
     items: list[TriageItemView]
 
 
+class TriageItemUpdate(BaseModel):
+    status: TriageStatus
+
+
 class TreatmentAnalysisSnapshot(BaseModel):
     id: UUID
     treatment_id: UUID
