@@ -18,10 +18,12 @@ import { toast } from "sonner";
 import { ApiError } from "../api/client";
 import {
   draftPatientReply,
+  getTreatment,
   listConversationMessages,
   listTreatments,
   type ConversationMessageList,
   type ConversationMessageView,
+  type TreatmentDetail,
   type TreatmentListItem,
 } from "../api/treatments";
 
@@ -38,6 +40,12 @@ type ConversationState =
   | { kind: "idle" }
   | { kind: "loading" }
   | { kind: "ok"; items: ConversationMessageView[] }
+  | { kind: "error"; requestId: string | null };
+
+type TreatmentDetailState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "ok"; data: TreatmentDetail }
   | { kind: "error"; requestId: string | null };
 
 type PatientTreatmentGroup = {
@@ -95,6 +103,9 @@ export default function PatientManagementPage() {
   const { isPrivacyMode } = useOutletContext<OutletContext>();
   const [treatmentState, setTreatmentState] = useState<TreatmentState>({ kind: "loading" });
   const [conversationState, setConversationState] = useState<ConversationState>({ kind: "idle" });
+  const [treatmentDetailState, setTreatmentDetailState] = useState<TreatmentDetailState>({
+    kind: "idle",
+  });
   const [selectedTreatmentId, setSelectedTreatmentId] = useState<string | null>(null);
   const [activeProfileTab, setActiveProfileTab] = useState<"patient" | "reasoning">("patient");
   const [searchQuery, setSearchQuery] = useState("");
@@ -124,11 +135,27 @@ export default function PatientManagementPage() {
   useEffect(() => {
     if (!selectedTreatmentId) {
       setConversationState({ kind: "idle" });
+      setTreatmentDetailState({ kind: "idle" });
       return;
     }
 
     let cancelled = false;
     setConversationState({ kind: "loading" });
+    setTreatmentDetailState({ kind: "loading" });
+
+    getTreatment(selectedTreatmentId)
+      .then((res) => {
+        if (cancelled) return;
+        setTreatmentDetailState({ kind: "ok", data: res });
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setTreatmentDetailState({
+          kind: "error",
+          requestId: err instanceof ApiError ? err.requestId : null,
+        });
+      });
+
     listConversationMessages(selectedTreatmentId, { limit: 100, offset: 0 })
       .then((res) => {
         if (cancelled) return;
@@ -264,7 +291,7 @@ export default function PatientManagementPage() {
           <>
             <PatientHeader item={selectedTreatment} isPrivacyMode={isPrivacyMode} />
             <div className="flex-1 flex overflow-hidden">
-              <ClinicalWorkspace item={selectedTreatment} />
+              <ClinicalWorkspace item={selectedTreatment} treatmentDetailState={treatmentDetailState} />
               <InteractionLog
                 activeProfileTab={activeProfileTab}
                 conversationState={conversationState}
@@ -450,7 +477,13 @@ function PatientHeader({
   );
 }
 
-function ClinicalWorkspace({ item }: { item: TreatmentListItem }) {
+function ClinicalWorkspace({
+  item,
+  treatmentDetailState,
+}: {
+  item: TreatmentListItem;
+  treatmentDetailState: TreatmentDetailState;
+}) {
   return (
     <div className="flex-1 overflow-y-auto p-8 flex flex-col gap-6">
       <section className="bg-white border border-slate-200 rounded-2xl p-6">
@@ -471,6 +504,8 @@ function ClinicalWorkspace({ item }: { item: TreatmentListItem }) {
         </div>
       </section>
 
+      <MedicationsPanel state={treatmentDetailState} />
+
       <section className="bg-white border border-slate-200 rounded-2xl p-6">
         <div className="flex items-center gap-2 mb-5">
           <Zap size={18} className="text-slate-400" />
@@ -482,6 +517,74 @@ function ClinicalWorkspace({ item }: { item: TreatmentListItem }) {
         </p>
       </section>
     </div>
+  );
+}
+
+function MedicationsPanel({ state }: { state: TreatmentDetailState }) {
+  if (state.kind === "idle" || state.kind === "loading") {
+    return (
+      <section className="bg-white border border-slate-200 rounded-2xl p-6">
+        <h3 className="font-bold text-slate-900">Medications</h3>
+        <div className="mt-4 flex items-center gap-2 text-sm text-slate-500">
+          <Loader2 size={16} className="animate-spin" />
+          Loading medications...
+        </div>
+      </section>
+    );
+  }
+
+  if (state.kind === "error") {
+    return (
+      <section className="bg-white border border-amber-200 rounded-2xl p-6">
+        <h3 className="font-bold text-slate-900">Medications</h3>
+        <p className="mt-4 text-sm text-slate-600">
+          Could not load medications. Reference ID: <code>{state.requestId ?? "unknown"}</code>
+        </p>
+      </section>
+    );
+  }
+
+  if (state.data.medications.length === 0) {
+    return (
+      <section className="bg-white border border-slate-200 rounded-2xl p-6">
+        <h3 className="font-bold text-slate-900">Medications</h3>
+        <p className="mt-4 text-sm text-slate-500">No medications recorded for this treatment.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="bg-white border border-slate-200 rounded-2xl p-6">
+      <h3 className="font-bold text-slate-900">Medications</h3>
+      <div className="mt-4 overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              <th className="w-12 py-2 pr-4 text-left">#</th>
+              <th className="py-2 pr-4 text-left">Name</th>
+              <th className="py-2 pr-4 text-left">Dosage</th>
+              <th className="py-2 pr-4 text-left">Frequency</th>
+              <th className="py-2 pr-4 text-left">Duration</th>
+              <th className="py-2 pr-4 text-left">Objective</th>
+            </tr>
+          </thead>
+          <tbody>
+            {state.data.medications.map((medication, index) => (
+              <tr key={medication.id} className={index % 2 === 1 ? "bg-slate-50" : ""}>
+                <td className="py-2 pr-4 tabular-nums text-slate-500">
+                  {medication.ordinal + 1}
+                </td>
+                <td className="py-2 pr-4 font-semibold text-slate-900">{medication.name}</td>
+                <td className="py-2 pr-4 tabular-nums text-slate-700">{medication.dosage}</td>
+                <td className="py-2 pr-4 text-slate-700">{medication.frequency}</td>
+                <td className="py-2 pr-4 tabular-nums text-slate-700">{medication.duration}</td>
+                <td className="py-2 pr-4 text-slate-500">{medication.objective ?? "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 

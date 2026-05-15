@@ -8,6 +8,7 @@ import * as treatmentsApi from "../../api/treatments";
 import type {
   ConversationMessageList,
   ConversationTurnView,
+  TreatmentDetail,
   TreatmentList,
 } from "../../api/treatments";
 import PatientManagementPage from "../PatientManagementPage";
@@ -81,6 +82,31 @@ const MESSAGES: ConversationMessageList = {
   ],
 };
 
+const DETAIL: TreatmentDetail = {
+  patient: TREATMENTS.items[0].patient,
+  treatment: TREATMENTS.items[0].treatment,
+  medications: [
+    {
+      id: "med-1",
+      name: "Lisinopril",
+      dosage: "10mg",
+      frequency: "Once daily",
+      duration: "30 days",
+      objective: "Monitor dizziness",
+      ordinal: 0,
+    },
+    {
+      id: "med-2",
+      name: "Amlodipine",
+      dosage: "5mg",
+      frequency: "Once daily",
+      duration: "30 days",
+      objective: null,
+      ordinal: 1,
+    },
+  ],
+};
+
 const HELD_TURN: ConversationTurnView = {
   inbound_message: {
     ...MESSAGES.items[0],
@@ -126,6 +152,7 @@ afterEach(() => {
 describe("PatientManagementPage", () => {
   it("loads treatments and conversation messages from the API", async () => {
     vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue(TREATMENTS);
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(DETAIL);
     vi.spyOn(treatmentsApi, "listConversationMessages").mockResolvedValue(MESSAGES);
 
     renderPage();
@@ -138,12 +165,16 @@ describe("PatientManagementPage", () => {
     expect(screen.getAllByText("Monitor dizziness").length).toBeGreaterThan(0);
     expect(screen.getByText("Metformin")).toBeTruthy();
     expect(screen.getByText("Monitor glucose")).toBeTruthy();
+    expect(await screen.findByRole("columnheader", { name: "Dosage" })).toBeTruthy();
+    expect(screen.getByText("10mg")).toBeTruthy();
+    expect(screen.getByText("Amlodipine")).toBeTruthy();
     expect(await screen.findByText("I feel dizzy today.")).toBeTruthy();
   });
 
   it("submits an incoming WhatsApp message and refreshes the thread", async () => {
     const user = userEvent.setup();
     vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue(TREATMENTS);
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(DETAIL);
     vi.spyOn(treatmentsApi, "listConversationMessages")
       .mockResolvedValueOnce(MESSAGES)
       .mockResolvedValueOnce({
