@@ -77,7 +77,11 @@ async def summarize_treatment(
         return await _summarize_with_schedule(state, agent=schedule_agent)
 
     summary_agent = agent or build_summary_agent()
-    result = await summary_agent.run(_summary_prompt(state))
+    try:
+        result = await summary_agent.run(_summary_prompt(state))
+    except Exception as exc:
+        return _fallback_summary_state(state, exc, needs_llm_parse=False)
+
     reasoning = _apply_clinical_safety_guard(state, result.output)
 
     next_state = state.copy()
@@ -92,7 +96,11 @@ async def _summarize_with_schedule(
     agent: Agent[None, ClinicalReasoningWithSchedule] | None,
 ) -> AnalysisState:
     summary_agent = agent or build_summary_with_schedule_agent()
-    result = await summary_agent.run(_summary_prompt(state))
+    try:
+        result = await summary_agent.run(_summary_prompt(state))
+    except Exception as exc:
+        return _fallback_summary_state(state, exc, needs_llm_parse=True)
+
     output = result.output
 
     next_state = state.copy()
@@ -114,6 +122,42 @@ def _sort_reminders(reminders: list[ReminderSlot]) -> list[ReminderSlot]:
         reminders,
         key=lambda reminder: (reminder.offset_from_start, str(reminder.medication_id)),
     )
+
+
+def _fallback_summary_state(
+    state: AnalysisState,
+    exc: Exception,
+    *,
+    needs_llm_parse: bool,
+) -> AnalysisState:
+    """Preserve usable deterministic analysis when the summary model is unavailable."""
+    reasoning = ClinicalReasoning(
+        summary="Model-generated clinical summary is unavailable. Pharmacist review is required.",
+        red_flags=_fallback_red_flags(state, needs_llm_parse=needs_llm_parse),
+        confidence=0,
+    )
+    result = state.copy()
+    result["degraded"] = True
+    result["reasoning"] = reasoning
+    log.warning(
+        "summary_generation_failed",
+        error_type=exc.__class__.__name__,
+        needs_llm_parse=needs_llm_parse,
+        degraded=True,
+    )
+    _log_reasoning_summary(result, reasoning)
+    return result
+
+
+def _fallback_red_flags(state: AnalysisState, *, needs_llm_parse: bool) -> list[str]:
+    flags = ["Model-generated clinical summary unavailable; pharmacist review required."]
+    if state.get("degraded", False):
+        flags.append("Analysis is degraded; verify upstream results before acting.")
+    if state.get("ddi_warnings"):
+        flags.append("Interaction warnings require pharmacist review.")
+    if needs_llm_parse:
+        flags.append("Some schedule instructions need pharmacist review.")
+    return flags
 
 
 def _apply_clinical_safety_guard(

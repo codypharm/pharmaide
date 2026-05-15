@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
+import httpx
 import pytest
 import structlog
 from pydantic_ai import Agent
@@ -24,6 +25,11 @@ from app.agents.nodes.clinical_safety_review import (
 
 FIRST_MEDICATION_ID = UUID("11111111-1111-1111-1111-111111111111")
 SECOND_MEDICATION_ID = UUID("22222222-2222-2222-2222-222222222222")
+
+
+class _FailingAgent:
+    async def run(self, _prompt: str) -> object:
+        raise httpx.ConnectTimeout("connect timed out")
 
 
 @pytest.fixture(autouse=True)
@@ -88,7 +94,9 @@ async def test_review_clinical_safety_writes_validated_model_review() -> None:
         model=TestModel(
             custom_output_args={
                 "source_type": "model_review",
-                "possible_interactions": ["Review blood pressure effects with current regimen."],
+                "possible_interactions": [
+                    "Lisinopril + Warfarin: review blood pressure and bleeding risk."
+                ],
                 "monitoring_concerns": ["Monitor dizziness or hypotension."],
                 "counseling_points": ["Advise patient to report fainting."],
                 "missing_information": ["Recent blood pressure readings unavailable."],
@@ -101,7 +109,9 @@ async def test_review_clinical_safety_writes_validated_model_review() -> None:
     reviewed = await review_clinical_safety(_state(), agent=agent)
 
     assert reviewed["clinical_safety_review"] == ClinicalSafetyReview(
-        possible_interactions=["Review blood pressure effects with current regimen."],
+        possible_interactions=[
+            "Lisinopril + Warfarin: review blood pressure and bleeding risk."
+        ],
         monitoring_concerns=["Monitor dizziness or hypotension."],
         counseling_points=["Advise patient to report fainting."],
         missing_information=["Recent blood pressure readings unavailable."],
@@ -201,6 +211,67 @@ async def test_review_clinical_safety_skips_when_agent_not_configured() -> None:
     reviewed = await review_clinical_safety(_state(), agent=None)
 
     assert reviewed["clinical_safety_review"] is None
+
+
+async def test_review_clinical_safety_degrades_when_model_call_fails() -> None:
+    reviewed = await review_clinical_safety(_state(), agent=_FailingAgent())  # type: ignore[arg-type]
+
+    assert reviewed["clinical_safety_review"] is None
+    assert reviewed["degraded"] is True
+
+
+async def test_review_clinical_safety_filters_hypothetical_interaction_entities() -> None:
+    state: AnalysisState = {
+        "medications": [
+            {
+                "id": FIRST_MEDICATION_ID,
+                "name": "Amoxicillin",
+                "dosage": "1 g",
+                "frequency": "BID",
+                "duration": "14 days",
+                "objective": None,
+            },
+            {
+                "id": SECOND_MEDICATION_ID,
+                "name": "Metronidazole",
+                "dosage": "400 mg",
+                "frequency": "TID",
+                "duration": "7 days",
+                "objective": None,
+            },
+        ],
+        "groundings": [],
+        "ddi_warnings": [],
+        "degraded": False,
+    }
+    agent = build_clinical_safety_agent(
+        model=TestModel(
+            custom_output_args={
+                "source_type": "model_review",
+                "possible_interactions": [
+                    "Amoxicillin + metronidazole: overlapping gastrointestinal adverse effects.",
+                    "Metronidazole + warfarin: potential increase in anticoagulant effect.",
+                    "Metronidazole + lithium: potential for increased lithium concentrations.",
+                    "Metronidazole + disulfiram: risk of neuropsychiatric reactions.",
+                    "Metronidazole + alcohol: reaction risk.",
+                    "Amoxicillin + combined hormonal contraceptives: uncertain evidence.",
+                    "Renal/hepatic considerations: review dose adjustment if applicable.",
+                ],
+                "monitoring_concerns": [],
+                "counseling_points": [],
+                "missing_information": [],
+                "confidence": 0.5,
+                "requires_pharmacist_review": True,
+            }
+        )
+    )
+
+    reviewed = await review_clinical_safety(state, agent=agent)
+
+    assert reviewed["clinical_safety_review"] is not None
+    assert reviewed["clinical_safety_review"].possible_interactions == [
+        "Amoxicillin + metronidazole: overlapping gastrointestinal adverse effects."
+    ]
 
 
 def _user_prompt(messages: list[ModelMessage]) -> str:

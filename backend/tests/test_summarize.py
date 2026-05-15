@@ -4,6 +4,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+import httpx
 import pytest
 import structlog
 from pydantic_ai import Agent
@@ -37,6 +38,11 @@ from app.logging_setup import configure_logging
 
 FIRST_MEDICATION_ID = UUID("11111111-1111-1111-1111-111111111111")
 SECOND_MEDICATION_ID = UUID("22222222-2222-2222-2222-222222222222")
+
+
+class _FailingAgent:
+    async def run(self, _prompt: str) -> object:
+        raise httpx.ConnectTimeout("connect timed out")
 
 
 @pytest.fixture(autouse=True)
@@ -137,6 +143,20 @@ async def test_summarize_treatment_writes_validated_clinical_reasoning() -> None
         summary="Grounding is incomplete and pharmacist review is needed.",
         red_flags=["One medication was not grounded."],
         confidence=0.72,
+    )
+
+
+async def test_summarize_treatment_degrades_with_validated_fallback_when_model_call_fails() -> None:
+    summarized = await summarize_treatment(_state(), agent=_FailingAgent())  # type: ignore[arg-type]
+
+    assert summarized["degraded"] is True
+    assert summarized["reasoning"] == ClinicalReasoning(
+        summary="Model-generated clinical summary is unavailable. Pharmacist review is required.",
+        red_flags=[
+            "Model-generated clinical summary unavailable; pharmacist review required.",
+            "Analysis is degraded; verify upstream results before acting.",
+        ],
+        confidence=0,
     )
 
 
