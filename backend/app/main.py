@@ -18,6 +18,7 @@ from app.api.internal import router as internal_router
 from app.api.knowledge import router as knowledge_router
 from app.api.prescriptions import router as prescriptions_router
 from app.api.treatments import router as treatments_router
+from app.api.triage import router as triage_router
 from app.config import Settings, get_settings
 from app.errors import RequestIdMiddleware, global_exception_handler, run_graph
 from app.graph import open_counter_graph
@@ -73,6 +74,7 @@ def create_app(settings: Settings) -> FastAPI:
     app.include_router(treatments_router, tags=["treatments"])
     app.include_router(prescriptions_router, tags=["prescriptions"])
     app.include_router(knowledge_router, tags=["knowledge"])
+    app.include_router(triage_router, tags=["triage"])
     app.include_router(internal_router, tags=["internal"])
 
     # Mount-time gating, not request-time. When the flag is False the route

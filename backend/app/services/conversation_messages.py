@@ -17,6 +17,7 @@ from app.agents.safety_provider_factory import ConfiguredSafetyProviders, Safety
 from app.api.schemas import ConversationMessageList, ConversationMessageView, ConversationTurnView
 from app.db.models import AuditLogEntry, ConversationMessage, Treatment
 from app.services.patient_safety import review_patient_draft_safety
+from app.services.triage import create_open_triage_item
 
 log = structlog.get_logger(__name__)
 
@@ -140,6 +141,13 @@ async def submit_patient_conversation_turn(
     )
     session.add(assistant)
     await session.flush()
+    if assistant.status == "held_for_review" and decision.hold_reason is not None:
+        await create_open_triage_item(
+            session,
+            treatment_id=treatment_id,
+            conversation_message_id=assistant.id,
+            reason=decision.hold_reason,
+        )
 
     _audit_conversation_turn(session, treatment_id, inbound, assistant, decision.status)
     await session.flush()

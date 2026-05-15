@@ -77,6 +77,94 @@ async def test_post_conversation_turn_returns_held_draft_when_safety_blocks(
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_held_conversation_turn_creates_open_triage_item(
+    app_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    treatment_id = await _create_treatment(app_client, "CONV-API-009")
+    _patch_safety_decision(monkeypatch, treatment_id, status="hold_for_pharmacist")
+
+    turn_response = await app_client.post(
+        f"/treatments/{treatment_id}/conversation-turns",
+        json={
+            "patient_message": "Can I take an extra dose?",
+            "assistant_draft": "This draft must be reviewed.",
+            "prescription_context": "Amoxicillin 500 mg three times daily.",
+        },
+    )
+    response = await app_client.get("/triage/items")
+
+    assert turn_response.status_code == 201, turn_response.text
+    turn = turn_response.json()
+    assert response.status_code == 200, response.text
+    items = response.json()["items"]
+    assert len(items) == 1
+    assert items[0]["treatment_id"] == str(treatment_id)
+    assert items[0]["conversation_message_id"] == turn["assistant_message"]["id"]
+    assert items[0]["reason"] == "input_guard"
+    assert items[0]["status"] == "open"
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_allowed_conversation_turn_does_not_create_triage_item(
+    app_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    treatment_id = await _create_treatment(app_client, "CONV-API-010")
+    _patch_safety_decision(monkeypatch, treatment_id, status="send")
+
+    turn_response = await app_client.post(
+        f"/treatments/{treatment_id}/conversation-turns",
+        json={
+            "patient_message": "Can I take this after food?",
+            "assistant_draft": "Please follow the timing your pharmacist approved.",
+            "prescription_context": "Amoxicillin 500 mg three times daily.",
+        },
+    )
+    response = await app_client.get("/triage/items")
+
+    assert turn_response.status_code == 201, turn_response.text
+    assert response.status_code == 200, response.text
+    assert response.json()["items"] == []
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_list_triage_items_returns_newest_first(
+    app_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first_treatment_id = await _create_treatment(app_client, "CONV-API-011")
+    second_treatment_id = await _create_treatment(app_client, "CONV-API-012")
+    _patch_safety_decision(monkeypatch, first_treatment_id, status="hold_for_pharmacist")
+    await app_client.post(
+        f"/treatments/{first_treatment_id}/conversation-turns",
+        json={
+            "patient_message": "First blocked message",
+            "assistant_draft": "First blocked draft.",
+            "prescription_context": "Amoxicillin 500 mg three times daily.",
+        },
+    )
+    _patch_safety_decision(monkeypatch, second_treatment_id, status="hold_for_pharmacist")
+    await app_client.post(
+        f"/treatments/{second_treatment_id}/conversation-turns",
+        json={
+            "patient_message": "Second blocked message",
+            "assistant_draft": "Second blocked draft.",
+            "prescription_context": "Amoxicillin 500 mg three times daily.",
+        },
+    )
+
+    response = await app_client.get("/triage/items")
+
+    assert response.status_code == 200, response.text
+    items = response.json()["items"]
+    assert [item["treatment_id"] for item in items] == [
+        str(second_treatment_id),
+        str(first_treatment_id),
+    ]
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_post_conversation_turn_returns_404_for_unknown_treatment(
     app_client: AsyncClient,
 ) -> None:

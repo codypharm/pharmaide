@@ -30,6 +30,14 @@ ConversationMessageDirection = Literal["inbound", "outbound"]
 ConversationMessageSender = Literal["patient", "assistant", "pharmacist", "system"]
 ConversationMessageChannel = Literal["whatsapp", "dashboard", "system"]
 ConversationMessageStatus = Literal["received", "draft_ready", "held_for_review"]
+TriageReason = Literal[
+    "input_guard",
+    "referee",
+    "output_guard",
+    "adverse_event",
+    "non_responsive",
+]
+TriageStatus = Literal["open", "acknowledged", "resolved"]
 AllergyName = Annotated[str, Field(min_length=1, max_length=200)]
 
 
@@ -241,6 +249,21 @@ class PatientReplyDraftCreate(BaseModel):
         if not stripped:
             raise ValueError("patient_message must not be blank")
         return stripped
+
+
+class TriageItemView(BaseModel):
+    id: UUID
+    treatment_id: UUID
+    conversation_message_id: UUID | None
+    reason: TriageReason
+    status: TriageStatus
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class TriageItemList(BaseModel):
+    items: list[TriageItemView]
 
 
 class TreatmentAnalysisSnapshot(BaseModel):

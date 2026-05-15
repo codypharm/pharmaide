@@ -106,6 +106,9 @@ class Treatment(Base):
     conversation_messages: Mapped[list["ConversationMessage"]] = relationship(
         back_populates="treatment", cascade="all, delete-orphan"
     )
+    triage_items: Mapped[list["TriageItem"]] = relationship(
+        back_populates="treatment", cascade="all, delete-orphan"
+    )
 
 
 class Medication(Base):
@@ -267,6 +270,39 @@ class ConversationMessage(Base):
 
     __table_args__ = (
         Index("idx_conversation_messages_treatment_created", "treatment_id", created_at.desc()),
+    )
+
+
+class TriageItem(Base):
+    __tablename__ = "triage_items"
+
+    id: Mapped[UUID] = mapped_column(
+        Uuid, primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    treatment_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey("treatments.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    conversation_message_id: Mapped[UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("conversation_messages.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'open'"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+    )
+
+    treatment: Mapped[Treatment] = relationship(back_populates="triage_items")
+    conversation_message: Mapped[ConversationMessage | None] = relationship()
+
+    __table_args__ = (
+        Index("idx_triage_items_status_created", "status", created_at.desc()),
+        Index("idx_triage_items_treatment_created", "treatment_id", created_at.desc()),
     )
 
 
