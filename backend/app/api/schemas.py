@@ -192,6 +192,10 @@ class ConversationMessageView(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ConversationMessageList(BaseModel):
+    items: list[ConversationMessageView]
+
+
 class ConversationTurnView(BaseModel):
     inbound_message: ConversationMessageView
     assistant_message: ConversationMessageView

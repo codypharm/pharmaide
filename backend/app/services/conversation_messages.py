@@ -10,10 +10,11 @@ from uuid import UUID
 
 import structlog
 from pydantic import SecretStr
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.safety_provider_factory import ConfiguredSafetyProviders, SafetyProviderMode
-from app.api.schemas import ConversationMessageView, ConversationTurnView
+from app.api.schemas import ConversationMessageList, ConversationMessageView, ConversationTurnView
 from app.db.models import AuditLogEntry, ConversationMessage, Treatment
 from app.services.patient_safety import review_patient_draft_safety
 
@@ -52,6 +53,39 @@ async def record_patient_conversation_message(
         channel=inbound.channel,
     )
     return ConversationMessageView.model_validate(inbound)
+
+
+async def list_conversation_messages(
+    session: AsyncSession,
+    treatment_id: UUID,
+    *,
+    limit: int,
+    offset: int,
+) -> ConversationMessageList:
+    """Return treatment conversation messages in chat display order."""
+    treatment = await session.get(Treatment, treatment_id)
+    if treatment is None:
+        raise TreatmentNotFound()
+
+    result = await session.execute(
+        select(ConversationMessage)
+        .where(ConversationMessage.treatment_id == treatment_id)
+        .order_by(ConversationMessage.created_at.asc(), ConversationMessage.id.asc())
+        .limit(limit)
+        .offset(offset)
+    )
+    messages = result.scalars().all()
+
+    log.info(
+        "conversation_messages_listed",
+        treatment_id=str(treatment_id),
+        count=len(messages),
+        limit=limit,
+        offset=offset,
+    )
+    return ConversationMessageList(
+        items=[ConversationMessageView.model_validate(message) for message in messages]
+    )
 
 
 async def submit_patient_conversation_turn(

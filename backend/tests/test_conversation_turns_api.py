@@ -152,6 +152,68 @@ async def test_post_patient_message_returns_404_for_unknown_treatment(
     assert response.json() == {"detail": {"error": "treatment_not_found"}}
 
 
+@pytest.mark.usefixtures("postgres_container")
+async def test_list_conversation_messages_returns_oldest_first(
+    app_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    treatment_id = await _create_treatment(app_client, "CONV-API-005")
+    _patch_safety_decision(monkeypatch, treatment_id, status="send")
+    await app_client.post(
+        f"/treatments/{treatment_id}/patient-messages",
+        json={"message": "First patient message"},
+    )
+    await app_client.post(
+        f"/treatments/{treatment_id}/conversation-turns",
+        json={
+            "patient_message": "Second patient message",
+            "assistant_draft": "Assistant draft",
+            "prescription_context": "Amoxicillin 500 mg three times daily.",
+        },
+    )
+
+    response = await app_client.get(f"/treatments/{treatment_id}/conversation-messages")
+
+    assert response.status_code == 200, response.text
+    items = response.json()["items"]
+    assert [item["body"] for item in items] == [
+        "First patient message",
+        "Second patient message",
+        "Assistant draft",
+    ]
+    assert [item["direction"] for item in items] == ["inbound", "inbound", "outbound"]
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_list_conversation_messages_supports_limit_and_offset(
+    app_client: AsyncClient,
+) -> None:
+    treatment_id = await _create_treatment(app_client, "CONV-API-006")
+    for message in ["First", "Second", "Third"]:
+        await app_client.post(
+            f"/treatments/{treatment_id}/patient-messages",
+            json={"message": message},
+        )
+
+    response = await app_client.get(
+        f"/treatments/{treatment_id}/conversation-messages",
+        params={"limit": 1, "offset": 1},
+    )
+
+    assert response.status_code == 200, response.text
+    assert [item["body"] for item in response.json()["items"]] == ["Second"]
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_list_conversation_messages_returns_404_for_unknown_treatment(
+    app_client: AsyncClient,
+) -> None:
+    response = await app_client.get(f"/treatments/{uuid4()}/conversation-messages")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": {"error": "treatment_not_found"}}
+
+
 async def _create_treatment(app_client: AsyncClient, mrn: str) -> UUID:
     response = await app_client.post(
         "/treatments",
