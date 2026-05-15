@@ -7,6 +7,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.patient_reply import PatientReplyDraft
 from app.agents.safety_schemas import (
     GuardResult,
     PatientDraftSafetyDecision,
@@ -214,6 +215,67 @@ async def test_list_conversation_messages_returns_404_for_unknown_treatment(
     assert response.json() == {"detail": {"error": "treatment_not_found"}}
 
 
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_patient_reply_draft_generates_ready_conversation_turn(
+    app_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    treatment_id = await _create_treatment(app_client, "CONV-API-007")
+    seen: dict[str, str] = {}
+    _patch_generated_reply(monkeypatch)
+    _patch_safety_decision(monkeypatch, treatment_id, status="send", seen=seen)
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/patient-reply-drafts",
+        json={"patient_message": "Can I take this after food?"},
+    )
+
+    assert response.status_code == 201, response.text
+    payload = response.json()
+    assert payload["inbound_message"]["body"] == "Can I take this after food?"
+    assert payload["assistant_message"]["body"] == (
+        "Please follow the timing your pharmacist approved."
+    )
+    assert payload["assistant_message"]["status"] == "draft_ready"
+    assert payload["safety_decision"]["status"] == "send"
+    assert "Amoxicillin" in seen["prescription_context"]
+    assert "Three Times Daily (TID)" in seen["prescription_context"]
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_patient_reply_draft_holds_when_safety_blocks(
+    app_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    treatment_id = await _create_treatment(app_client, "CONV-API-008")
+    _patch_generated_reply(monkeypatch)
+    _patch_safety_decision(monkeypatch, treatment_id, status="hold_for_pharmacist")
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/patient-reply-drafts",
+        json={"patient_message": "Can I take an extra dose?"},
+    )
+
+    assert response.status_code == 201, response.text
+    payload = response.json()
+    assert payload["assistant_message"]["status"] == "held_for_review"
+    assert payload["assistant_message"]["safety_hold_reason"] == "input_guard"
+    assert payload["safety_decision"]["status"] == "hold_for_pharmacist"
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_patient_reply_draft_returns_404_for_unknown_treatment(
+    app_client: AsyncClient,
+) -> None:
+    response = await app_client.post(
+        f"/treatments/{uuid4()}/patient-reply-drafts",
+        json={"patient_message": "Hello"},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": {"error": "treatment_not_found"}}
+
+
 async def _create_treatment(app_client: AsyncClient, mrn: str) -> UUID:
     response = await app_client.post(
         "/treatments",
@@ -246,14 +308,32 @@ def _patch_safety_decision(
     treatment_id: UUID,
     *,
     status: str,
+    seen: dict[str, str] | None = None,
 ) -> None:
     async def fake_review_patient_draft_safety(*args: object, **kwargs: object) -> object:
         assistant_draft = str(kwargs["assistant_draft"])
+        if seen is not None:
+            seen["prescription_context"] = str(kwargs["prescription_context"])
         return _safety_decision(treatment_id, status=status, assistant_draft=assistant_draft)
 
     monkeypatch.setattr(
         "app.services.conversation_messages.review_patient_draft_safety",
         fake_review_patient_draft_safety,
+    )
+
+
+def _patch_generated_reply(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_draft_patient_reply_for_treatment(*args: object, **kwargs: object) -> object:
+        return PatientReplyDraft(
+            message="Please follow the timing your pharmacist approved.",
+            requires_pharmacist_review=False,
+            escalation_reason="none",
+            confidence=0.86,
+        )
+
+    monkeypatch.setattr(
+        "app.api.treatments.draft_patient_reply_for_treatment",
+        fake_draft_patient_reply_for_treatment,
     )
 
 

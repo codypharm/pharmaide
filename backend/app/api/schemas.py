@@ -230,6 +230,19 @@ class PatientConversationMessageCreate(BaseModel):
         return stripped
 
 
+class PatientReplyDraftCreate(BaseModel):
+    patient_message: str = Field(min_length=1, max_length=4000)
+
+    @field_validator("patient_message")
+    @classmethod
+    def normalise_patient_message(cls, value: str) -> str:
+        """Reject blank patient messages before draft generation."""
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("patient_message must not be blank")
+        return stripped
+
+
 class TreatmentAnalysisSnapshot(BaseModel):
     id: UUID
     treatment_id: UUID

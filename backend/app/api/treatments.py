@@ -10,8 +10,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import Response
+from pydantic_ai import Agent
+from pydantic_ai.models.openai import OpenAIResponsesModel
+from pydantic_ai.providers.openai import OpenAIProvider
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.agents.patient_reply import PatientReplyDraft, build_patient_reply_agent
 from app.api.schemas import (
     AdherenceEventCreate,
     AdherenceEventList,
@@ -27,6 +31,7 @@ from app.api.schemas import (
     PatientCheckInList,
     PatientCheckInView,
     PatientConversationMessageCreate,
+    PatientReplyDraftCreate,
     TreatmentAnalysisView,
     TreatmentDetail,
     TreatmentList,
@@ -66,6 +71,12 @@ from app.services.patient_checkins import (
 from app.services.patient_checkins import (
     create_patient_check_in,
     list_patient_check_ins,
+)
+from app.services.patient_reply_drafts import (
+    TreatmentNotFound as ReplyDraftTreatmentNotFound,
+)
+from app.services.patient_reply_drafts import (
+    draft_patient_reply_for_treatment,
 )
 from app.services.treatments import (
     MRNConflict,
@@ -282,6 +293,46 @@ async def get_conversation_messages(
 
 
 @router.post(
+    "/treatments/{treatment_id}/patient-reply-drafts",
+    status_code=201,
+    response_model=ConversationTurnView,
+)
+async def post_patient_reply_draft(
+    treatment_id: UUID,
+    body: PatientReplyDraftCreate,
+    session_factory: SessionFactoryDep,
+    settings: SettingsDep,
+) -> ConversationTurnView:
+    try:
+        async with session_factory() as session, session.begin():
+            draft = await draft_patient_reply_for_treatment(
+                session,
+                treatment_id,
+                patient_message=body.patient_message,
+                agent=_build_configured_patient_reply_agent(settings),
+            )
+            return await submit_patient_conversation_turn(
+                session,
+                treatment_id=treatment_id,
+                patient_message=body.patient_message,
+                assistant_draft=draft.message,
+                prescription_context=await _patient_reply_safety_context(
+                    session,
+                    treatment_id,
+                    draft,
+                ),
+                openai_api_key=settings.openai_api_key,
+                safety_provider=settings.safety_provider,
+                llama_guard_url=settings.llama_guard_url,
+                agentdog_url=settings.agentdog_url,
+                safety_provider_api_key=settings.safety_provider_api_key,
+                safety_provider_timeout_seconds=settings.safety_provider_timeout_seconds,
+            )
+    except (ConversationTreatmentNotFound, ReplyDraftTreatmentNotFound) as exc:
+        raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
+
+
+@router.post(
     "/treatments/{treatment_id}/analyze",
     status_code=202,
     response_model=AnalyzeTreatmentResponse,
@@ -320,6 +371,46 @@ async def post_treatment_analysis(
             headers={"Retry-After": "30"},
         ) from exc
     return AnalyzeTreatmentResponse(analysis_id=analysis_id)
+
+
+def _build_configured_patient_reply_agent(
+    settings: Settings,
+) -> Agent[None, PatientReplyDraft] | None:
+    if settings.openai_api_key is None:
+        return None
+    provider = OpenAIProvider(api_key=settings.openai_api_key.get_secret_value())
+    return build_patient_reply_agent(OpenAIResponsesModel("gpt-5", provider=provider))
+
+
+async def _patient_reply_safety_context(
+    session: AsyncSession,
+    treatment_id: UUID,
+    draft: PatientReplyDraft,
+) -> str:
+    detail = await get_treatment(session, treatment_id)
+    if detail is None:
+        raise ReplyDraftTreatmentNotFound()
+    medications = "\n".join(
+        (
+            f"- {medication.name}; dosage={medication.dosage}; "
+            f"frequency={medication.frequency}; duration={medication.duration}; "
+            f"objective={medication.objective or 'unavailable'}"
+        )
+        for medication in detail.medications
+    )
+    return "\n".join(
+        [
+            "Treatment context for generated patient-reply draft.",
+            f"clinical_objective: {detail.treatment.clinical_objective or 'unavailable'}",
+            "medications:",
+            medications or "- none",
+            (
+                "draft_metadata: "
+                f"requires_pharmacist_review={draft.requires_pharmacist_review}; "
+                f"escalation_reason={draft.escalation_reason}; confidence={draft.confidence}"
+            ),
+        ]
+    )
 
 
 @router.get(
