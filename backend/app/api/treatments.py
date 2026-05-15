@@ -16,6 +16,9 @@ from app.api.schemas import (
     AnalyzeTreatmentResponse,
     CreateTreatmentRequest,
     CreateTreatmentResponse,
+    PatientCheckInCreate,
+    PatientCheckInList,
+    PatientCheckInView,
     TreatmentAnalysisView,
     TreatmentDetail,
     TreatmentList,
@@ -29,6 +32,13 @@ from app.services.analysis import (
     create_pending_analysis,
     get_latest_analysis,
     mark_analysis_failed,
+)
+from app.services.patient_checkins import (
+    TreatmentNotFound as CheckInTreatmentNotFound,
+)
+from app.services.patient_checkins import (
+    create_patient_check_in,
+    list_patient_check_ins,
 )
 from app.services.treatments import (
     MRNConflict,
@@ -102,6 +112,39 @@ async def get_treatment_by_id(treatment_id: UUID, session: SessionDep) -> Treatm
     if detail is None:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"})
     return detail
+
+
+@router.post(
+    "/treatments/{treatment_id}/check-ins",
+    status_code=201,
+    response_model=PatientCheckInView,
+)
+async def post_patient_check_in(
+    treatment_id: UUID,
+    body: PatientCheckInCreate,
+    session_factory: SessionFactoryDep,
+) -> PatientCheckInView:
+    try:
+        async with session_factory() as session, session.begin():
+            return await create_patient_check_in(session, treatment_id, body)
+    except CheckInTreatmentNotFound as exc:
+        raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
+
+
+@router.get(
+    "/treatments/{treatment_id}/check-ins",
+    response_model=PatientCheckInList,
+)
+async def get_patient_check_ins(
+    treatment_id: UUID,
+    session: SessionDep,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> PatientCheckInList:
+    try:
+        return await list_patient_check_ins(session, treatment_id, limit=limit, offset=offset)
+    except CheckInTreatmentNotFound as exc:
+        raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
 
 
 @router.post(

@@ -97,6 +97,9 @@ class Treatment(Base):
     analyses: Mapped[list["TreatmentAnalysis"]] = relationship(
         back_populates="treatment", cascade="all, delete-orphan"
     )
+    check_ins: Mapped[list["PatientCheckIn"]] = relationship(
+        back_populates="treatment", cascade="all, delete-orphan"
+    )
 
 
 class Medication(Base):
@@ -159,6 +162,33 @@ class TreatmentAnalysis(Base):
             unique=True,
             postgresql_where=text("status IN ('pending', 'running')"),
         ),
+    )
+
+
+class PatientCheckIn(Base):
+    __tablename__ = "patient_check_ins"
+
+    id: Mapped[UUID] = mapped_column(
+        Uuid, primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    treatment_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey("treatments.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    report_type: Mapped[str] = mapped_column(Text, nullable=False)
+    source: Mapped[str] = mapped_column(Text, nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    observed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+    )
+
+    treatment: Mapped[Treatment] = relationship(back_populates="check_ins")
+
+    __table_args__ = (
+        Index("idx_patient_check_ins_treatment_created", "treatment_id", created_at.desc()),
     )
 
 

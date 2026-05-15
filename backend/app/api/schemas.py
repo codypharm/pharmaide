@@ -14,6 +14,14 @@ from pydantic import BaseModel, Field, field_validator
 from pydantic_extra_types.phone_numbers import PhoneNumber
 
 IngestionMethod = Literal["structured", "manual", "vision"]
+PatientCheckInReportType = Literal[
+    "not_improving",
+    "side_effect",
+    "feeling_better",
+    "general_update",
+    "missed_dose",
+]
+PatientCheckInSource = Literal["patient", "pharmacist", "system"]
 AllergyName = Annotated[str, Field(min_length=1, max_length=200)]
 
 
@@ -73,6 +81,46 @@ class CreateTreatmentResponse(BaseModel):
 
 class AnalyzeTreatmentResponse(BaseModel):
     analysis_id: UUID
+
+
+class PatientCheckInCreate(BaseModel):
+    report_type: PatientCheckInReportType
+    source: PatientCheckInSource = "patient"
+    message: str = Field(min_length=1, max_length=2000)
+    observed_at: datetime | None = None
+
+    @field_validator("message")
+    @classmethod
+    def normalise_message(cls, value: str) -> str:
+        """Store patient reports without surrounding transport whitespace."""
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("message must not be blank")
+        return stripped
+
+    @field_validator("observed_at")
+    @classmethod
+    def require_timezone_for_observed_at(cls, value: datetime | None) -> datetime | None:
+        """Patient timelines need an absolute instant, not browser-local ambiguity."""
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValueError("observed_at must include a timezone")
+        return value
+
+
+class PatientCheckInView(BaseModel):
+    id: UUID
+    treatment_id: UUID
+    report_type: str
+    source: str
+    message: str
+    observed_at: datetime | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class PatientCheckInList(BaseModel):
+    items: list[PatientCheckInView]
 
 
 class TreatmentAnalysisView(BaseModel):
