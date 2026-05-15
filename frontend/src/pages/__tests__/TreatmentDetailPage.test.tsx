@@ -7,6 +7,7 @@ import TreatmentDetailPage from "../TreatmentDetailPage";
 import { ApiError, NotFoundError } from "../../api/client";
 import * as treatmentsApi from "../../api/treatments";
 import type {
+  AdherenceEventView,
   PatientCheckInView,
   TreatmentAnalysisRow,
   TreatmentDetail,
@@ -143,6 +144,20 @@ const SAMPLE_CHECK_INS: PatientCheckInView[] = [
   },
 ];
 
+const SAMPLE_ADHERENCE_EVENTS: AdherenceEventView[] = [
+  {
+    id: "adherence-1",
+    treatment_id: SAMPLE.treatment.id,
+    medication_id: SAMPLE.medications[0].id,
+    status: "taken",
+    source: "patient",
+    scheduled_for: "2026-05-16T09:30:00.000Z",
+    occurred_at: "2026-05-16T09:35:00Z",
+    note: null,
+    created_at: "2026-05-16T09:35:00Z",
+  },
+];
+
 function renderAt(treatmentId: string, { isPrivacyMode = false }: { isPrivacyMode?: boolean } = {}) {
   // TreatmentDetailPage reads isPrivacyMode via useOutletContext, so it must
   // be rendered as a nested route under a parent that supplies the context.
@@ -159,6 +174,7 @@ function renderAt(treatmentId: string, { isPrivacyMode = false }: { isPrivacyMod
 
 beforeEach(() => {
   vi.spyOn(treatmentsApi, "listPatientCheckIns").mockResolvedValue({ items: [] });
+  vi.spyOn(treatmentsApi, "listAdherenceEvents").mockResolvedValue({ items: [] });
 });
 
 afterEach(() => {
@@ -346,11 +362,64 @@ describe("TreatmentDetailPage", () => {
     expect(screen.getByText("Monitor INR closely.")).toBeTruthy();
     expect(screen.getByText("Reminder 1")).toBeTruthy();
     expect(screen.getAllByText("Lisinopril").length).toBeGreaterThan(0);
-    expect(screen.getByText(/planned relative schedule/i)).toBeTruthy();
+    expect(screen.getByText(/planned relative schedule with recorded adherence state/i)).toBeTruthy();
     expect(screen.getByText("Day 1, 01:00")).toBeTruthy();
     expect(screen.getByText("Planned Day 1 · +1h")).toBeTruthy();
     expect(screen.getByText("Day 1, 20:00")).toBeTruthy();
     expect(screen.getByText("Day 1, 21:00")).toBeTruthy();
+  });
+
+  it("shows adherence status beside matching schedule reminders", async () => {
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(SAMPLE);
+    vi.spyOn(treatmentsApi, "getAnalysis").mockResolvedValue(COMPLETED_ANALYSIS);
+    vi.spyOn(treatmentsApi, "listAdherenceEvents").mockResolvedValue({
+      items: SAMPLE_ADHERENCE_EVENTS,
+    });
+    const user = userEvent.setup();
+
+    renderAt(SAMPLE.treatment.id);
+
+    await screen.findByText("Eleanor Vance");
+    await user.click(screen.getByRole("tab", { name: /reasoning/i }));
+
+    expect((await screen.findAllByText("Taken")).length).toBeGreaterThan(0);
+    expect(screen.getByText(/recorded by patient/i)).toBeTruthy();
+  });
+
+  it("lets the pharmacist hold a schedule reminder", async () => {
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(SAMPLE);
+    vi.spyOn(treatmentsApi, "getAnalysis").mockResolvedValue(COMPLETED_ANALYSIS);
+    vi.spyOn(treatmentsApi, "listAdherenceEvents").mockResolvedValue({ items: [] });
+    const create = vi.spyOn(treatmentsApi, "createAdherenceEvent").mockResolvedValue({
+      id: "adherence-created",
+      treatment_id: SAMPLE.treatment.id,
+      medication_id: SAMPLE.medications[0].id,
+      status: "held",
+      source: "pharmacist",
+      scheduled_for: "2026-05-16T09:30:00.000Z",
+      occurred_at: "2026-05-18T10:00:00.000Z",
+      note: null,
+      created_at: "2026-05-18T10:00:00Z",
+    });
+    const user = userEvent.setup();
+
+    renderAt(SAMPLE.treatment.id);
+
+    await screen.findByText("Eleanor Vance");
+    await user.click(screen.getByRole("tab", { name: /reasoning/i }));
+    expect(screen.queryByRole("button", { name: /mark taken/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /mark missed/i })).toBeNull();
+    await user.click((await screen.findAllByRole("button", { name: /hold dose/i }))[0]);
+
+    expect(create).toHaveBeenCalledWith(SAMPLE.treatment.id, {
+      medication_id: SAMPLE.medications[0].id,
+      status: "held",
+      source: "pharmacist",
+      scheduled_for: "2026-05-16T09:30:00.000Z",
+      occurred_at: expect.any(String),
+      note: null,
+    });
+    expect((await screen.findAllByText("Held")).length).toBeGreaterThan(0);
   });
 
   it("lets the pharmacist confirm a forced re-run after an analysis exists", async () => {

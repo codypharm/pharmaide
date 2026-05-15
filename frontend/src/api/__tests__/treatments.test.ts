@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  createAdherenceEvent,
   createPatientCheckIn,
   getAnalysis,
+  listAdherenceEvents,
   listPatientCheckIns,
   listTreatments,
   triggerAnalysis,
@@ -158,6 +160,73 @@ describe("patient check-ins", () => {
       source: "pharmacist",
     });
     expect(result.message).toBe("Dizziness after dose");
+  });
+});
+
+describe("adherence events", () => {
+  it("lists adherence events for a treatment", async () => {
+    const spy = mockFetch({
+      status: 200,
+      body: {
+        items: [
+          {
+            id: "e1",
+            treatment_id: "t1",
+            medication_id: "m1",
+            status: "taken",
+            source: "patient",
+            scheduled_for: "2026-05-18T08:00:00Z",
+            occurred_at: "2026-05-18T10:00:00Z",
+            note: null,
+            created_at: "2026-05-18T10:00:00Z",
+          },
+        ],
+      },
+    });
+
+    const result = await listAdherenceEvents("t1");
+
+    const calledUrl = spy.mock.calls[0]?.[0] as string;
+    expect(calledUrl).toMatch(/\/treatments\/t1\/adherence-events$/);
+    expect(result.items[0].status).toBe("taken");
+  });
+
+  it("creates an adherence event for a treatment", async () => {
+    const spy = mockFetch({
+      status: 201,
+      body: {
+        id: "e1",
+        treatment_id: "t1",
+        medication_id: "m1",
+        status: "held",
+        source: "pharmacist",
+        scheduled_for: "2026-05-18T08:00:00Z",
+        occurred_at: null,
+        note: null,
+        created_at: "2026-05-18T10:00:00Z",
+      },
+    });
+
+    const result = await createAdherenceEvent("t1", {
+      medication_id: "m1",
+      status: "held",
+      source: "pharmacist",
+      scheduled_for: "2026-05-18T08:00:00Z",
+      occurred_at: null,
+      note: null,
+    });
+
+    const calledUrl = spy.mock.calls[0]?.[0] as string;
+    const init = spy.mock.calls[0]?.[1] as RequestInit;
+    expect(calledUrl).toMatch(/\/treatments\/t1\/adherence-events$/);
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      medication_id: "m1",
+      status: "held",
+      source: "pharmacist",
+      scheduled_for: "2026-05-18T08:00:00Z",
+    });
+    expect(result.status).toBe("held");
   });
 });
 

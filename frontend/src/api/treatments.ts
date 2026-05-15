@@ -125,6 +125,44 @@ export function listPatientCheckIns(treatmentId: string): Promise<PatientCheckIn
   return getJson<PatientCheckInList>(`/treatments/${treatmentId}/check-ins`);
 }
 
+// POST/GET /treatments/:id/adherence-events — structured dose/reminder state.
+
+export type AdherenceEventStatus = "taken" | "missed" | "held" | "skipped";
+export type AdherenceEventSource = "patient" | "pharmacist" | "system";
+
+export type AdherenceEventCreate = {
+  medication_id: string;
+  status: AdherenceEventStatus;
+  source: AdherenceEventSource;
+  scheduled_for: string | null;
+  occurred_at: string | null;
+  note: string | null;
+};
+
+export type AdherenceEventView = AdherenceEventCreate & {
+  id: string;
+  treatment_id: string;
+  created_at: string;
+};
+
+export type AdherenceEventList = {
+  items: AdherenceEventView[];
+};
+
+export function createAdherenceEvent(
+  treatmentId: string,
+  payload: AdherenceEventCreate,
+): Promise<AdherenceEventView> {
+  return postJson<AdherenceEventCreate, AdherenceEventView>(
+    `/treatments/${treatmentId}/adherence-events`,
+    payload,
+  );
+}
+
+export function listAdherenceEvents(treatmentId: string): Promise<AdherenceEventList> {
+  return getJson<AdherenceEventList>(`/treatments/${treatmentId}/adherence-events`);
+}
+
 // GET /treatments — paginated list. Mirrors backend TreatmentList.
 
 export type TreatmentListItem = {

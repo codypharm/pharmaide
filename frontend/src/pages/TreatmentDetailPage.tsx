@@ -9,6 +9,7 @@ import {
   AlertCircle,
   Brain,
   MessageSquare,
+  PauseCircle,
   Play,
   Send,
   ShieldCheck,
@@ -16,10 +17,14 @@ import {
 
 import { ApiError, NotFoundError } from "../api/client";
 import {
-  getTreatment,
+  createAdherenceEvent,
   createPatientCheckIn,
+  getTreatment,
+  listAdherenceEvents,
   listPatientCheckIns,
   triggerAnalysis,
+  type AdherenceEventStatus,
+  type AdherenceEventView,
   type AnalysisResult,
   type ClinicalSafetyReview,
   type DDIWarning,
@@ -102,7 +107,7 @@ export default function TreatmentDetailPage() {
                 />
               </>
             ) : (
-              <ReasoningTab treatmentId={state.data.treatment.id} />
+              <ReasoningTab treatment={state.data.treatment} />
             )}
           </>
         )}
@@ -444,11 +449,38 @@ function ErrorCard({ requestId }: { requestId: string | null }) {
   );
 }
 
-function ReasoningTab({ treatmentId }: { treatmentId: string }) {
+type AdherenceState =
+  | { kind: "loading"; items: AdherenceEventView[] }
+  | { kind: "ok"; items: AdherenceEventView[] }
+  | { kind: "error"; items: AdherenceEventView[] };
+
+function ReasoningTab({ treatment }: { treatment: TreatmentDetail["treatment"] }) {
+  const treatmentId = treatment.id;
   const analysis = useAnalysisStatus(treatmentId);
+  const [adherenceState, setAdherenceState] = useState<AdherenceState>({
+    kind: "loading",
+    items: [],
+  });
   const [isStarting, setIsStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [isConfirmingRerun, setIsConfirmingRerun] = useState(false);
+  const [recordingKey, setRecordingKey] = useState<string | null>(null);
+  const [recordError, setRecordError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setAdherenceState({ kind: "loading", items: [] });
+    listAdherenceEvents(treatmentId)
+      .then((result) => {
+        if (!cancelled) setAdherenceState({ kind: "ok", items: result.items });
+      })
+      .catch(() => {
+        if (!cancelled) setAdherenceState({ kind: "error", items: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [treatmentId]);
 
   async function handleStartAnalysis(force = false): Promise<void> {
     setIsStarting(true);
@@ -465,6 +497,39 @@ function ReasoningTab({ treatmentId }: { treatmentId: string }) {
       setStartError("Could not start analysis.");
     } finally {
       setIsStarting(false);
+    }
+  }
+
+  async function handleRecordAdherence(
+    reminder: ReminderSlot,
+    status: AdherenceEventStatus,
+  ): Promise<void> {
+    // The graph emits relative reminder offsets, but adherence events are persisted
+    // against absolute instants so they can be audited and compared later.
+    const scheduledFor = scheduledForIso(treatment.treatment_start_at, reminder.offset_from_start);
+    const key = adherenceKey(reminder.medication_id, scheduledFor);
+    setRecordingKey(key);
+    setRecordError(null);
+    try {
+      const created = await createAdherenceEvent(treatmentId, {
+        medication_id: reminder.medication_id,
+        status,
+        source: "pharmacist",
+        scheduled_for: scheduledFor,
+        occurred_at: new Date().toISOString(),
+        note: null,
+      });
+      setAdherenceState((current) => ({
+        kind: "ok",
+        items: [created, ...current.items],
+      }));
+    } catch (err) {
+      const requestId = err instanceof ApiError ? err.requestId : null;
+      setRecordError(
+        `Could not record adherence action. Reference ID: ${requestId ?? "unknown"}`,
+      );
+    } finally {
+      setRecordingKey(null);
     }
   }
 
@@ -523,7 +588,14 @@ function ReasoningTab({ treatmentId }: { treatmentId: string }) {
       />
       {startError && <p className="mt-3 text-sm text-red-700">{startError}</p>}
       {analysis.data.result ? (
-        <AnalysisResultView result={analysis.data.result} />
+        <AnalysisResultView
+          result={analysis.data.result}
+          adherenceState={adherenceState}
+          recordError={recordError}
+          recordingKey={recordingKey}
+          treatmentStartAt={treatment.treatment_start_at}
+          onRecordAdherence={(reminder, status) => void handleRecordAdherence(reminder, status)}
+        />
       ) : isActiveAnalysis ? (
         <ActiveAnalysisNotice status={analysis.data.status} />
       ) : (
@@ -613,7 +685,21 @@ function AnalysisStatusHeader({
   );
 }
 
-function AnalysisResultView({ result }: { result: AnalysisResult }) {
+function AnalysisResultView({
+  result,
+  adherenceState,
+  recordError,
+  recordingKey,
+  treatmentStartAt,
+  onRecordAdherence,
+}: {
+  result: AnalysisResult;
+  adherenceState: AdherenceState;
+  recordError: string | null;
+  recordingKey: string | null;
+  treatmentStartAt: string | null;
+  onRecordAdherence: (reminder: ReminderSlot, status: AdherenceEventStatus) => void;
+}) {
   return (
     <div className="mt-6 space-y-6">
       <ClinicalSummary result={result} />
@@ -624,6 +710,11 @@ function AnalysisResultView({ result }: { result: AnalysisResult }) {
       <SchedulePreview
         groundings={result.groundings}
         reminders={result.schedule?.reminders ?? []}
+        adherenceState={adherenceState}
+        recordError={recordError}
+        recordingKey={recordingKey}
+        treatmentStartAt={treatmentStartAt}
+        onRecordAdherence={onRecordAdherence}
       />
     </div>
   );
@@ -804,47 +895,141 @@ function InteractionsList({ warnings }: { warnings: DDIWarning[] }) {
 function SchedulePreview({
   groundings,
   reminders,
+  adherenceState,
+  recordError,
+  recordingKey,
+  treatmentStartAt,
+  onRecordAdherence,
 }: {
   groundings: MedicationGrounding[];
   reminders: ReminderSlot[];
+  adherenceState: AdherenceState;
+  recordError: string | null;
+  recordingKey: string | null;
+  treatmentStartAt: string | null;
+  onRecordAdherence: (reminder: ReminderSlot, status: AdherenceEventStatus) => void;
 }) {
   const medicationNames = new Map(
     groundings.map((grounding) => [grounding.medication_id, grounding.medication_name]),
   );
+  const adherenceByReminder = latestAdherenceByReminder(adherenceState.items);
+
   return (
     <div className="border-t border-slate-200 pt-5">
       <SubsectionTitle>Schedule Preview</SubsectionTitle>
       {reminders.length > 0 && (
-        <p className="mt-2 text-xs font-semibold text-slate-500">
-          Planned relative schedule. Adherence state is not tracked here.
-        </p>
+        <div className="mt-2 space-y-1 text-xs font-semibold text-slate-500">
+          <p>Planned relative schedule with recorded adherence state.</p>
+          {adherenceState.kind === "loading" && <p>Loading adherence state…</p>}
+          {adherenceState.kind === "error" && (
+            <p className="text-amber-700">Could not load adherence state.</p>
+          )}
+          {recordError && <p className="text-red-700">{recordError}</p>}
+        </div>
       )}
       {reminders.length > 0 ? (
-        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          {reminders.map((reminder, index) => (
-            <div
-              key={`${reminder.medication_id}-${reminder.offset_from_start}`}
-              className="border border-slate-200 bg-slate-50 px-3 py-2 tabular-nums"
-            >
-              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Reminder {index + 1}
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+          {reminders.map((reminder, index) => {
+            const scheduledFor = scheduledForIso(treatmentStartAt, reminder.offset_from_start);
+            const key = adherenceKey(reminder.medication_id, scheduledFor);
+            const event = adherenceByReminder.get(key);
+            const isRecording = recordingKey === key;
+
+            return (
+              <div
+                key={`${reminder.medication_id}-${reminder.offset_from_start}`}
+                className="border border-slate-200 bg-slate-50 px-3 py-2 tabular-nums"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    Reminder {index + 1}
+                  </div>
+                  <AdherenceStatusChip event={event} />
+                </div>
+                <div className="mt-1 text-sm font-bold text-slate-900">
+                  {medicationNames.get(reminder.medication_id) ?? "Medication"}
+                </div>
+                <div className="mt-1 text-sm font-bold text-slate-900">
+                  {reminder.human_label}
+                </div>
+                <div className="mt-1 flex items-center gap-1 text-xs text-slate-500">
+                  <span>{formatReminderTiming(reminder.offset_from_start)}</span>
+                </div>
+                {event && (
+                  <p className="mt-2 text-xs font-semibold text-slate-500">
+                    Recorded by {sourceLabel(event.source)}
+                  </p>
+                )}
+                <div className="mt-3">
+                  <AdherenceActionButton
+                    ariaLabel="Hold dose"
+                    label="Hold dose"
+                    isDisabled={event?.status === "held"}
+                    isBusy={isRecording}
+                    onClick={() => onRecordAdherence(reminder, "held")}
+                  />
+                </div>
               </div>
-              <div className="mt-1 text-sm font-bold text-slate-900">
-                {medicationNames.get(reminder.medication_id) ?? "Medication"}
-              </div>
-              <div className="mt-1 text-sm font-bold text-slate-900">
-                {reminder.human_label}
-              </div>
-              <div className="mt-1 flex items-center gap-1 text-xs text-slate-500">
-                <span>{formatReminderTiming(reminder.offset_from_start)}</span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <EmptyAnalysisText>No schedule reminders were generated.</EmptyAnalysisText>
       )}
     </div>
+  );
+}
+
+function AdherenceStatusChip({ event }: { event: AdherenceEventView | undefined }) {
+  if (!event) {
+    return (
+      <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+        Planned
+      </span>
+    );
+  }
+
+  const styles: Record<AdherenceEventStatus, string> = {
+    taken: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    missed: "border-red-200 bg-red-50 text-red-700",
+    held: "border-amber-200 bg-amber-50 text-amber-800",
+    skipped: "border-slate-200 bg-white text-slate-600",
+  };
+
+  return (
+    <span
+      className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${styles[event.status as AdherenceEventStatus]}`}
+    >
+      {adherenceStatusLabel(event.status)}
+    </span>
+  );
+}
+
+function AdherenceActionButton({
+  ariaLabel,
+  label,
+  isDisabled,
+  isBusy,
+  onClick,
+}: {
+  ariaLabel: string;
+  label: string;
+  isDisabled: boolean;
+  isBusy: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={ariaLabel}
+      title={ariaLabel}
+      disabled={isBusy || isDisabled}
+      onClick={onClick}
+      className="inline-flex min-h-9 w-full cursor-pointer items-center justify-center gap-1 rounded-md border border-amber-200 bg-white px-3 text-[11px] font-bold text-amber-900 hover:border-amber-300 hover:bg-amber-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+    >
+      {isBusy ? <Loader2 size={13} className="animate-spin" /> : <PauseCircle size={13} />}
+      <span>{label}</span>
+    </button>
   );
 }
 
@@ -859,17 +1044,9 @@ function sourceTypeLabel(sourceType: KBCitation["source_type"]): string {
 }
 
 function formatReminderTiming(offset: string): string {
-  const match = offset.match(
-    /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?$/,
-  );
-  if (!match) return offset;
+  const totalSeconds = durationToSeconds(offset);
+  if (totalSeconds === null) return offset;
 
-  const [, days, hours, minutes, seconds] = match;
-  const totalSeconds =
-    Number(days ?? 0) * 86_400 +
-    Number(hours ?? 0) * 3_600 +
-    Number(minutes ?? 0) * 60 +
-    Number(seconds ?? 0);
   const plannedDay = Math.floor(totalSeconds / 86_400) + 1;
   const secondsWithinDay = totalSeconds % 86_400;
   const timeParts = [
@@ -884,6 +1061,64 @@ function formatReminderTiming(offset: string): string {
   const relativeTime = timeParts.length > 0 ? `+${timeParts.join(" ")}` : "at start";
 
   return `Planned Day ${plannedDay} · ${relativeTime}`;
+}
+
+function durationToSeconds(offset: string): number | null {
+  const match = offset.match(
+    /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?$/,
+  );
+  if (!match) return null;
+
+  const [, days, hours, minutes, seconds] = match;
+  return (
+    Number(days ?? 0) * 86_400 +
+    Number(hours ?? 0) * 3_600 +
+    Number(minutes ?? 0) * 60 +
+    Number(seconds ?? 0)
+  );
+}
+
+function scheduledForIso(treatmentStartAt: string | null, offset: string): string | null {
+  if (!treatmentStartAt) return null;
+  const start = new Date(treatmentStartAt);
+  const offsetSeconds = durationToSeconds(offset);
+  if (Number.isNaN(start.getTime()) || offsetSeconds === null) return null;
+  return new Date(start.getTime() + offsetSeconds * 1000).toISOString();
+}
+
+function latestAdherenceByReminder(events: AdherenceEventView[]): Map<string, AdherenceEventView> {
+  const latest = new Map<string, AdherenceEventView>();
+  for (const event of events) {
+    // The API returns newest first; keep the first event for each scheduled dose.
+    const key = adherenceKey(event.medication_id, normaliseEventTime(event.scheduled_for));
+    if (!latest.has(key)) latest.set(key, event);
+  }
+  return latest;
+}
+
+function adherenceKey(medicationId: string, scheduledFor: string | null): string {
+  return `${medicationId}:${normaliseEventTime(scheduledFor) ?? "unscheduled"}`;
+}
+
+function normaliseEventTime(value: string | null): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toISOString();
+}
+
+function adherenceStatusLabel(status: string): string {
+  switch (status) {
+    case "taken":
+      return "Taken";
+    case "missed":
+      return "Missed";
+    case "held":
+      return "Held";
+    case "skipped":
+      return "Skipped";
+    default:
+      return status;
+  }
 }
 
 function toOptionalIso(value: string): string | null {
