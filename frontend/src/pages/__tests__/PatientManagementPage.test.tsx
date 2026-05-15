@@ -134,8 +134,10 @@ describe("PatientManagementPage", () => {
     expect(screen.getAllByText(/PHA-AB12/).length).toBeGreaterThan(0);
     expect(screen.getByText("2 treatments")).toBeTruthy();
     expect(screen.getByText(/First listed medication: Lisinopril/)).toBeTruthy();
-    expect(screen.getAllByText("Lisinopril").length).toBeGreaterThan(0);
+    expect(screen.getByText("Lisinopril + 1 more")).toBeTruthy();
+    expect(screen.getAllByText("Monitor dizziness").length).toBeGreaterThan(0);
     expect(screen.getByText("Metformin")).toBeTruthy();
+    expect(screen.getByText("Monitor glucose")).toBeTruthy();
     expect(await screen.findByText("I feel dizzy today.")).toBeTruthy();
   });
 
