@@ -135,6 +135,19 @@ export async function deleteJson<TResponse = null>(
   return parseJsonResponse<TResponse>(response);
 }
 
+export async function patchJson<TRequest, TResponse>(
+  path: string,
+  body: TRequest,
+  options: RequestOptions = {},
+): Promise<TResponse> {
+  const response = await fetch(`${baseUrl()}${path}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options.headers },
+    body: JSON.stringify(body),
+  });
+  return parseJsonResponse<TResponse>(response);
+}
+
 async function parseJsonResponse<TResponse>(response: Response): Promise<TResponse> {
   const requestId = response.headers.get("X-Request-ID");
   const text = await response.text();
