@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createAdherenceEvent,
   createPatientCheckIn,
+  draftPatientReply,
   getAnalysis,
   listAdherenceEvents,
   listConversationMessages,
@@ -260,6 +261,75 @@ describe("conversation messages", () => {
     expect(calledUrl).toContain("limit=25");
     expect(calledUrl).toContain("offset=50");
     expect(result.items[0].body).toBe("I feel dizzy after taking it.");
+  });
+
+  it("generates a patient reply draft for a treatment", async () => {
+    const spy = mockFetch({
+      status: 201,
+      body: {
+        inbound_message: {
+          id: "msg-in",
+          treatment_id: "t1",
+          direction: "inbound",
+          sender_type: "patient",
+          channel: "whatsapp",
+          status: "received",
+          body: "I feel dizzy.",
+          safety_hold_reason: null,
+          external_message_id: null,
+          created_at: "2026-05-18T10:00:00Z",
+        },
+        assistant_message: {
+          id: "msg-out",
+          treatment_id: "t1",
+          direction: "outbound",
+          sender_type: "assistant",
+          channel: "whatsapp",
+          status: "held_for_review",
+          body: "Please stop taking it.",
+          safety_hold_reason: "referee",
+          external_message_id: null,
+          created_at: "2026-05-18T10:00:01Z",
+        },
+        safety_decision: {
+          status: "hold_for_pharmacist",
+          message_to_send: null,
+          hold_reason: "referee",
+          review: {
+            input_guard: {
+              stage: "input",
+              action: "allow",
+              categories: [],
+              confidence: 0.9,
+              rationale: "Allowed.",
+            },
+            referee: {
+              action: "block",
+              violation_type: "dosage_change",
+              confidence: 0.95,
+              rationale: "Draft changed dose.",
+            },
+            output_guard: {
+              stage: "output",
+              action: "block",
+              categories: ["medical_safety"],
+              confidence: 0.9,
+              rationale: "Blocked.",
+            },
+            allowed_to_send: false,
+          },
+        },
+      },
+    });
+
+    const result = await draftPatientReply("t1", { patient_message: "I feel dizzy." });
+
+    const calledUrl = spy.mock.calls[0]?.[0] as string;
+    const init = spy.mock.calls[0]?.[1] as RequestInit;
+    expect(calledUrl).toMatch(/\/treatments\/t1\/patient-reply-drafts$/);
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(String(init.body))).toEqual({ patient_message: "I feel dizzy." });
+    expect(result.assistant_message.status).toBe("held_for_review");
   });
 });
 

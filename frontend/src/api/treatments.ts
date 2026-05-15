@@ -187,9 +187,29 @@ export type ConversationMessageList = {
   items: ConversationMessageView[];
 };
 
+export type PatientDraftSafetyStatus = "send" | "hold_for_pharmacist";
+export type PatientDraftHoldReason = "input_guard" | "referee" | "output_guard";
+
+export type PatientDraftSafetyDecision = {
+  status: PatientDraftSafetyStatus;
+  message_to_send: string | null;
+  hold_reason: PatientDraftHoldReason | null;
+  review?: unknown;
+};
+
+export type ConversationTurnView = {
+  inbound_message: ConversationMessageView;
+  assistant_message: ConversationMessageView;
+  safety_decision: PatientDraftSafetyDecision;
+};
+
 export type ListConversationMessagesParams = {
   limit?: number;
   offset?: number;
+};
+
+export type PatientReplyDraftCreate = {
+  patient_message: string;
 };
 
 export function listConversationMessages(
@@ -202,6 +222,16 @@ export function listConversationMessages(
   const qs = query.toString();
   return getJson<ConversationMessageList>(
     `/treatments/${treatmentId}/conversation-messages${qs ? `?${qs}` : ""}`,
+  );
+}
+
+export function draftPatientReply(
+  treatmentId: string,
+  payload: PatientReplyDraftCreate,
+): Promise<ConversationTurnView> {
+  return postJson<PatientReplyDraftCreate, ConversationTurnView>(
+    `/treatments/${treatmentId}/patient-reply-drafts`,
+    payload,
   );
 }
 
