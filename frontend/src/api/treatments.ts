@@ -163,7 +163,7 @@ export type AnalysisResult = {
   ddi_warnings: DDIWarning[];
   schedule: Schedule | null;
   kb_citations: KBCitation[];
-  clinical_safety_review: ClinicalSafetyReview | null;
+  clinical_safety_review?: ClinicalSafetyReview | null;
   reasoning: ClinicalReasoning | null;
   degraded: boolean;
   partial_results: boolean;

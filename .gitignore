@@ -10,5 +10,5 @@ node_modules
 dist
 .vite
 .env
-SPRINT_3_PLAN.md
+SPRINT_4_CARRYOVER.md
 backend/data/kb_uploads/*

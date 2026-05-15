@@ -472,9 +472,9 @@ function SourcesList({ citations }: { citations: KBCitation[] }) {
 function ClinicalSafetyReviewPanel({
   review,
 }: {
-  review: ClinicalSafetyReview | null;
+  review: ClinicalSafetyReview | null | undefined;
 }) {
-  if (review === null) return null;
+  if (!review) return null;
 
   return (
     <div className="border-t border-slate-200 pt-5">

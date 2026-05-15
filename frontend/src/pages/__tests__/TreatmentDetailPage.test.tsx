@@ -319,6 +319,25 @@ describe("TreatmentDetailPage", () => {
     expect(screen.queryByText("AI Safety Review")).toBeNull();
   });
 
+  it("does not crash when older analysis results omit the AI safety review", async () => {
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(SAMPLE);
+    vi.spyOn(treatmentsApi, "getAnalysis").mockResolvedValue({
+      ...COMPLETED_ANALYSIS,
+      result: COMPLETED_ANALYSIS.result
+        ? { ...COMPLETED_ANALYSIS.result, clinical_safety_review: undefined }
+        : null,
+    });
+    const user = userEvent.setup();
+
+    renderAt(SAMPLE.treatment.id);
+
+    await screen.findByText("Eleanor Vance");
+    await user.click(screen.getByRole("tab", { name: /reasoning/i }));
+
+    await screen.findByText("Patient should be monitored for cough and dizziness.");
+    expect(screen.queryByText("AI Safety Review")).toBeNull();
+  });
+
   it("does not show re-run while analysis is still running", async () => {
     vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(SAMPLE);
     vi.spyOn(treatmentsApi, "getAnalysis").mockResolvedValue(RUNNING_ANALYSIS);
