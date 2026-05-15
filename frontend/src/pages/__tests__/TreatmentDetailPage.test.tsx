@@ -386,6 +386,22 @@ describe("TreatmentDetailPage", () => {
     expect(screen.getByText(/recorded by patient/i)).toBeTruthy();
   });
 
+  it("keeps schedule usable when adherence history cannot be loaded", async () => {
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(SAMPLE);
+    vi.spyOn(treatmentsApi, "getAnalysis").mockResolvedValue(COMPLETED_ANALYSIS);
+    vi.spyOn(treatmentsApi, "listAdherenceEvents").mockRejectedValue(new Error("unavailable"));
+    const user = userEvent.setup();
+
+    renderAt(SAMPLE.treatment.id);
+
+    await screen.findByText("Eleanor Vance");
+    await user.click(screen.getByRole("tab", { name: /reasoning/i }));
+
+    expect(await screen.findByText("Reminder 1")).toBeTruthy();
+    expect(screen.queryByText(/could not load adherence state/i)).toBeNull();
+    expect(screen.getAllByText("Planned").length).toBeGreaterThan(0);
+  });
+
   it("lets the pharmacist hold a schedule reminder", async () => {
     vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(SAMPLE);
     vi.spyOn(treatmentsApi, "getAnalysis").mockResolvedValue(COMPLETED_ANALYSIS);

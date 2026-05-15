@@ -78,6 +78,29 @@ export default function NewTreatmentPage() {
   );
   const currentPatientAllergies = appendPatientAllergies(patientAllergies, allergyDraft);
 
+  const resetDraft = () => {
+    setMethod("structured");
+    setMedications([
+      { id: crypto.randomUUID(), name: "", dosage: "", frequency: "", duration: "" },
+    ]);
+    setPatientName("");
+    setPatientDob("");
+    setPatientMrn("");
+    setPatientPhone("");
+    setPatientAllergies([]);
+    setAllergyDraft("");
+    setClinicalObjective("");
+    setTreatmentStartAt("");
+    setFieldErrors({});
+    setShowConfirm(false);
+    setDragActive(false);
+    setVisionFile(null);
+    setExtractionError(null);
+    setExtractionWarnings([]);
+    setExtractedFields(new Set());
+    setLowConfidenceFields(new Set());
+  };
+
   const addMedication = () => {
     const newMed: Medication = {
       id: crypto.randomUUID(),
@@ -240,18 +263,7 @@ export default function NewTreatmentPage() {
         },
       });
       // Reset form so the pharmacist can register the next patient.
-      setPatientName("");
-      setPatientDob("");
-      setPatientMrn("");
-      setPatientPhone("");
-      setPatientAllergies([]);
-      setAllergyDraft("");
-      setClinicalObjective("");
-      setTreatmentStartAt("");
-      setMedications([
-        { id: crypto.randomUUID(), name: "", dosage: "", frequency: "", duration: "" },
-      ]);
-      setExtractionWarnings([]);
+      resetDraft();
     } catch (err) {
       if (err instanceof ConflictError) {
         setFieldErrors({ mrn: "This MRN already exists. Please verify or use a different identifier." });
@@ -305,7 +317,8 @@ export default function NewTreatmentPage() {
             </div>
           </div>
           <button
-            onClick={() => navigate(-1)}
+            type="button"
+            onClick={resetDraft}
             className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-colors shadow-sm flex items-center gap-2 cursor-pointer"
           >
             <X size={16} />

@@ -475,7 +475,7 @@ function ReasoningTab({ treatment }: { treatment: TreatmentDetail["treatment"] }
         if (!cancelled) setAdherenceState({ kind: "ok", items: result.items });
       })
       .catch(() => {
-        if (!cancelled) setAdherenceState({ kind: "error", items: [] });
+        if (!cancelled) setAdherenceState({ kind: "ok", items: [] });
       });
     return () => {
       cancelled = true;

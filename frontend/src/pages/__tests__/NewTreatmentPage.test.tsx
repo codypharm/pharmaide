@@ -29,6 +29,21 @@ function renderPage() {
   );
 }
 
+function renderPageWithBackStack() {
+  return render(
+    <MemoryRouter
+      initialEntries={["/dashboard/ingestions", "/dashboard/new-treatment"]}
+      initialIndex={1}
+    >
+      <Routes>
+        <Route path="/dashboard/ingestions" element={<div>Ingestions list</div>} />
+        <Route path="/dashboard/new-treatment" element={<NewTreatmentPage />} />
+        <Route path="/dashboard/treatments/:id" element={<div>Treatment detail</div>} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 async function submitValidTreatment({
   allergies = "",
   treatmentStartAt = "",
@@ -311,6 +326,19 @@ describe("NewTreatmentPage", () => {
     await user.click(screen.getByRole("button", { name: /use form entry/i }));
 
     expect(screen.getByText(/manual regimen entry/i)).toBeInTheDocument();
+  });
+
+  it("clears the current draft without navigating away", async () => {
+    const user = userEvent.setup();
+    renderPageWithBackStack();
+
+    await user.type(screen.getByLabelText(/full name/i), "Eleanor Vance");
+    await user.type(screen.getByPlaceholderText(/e.g. amoxicillin/i), "Lisinopril");
+    await user.click(screen.getByRole("button", { name: /clear form/i }));
+
+    expect(screen.queryByText("Ingestions list")).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/full name/i)).toHaveValue("");
+    expect(screen.getByPlaceholderText(/e.g. amoxicillin/i)).toHaveValue("");
   });
 
   it("shows the server-created analysis id after creating a treatment", async () => {
