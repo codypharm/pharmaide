@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.safety_provider_factory import (
     ConfiguredSafetyProviders,
+    SafetyProviderMode,
     build_configured_safety_providers,
 )
 from app.agents.safety_sandwich import can_send_to_patient, run_safety_sandwich
@@ -31,10 +32,14 @@ async def review_patient_draft_safety(
     assistant_draft: str,
     prescription_context: str,
     openai_api_key: SecretStr | None = None,
+    safety_provider: SafetyProviderMode = "model",
     providers: ConfiguredSafetyProviders | None = None,
 ) -> PatientDraftSafetyDecision:
     """Run safety sandwich for a patient-facing draft and audit the result."""
-    configured = providers or build_configured_safety_providers(openai_api_key)
+    configured = providers or build_configured_safety_providers(
+        openai_api_key,
+        provider_mode=safety_provider,
+    )
     review = await run_safety_sandwich(
         treatment_id=treatment_id,
         patient_message=patient_message,

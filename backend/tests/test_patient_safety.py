@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from typing import Any
 from uuid import uuid4
 
+from pydantic import SecretStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -103,6 +104,25 @@ async def test_review_patient_draft_safety_fails_closed_without_configured_key(
     assert decision.review.output_guard.action == "block"
     assert audit is not None
     assert audit.payload["requires_pharmacist_review"] is True
+
+
+async def test_review_patient_draft_safety_fails_closed_when_provider_mode_unconfigured(
+    db_session: AsyncSession,
+) -> None:
+    decision = await review_patient_draft_safety(
+        db_session,
+        treatment_id=uuid4(),
+        patient_message="Can I take more medicine?",
+        assistant_draft="Draft should be held because safety mode is disabled.",
+        prescription_context="Lisinopril 10 mg once daily.",
+        openai_api_key=SecretStr("test-openai-key"),
+        safety_provider="unconfigured",
+    )
+
+    assert decision.status == "hold_for_pharmacist"
+    assert decision.message_to_send is None
+    assert decision.hold_reason == "input_guard"
+    assert decision.review.input_guard.action == "block"
 
 
 async def test_review_patient_draft_safety_reports_output_guard_hold_reason(

@@ -1,4 +1,5 @@
 import pytest
+from pydantic import ValidationError
 
 from app.config import Settings
 
@@ -10,6 +11,7 @@ def test_settings_defaults_match_env_example(monkeypatch: pytest.MonkeyPatch) ->
         "PHARMAIDE_CHECKPOINT_DB_PATH",
         "PHARMAIDE_RXNORM_BASE_URL",
         "PHARMAIDE_OPENAI_API_KEY",
+        "PHARMAIDE_SAFETY_PROVIDER",
         "PHARMAIDE_ANALYSIS_TIMEOUT_SECONDS",
         "PHARMAIDE_MAX_CONCURRENT_ANALYSES_PER_USER",
         "PHARMAIDE_KNOWLEDGE_UPLOAD_DIR",
@@ -25,6 +27,7 @@ def test_settings_defaults_match_env_example(monkeypatch: pytest.MonkeyPatch) ->
     assert settings.checkpoint_db_path == "./pharmaide.db"
     assert settings.rxnorm_base_url == "https://rxnav.nlm.nih.gov/REST"
     assert settings.openai_api_key is None
+    assert settings.safety_provider == "model"
     assert settings.analysis_timeout_seconds == 60
     assert settings.max_concurrent_analyses_per_user == 3
     assert settings.knowledge_upload_dir == "./data/kb_uploads"
@@ -38,6 +41,7 @@ def test_settings_reads_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PHARMAIDE_CHECKPOINT_DB_PATH", "/tmp/x.db")
     monkeypatch.setenv("PHARMAIDE_RXNORM_BASE_URL", "https://rxnav.test/REST")
     monkeypatch.setenv("PHARMAIDE_OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("PHARMAIDE_SAFETY_PROVIDER", "unconfigured")
     monkeypatch.setenv("PHARMAIDE_ANALYSIS_TIMEOUT_SECONDS", "12")
     monkeypatch.setenv("PHARMAIDE_MAX_CONCURRENT_ANALYSES_PER_USER", "5")
     monkeypatch.setenv("PHARMAIDE_KNOWLEDGE_UPLOAD_DIR", "/tmp/kb")
@@ -52,6 +56,7 @@ def test_settings_reads_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.rxnorm_base_url == "https://rxnav.test/REST"
     assert settings.openai_api_key is not None
     assert settings.openai_api_key.get_secret_value() == "sk-test"
+    assert settings.safety_provider == "unconfigured"
     assert settings.analysis_timeout_seconds == 12
     assert settings.max_concurrent_analyses_per_user == 5
     assert settings.knowledge_upload_dir == "/tmp/kb"
@@ -67,3 +72,10 @@ def test_settings_accepts_human_readable_knowledge_upload_size(
     settings = Settings(_env_file=None)
 
     assert settings.knowledge_max_upload_bytes == 25 * 1024 * 1024
+
+
+def test_settings_rejects_unknown_safety_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PHARMAIDE_SAFETY_PROVIDER", "llama_guard")
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)

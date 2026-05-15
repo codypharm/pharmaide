@@ -32,6 +32,10 @@ class Settings(BaseSettings):
 
     openai_api_key: SecretStr | None = None
 
+    # Explicit safety-provider mode. "model" is the current interim path using
+    # typed PydanticAI checks; "unconfigured" deliberately fails closed.
+    safety_provider: Literal["model", "unconfigured"] = "model"
+
     # Caps a single analysis run so a stuck graph cannot pin background
     # capacity indefinitely. Route-level test overrides use the same bounds.
     analysis_timeout_seconds: int = Field(default=60, gt=0, le=300)

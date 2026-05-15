@@ -7,6 +7,7 @@ configured.
 """
 
 from dataclasses import dataclass
+from typing import Literal
 
 from pydantic import SecretStr
 from pydantic_ai.models.openai import OpenAIResponsesModel
@@ -25,6 +26,8 @@ from app.agents.safety_providers import (
     UnconfiguredRefereeProvider,
 )
 
+SafetyProviderMode = Literal["model", "unconfigured"]
+
 
 @dataclass(frozen=True)
 class ConfiguredSafetyProviders:
@@ -36,9 +39,11 @@ class ConfiguredSafetyProviders:
 
 def build_configured_safety_providers(
     openai_api_key: SecretStr | None,
+    *,
+    provider_mode: SafetyProviderMode = "model",
 ) -> ConfiguredSafetyProviders:
-    """Build safety providers from PHARMAIDE_OPENAI_API_KEY."""
-    if openai_api_key is None:
+    """Build safety providers from explicit safety mode and OpenAI key."""
+    if provider_mode == "unconfigured" or openai_api_key is None:
         return ConfiguredSafetyProviders(
             guard_provider=UnconfiguredGuardProvider(),
             referee_provider=UnconfiguredRefereeProvider(),
