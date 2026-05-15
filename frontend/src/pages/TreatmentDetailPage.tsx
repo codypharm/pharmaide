@@ -592,7 +592,10 @@ function ReasoningTab({ treatment }: { treatment: TreatmentDetail["treatment"] }
       {startError && <p className="mt-3 text-sm text-red-700">{startError}</p>}
       {isActiveAnalysis && <ActiveAnalysisNotice status={analysis.data.status} />}
       {isShowingLastCompleted && (
-        <LastCompletedAnalysisNotice latestStatus={analysis.data.status} />
+        <LastCompletedAnalysisNotice
+          latestStatus={analysis.data.status}
+          errorText={analysis.data.error_text}
+        />
       )}
       {displayedAnalysis.result ? (
         <AnalysisResultView
@@ -634,16 +637,40 @@ function ActiveAnalysisNotice({ status }: { status: string }) {
   );
 }
 
-function LastCompletedAnalysisNotice({ latestStatus }: { latestStatus: string }) {
+function LastCompletedAnalysisNotice({
+  latestStatus,
+  errorText,
+}: {
+  latestStatus: string;
+  errorText: string | null;
+}) {
   return (
-    <div className="mt-6 border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-      <p className="font-bold">Showing last completed analysis</p>
-      <p className="mt-1">
-        Latest attempt status is {latestStatus}. The result below is the most recent completed
-        analysis.
-      </p>
+    <div className="mt-6 flex items-start gap-3 border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+      <AlertCircle size={18} className="mt-0.5 shrink-0" />
+      <div>
+        <p className="font-bold">Latest analysis attempt could not complete</p>
+        <p className="mt-1">
+          {analysisFailureLabel(errorText)}. Showing the most recent completed analysis below.
+        </p>
+        <p className="mt-1 text-xs font-semibold uppercase tracking-wider text-amber-800">
+          Latest attempt status: {latestStatus}
+        </p>
+      </div>
     </div>
   );
+}
+
+function analysisFailureLabel(errorText: string | null): string {
+  switch (errorText) {
+    case "analysis_timeout":
+      return "Analysis took too long";
+    case "analysis_rate_limited":
+      return "Analysis service is busy";
+    case "analysis_failed":
+      return "Analysis attempt failed";
+    default:
+      return "Analysis attempt could not complete";
+  }
 }
 
 function AnalysisStatusHeader({
@@ -679,7 +706,7 @@ function AnalysisStatusHeader({
               disabled={isStarting}
               className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
             >
-              Re-run
+              Run again
             </button>
           )}
         </div>
@@ -701,7 +728,7 @@ function AnalysisStatusHeader({
               disabled={isStarting}
               className="cursor-pointer rounded-md bg-slate-900 px-3 py-1.5 font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
             >
-              Confirm Re-run
+              Confirm Run Again
             </button>
           </div>
         </div>

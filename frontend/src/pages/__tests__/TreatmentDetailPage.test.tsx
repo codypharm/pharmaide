@@ -137,7 +137,7 @@ const FAILED_WITH_LAST_COMPLETED_ANALYSIS: TreatmentAnalysisRow = {
   id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
   status: "failed",
   result: null,
-  error_text: "analysis_failed",
+  error_text: "analysis_timeout",
   last_completed: COMPLETED_ANALYSIS,
 };
 
@@ -389,7 +389,9 @@ describe("TreatmentDetailPage", () => {
     await user.click(screen.getByRole("tab", { name: /reasoning/i }));
 
     expect(await screen.findByText("failed")).toBeTruthy();
-    expect(screen.getByText(/showing last completed analysis/i)).toBeTruthy();
+    expect(screen.getByText(/latest analysis attempt could not complete/i)).toBeTruthy();
+    expect(screen.getByText(/analysis took too long/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /run again/i })).toBeTruthy();
     expect(
       screen.getByText("Patient should be monitored for cough and dizziness."),
     ).toBeTruthy();
@@ -478,10 +480,10 @@ describe("TreatmentDetailPage", () => {
     await user.click(screen.getByRole("tab", { name: /reasoning/i }));
     await screen.findByText("Patient should be monitored for cough and dizziness.");
 
-    await user.click(screen.getByRole("button", { name: /^re-run$/i }));
+    await user.click(screen.getByRole("button", { name: /^run again$/i }));
     expect(screen.getByText(/replace the current analysis/i)).toBeTruthy();
 
-    await user.click(screen.getByRole("button", { name: /confirm re-run/i }));
+    await user.click(screen.getByRole("button", { name: /confirm run again/i }));
 
     expect(trigger).toHaveBeenCalledWith(SAMPLE.treatment.id, { force: true });
   });
@@ -536,6 +538,6 @@ describe("TreatmentDetailPage", () => {
 
     expect(await screen.findByText("running")).toBeTruthy();
     expect(screen.getByText(/analysis in progress/i)).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /^re-run$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^run again$/i })).toBeNull();
   });
 });
