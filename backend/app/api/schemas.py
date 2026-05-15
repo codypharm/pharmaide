@@ -198,6 +198,21 @@ class ConversationTurnView(BaseModel):
     safety_decision: PatientDraftSafetyDecision
 
 
+class ConversationTurnCreate(BaseModel):
+    patient_message: str = Field(min_length=1, max_length=4000)
+    assistant_draft: str = Field(min_length=1, max_length=4000)
+    prescription_context: str = Field(min_length=1, max_length=8000)
+
+    @field_validator("patient_message", "assistant_draft", "prescription_context")
+    @classmethod
+    def normalise_text(cls, value: str) -> str:
+        """Reject transport whitespace before safety review sees the turn."""
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("conversation text must not be blank")
+        return stripped
+
+
 class TreatmentAnalysisSnapshot(BaseModel):
     id: UUID
     treatment_id: UUID

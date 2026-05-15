@@ -17,6 +17,8 @@ from app.api.schemas import (
     AdherenceEventList,
     AdherenceEventView,
     AnalyzeTreatmentResponse,
+    ConversationTurnCreate,
+    ConversationTurnView,
     CreateTreatmentRequest,
     CreateTreatmentResponse,
     PatientCheckInCreate,
@@ -46,6 +48,12 @@ from app.services.analysis import (
     get_latest_analysis,
     get_latest_completed_analysis,
     mark_analysis_failed,
+)
+from app.services.conversation_messages import (
+    TreatmentNotFound as ConversationTreatmentNotFound,
+)
+from app.services.conversation_messages import (
+    submit_patient_conversation_turn,
 )
 from app.services.patient_checkins import (
     TreatmentNotFound as CheckInTreatmentNotFound,
@@ -193,6 +201,36 @@ async def get_adherence_events(
     try:
         return await list_adherence_events(session, treatment_id, limit=limit, offset=offset)
     except AdherenceTreatmentNotFound as exc:
+        raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
+
+
+@router.post(
+    "/treatments/{treatment_id}/conversation-turns",
+    status_code=201,
+    response_model=ConversationTurnView,
+)
+async def post_conversation_turn(
+    treatment_id: UUID,
+    body: ConversationTurnCreate,
+    session_factory: SessionFactoryDep,
+    settings: SettingsDep,
+) -> ConversationTurnView:
+    try:
+        async with session_factory() as session, session.begin():
+            return await submit_patient_conversation_turn(
+                session,
+                treatment_id=treatment_id,
+                patient_message=body.patient_message,
+                assistant_draft=body.assistant_draft,
+                prescription_context=body.prescription_context,
+                openai_api_key=settings.openai_api_key,
+                safety_provider=settings.safety_provider,
+                llama_guard_url=settings.llama_guard_url,
+                agentdog_url=settings.agentdog_url,
+                safety_provider_api_key=settings.safety_provider_api_key,
+                safety_provider_timeout_seconds=settings.safety_provider_timeout_seconds,
+            )
+    except ConversationTreatmentNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
 
 
