@@ -41,6 +41,26 @@ const TREATMENTS: TreatmentList = {
       medication_count: 2,
       first_medication_name: "Lisinopril",
     },
+    {
+      patient: {
+        id: "patient-1",
+        name: "Eleanor Vance",
+        dob: "1955-10-12",
+        mrn: "PHA-AB12",
+        phone: "+18005551212",
+        allergies: ["Sulfa"],
+      },
+      treatment: {
+        id: "33333333-3333-3333-3333-333333333333",
+        patient_id: "patient-1",
+        status: "active",
+        clinical_objective: "Monitor glucose",
+        treatment_start_at: "2026-05-17T08:30:00Z",
+        created_at: "2026-05-14T09:00:00Z",
+      },
+      medication_count: 1,
+      first_medication_name: "Metformin",
+    },
   ],
 };
 
@@ -111,9 +131,11 @@ describe("PatientManagementPage", () => {
     renderPage();
 
     await screen.findByText("Eleanor Vance");
-    expect(screen.getByText(/PHA-AB12/)).toBeTruthy();
+    expect(screen.getAllByText(/PHA-AB12/).length).toBeGreaterThan(0);
+    expect(screen.getByText("2 treatments")).toBeTruthy();
     expect(screen.getByText(/First listed medication: Lisinopril/)).toBeTruthy();
     expect(screen.getAllByText("Lisinopril").length).toBeGreaterThan(0);
+    expect(screen.getByText("Metformin")).toBeTruthy();
     expect(await screen.findByText("I feel dizzy today.")).toBeTruthy();
   });
 

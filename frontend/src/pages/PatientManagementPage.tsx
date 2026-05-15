@@ -40,6 +40,11 @@ type ConversationState =
   | { kind: "ok"; items: ConversationMessageView[] }
   | { kind: "error"; requestId: string | null };
 
+type PatientTreatmentGroup = {
+  patientId: string;
+  items: TreatmentListItem[];
+};
+
 const PAGE_SIZE = 50;
 
 function formatDateTime(iso: string): string {
@@ -71,6 +76,19 @@ function patientAge(dob: string): string {
 
 function statusLabel(status: string): string {
   return status.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function groupTreatmentsByPatient(items: TreatmentListItem[]): PatientTreatmentGroup[] {
+  const groups = new Map<string, PatientTreatmentGroup>();
+  for (const item of items) {
+    const group = groups.get(item.patient.id);
+    if (group) {
+      group.items.push(item);
+    } else {
+      groups.set(item.patient.id, { patientId: item.patient.id, items: [item] });
+    }
+  }
+  return Array.from(groups.values());
 }
 
 export default function PatientManagementPage() {
@@ -141,6 +159,11 @@ export default function PatientManagementPage() {
       );
     });
   }, [searchQuery, treatments]);
+
+  const groupedTreatments = useMemo(
+    () => groupTreatmentsByPatient(filteredTreatments),
+    [filteredTreatments],
+  );
 
   const selectedTreatment =
     treatments.find((item) => item.treatment.id === selectedTreatmentId) ?? null;
@@ -214,13 +237,13 @@ export default function PatientManagementPage() {
           {treatmentState.kind === "ok" && treatments.length === 0 && <DirectoryEmpty />}
           {treatmentState.kind === "ok" && treatments.length > 0 && (
             <div className="divide-y divide-slate-100">
-              {filteredTreatments.map((item) => (
-                <TreatmentRow
-                  key={item.treatment.id}
-                  item={item}
-                  isSelected={selectedTreatmentId === item.treatment.id}
+              {groupedTreatments.map((group) => (
+                <PatientTreatmentGroup
+                  key={group.patientId}
+                  group={group}
+                  selectedTreatmentId={selectedTreatmentId}
                   isPrivacyMode={isPrivacyMode}
-                  onSelect={() => setSelectedTreatmentId(item.treatment.id)}
+                  onSelectTreatment={setSelectedTreatmentId}
                 />
               ))}
               {filteredTreatments.length === 0 && (
@@ -260,6 +283,52 @@ export default function PatientManagementPage() {
         )}
       </main>
     </div>
+  );
+}
+
+function PatientTreatmentGroup({
+  group,
+  selectedTreatmentId,
+  isPrivacyMode,
+  onSelectTreatment,
+}: {
+  group: PatientTreatmentGroup;
+  selectedTreatmentId: string | null;
+  isPrivacyMode: boolean;
+  onSelectTreatment: (treatmentId: string) => void;
+}) {
+  const patient = group.items[0].patient;
+  const treatmentCountLabel = `${group.items.length} treatment${group.items.length === 1 ? "" : "s"}`;
+
+  return (
+    <section className="bg-white">
+      <div className="px-4 pt-4 pb-2 flex items-center gap-3">
+        <div className="h-9 w-9 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center text-xs font-black text-slate-500">
+          {initials(patient.name) || "P"}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-3">
+            <p className={`truncate text-sm font-bold ${isPrivacyMode ? "blur-sm" : "text-slate-900"}`}>
+              {patient.name}
+            </p>
+            <span className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-500">
+              {treatmentCountLabel}
+            </span>
+          </div>
+          <p className="mt-0.5 text-[10px] font-medium text-slate-400">MRN {patient.mrn}</p>
+        </div>
+      </div>
+      <div className="pb-2">
+        {group.items.map((item) => (
+          <TreatmentRow
+            key={item.treatment.id}
+            item={item}
+            isSelected={selectedTreatmentId === item.treatment.id}
+            onSelect={() => onSelectTreatment(item.treatment.id)}
+          />
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -303,20 +372,18 @@ function DirectoryEmpty() {
 function TreatmentRow({
   item,
   isSelected,
-  isPrivacyMode,
   onSelect,
 }: {
   item: TreatmentListItem;
   isSelected: boolean;
-  isPrivacyMode: boolean;
   onSelect: () => void;
 }) {
   return (
     <button
       type="button"
       onClick={onSelect}
-      className={`w-full p-4 flex flex-col gap-3 text-left cursor-pointer transition-all hover:bg-slate-50/80 ${
-        isSelected ? "bg-blue-50/50 border-r-2 border-blue-600" : ""
+      className={`mx-4 mt-2 w-[calc(100%-2rem)] rounded-lg border p-3 flex flex-col gap-2 text-left cursor-pointer transition-all hover:bg-slate-50/80 ${
+        isSelected ? "border-blue-200 bg-blue-50/60" : "border-slate-100 bg-white"
       }`}
     >
       <div className="flex justify-between items-start gap-4">
@@ -324,8 +391,8 @@ function TreatmentRow({
           <span className="font-mono text-[10px] font-bold text-blue-600 uppercase tracking-widest">
             {item.treatment.id.slice(0, 8)}
           </span>
-          <span className={`text-sm font-bold truncate ${isPrivacyMode ? "blur-sm" : "text-slate-900"}`}>
-            {item.patient.name}
+          <span className="text-xs font-semibold text-slate-500">
+            {formatDateTime(item.treatment.created_at)}
           </span>
         </div>
         <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-tighter bg-slate-50 text-slate-600 border border-slate-200">
