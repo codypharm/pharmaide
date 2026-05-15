@@ -1,4 +1,5 @@
-import { getJson, patchJson } from "./client";
+import { getJson, patchJson, postJson } from "./client";
+import type { ConversationMessageView } from "./treatments";
 
 export type TriageReason =
   | "input_guard"
@@ -20,6 +21,11 @@ export type TriageItemView = {
 
 export type TriageItemList = {
   items: TriageItemView[];
+};
+
+export type TriageApprovalView = {
+  triage_item: TriageItemView;
+  approved_message: ConversationMessageView;
 };
 
 export type ListTriageItemsParams = {
@@ -44,5 +50,12 @@ export function updateTriageItemStatus(
   return patchJson<{ status: TriageStatus }, TriageItemView>(
     `/triage/items/${itemId}`,
     { status },
+  );
+}
+
+export function approveTriageItem(itemId: string): Promise<TriageApprovalView> {
+  return postJson<Record<string, never>, TriageApprovalView>(
+    `/triage/items/${itemId}/approve`,
+    {},
   );
 }

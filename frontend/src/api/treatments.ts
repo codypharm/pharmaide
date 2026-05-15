@@ -168,7 +168,11 @@ export function listAdherenceEvents(treatmentId: string): Promise<AdherenceEvent
 export type ConversationMessageDirection = "inbound" | "outbound";
 export type ConversationMessageSender = "patient" | "assistant" | "pharmacist" | "system";
 export type ConversationMessageChannel = "whatsapp" | "dashboard" | "system";
-export type ConversationMessageStatus = "received" | "draft_ready" | "held_for_review";
+export type ConversationMessageStatus =
+  | "received"
+  | "draft_ready"
+  | "held_for_review"
+  | "approved";
 
 export type ConversationMessageView = {
   id: string;

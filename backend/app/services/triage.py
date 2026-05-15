@@ -6,8 +6,15 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.schemas import TriageItemList, TriageItemView, TriageReason, TriageStatus
-from app.db.models import AuditLogEntry, TriageItem
+from app.api.schemas import (
+    ConversationMessageView,
+    TriageApprovalView,
+    TriageItemList,
+    TriageItemView,
+    TriageReason,
+    TriageStatus,
+)
+from app.db.models import AuditLogEntry, ConversationMessage, TriageItem
 
 log = structlog.get_logger(__name__)
 
@@ -24,6 +31,10 @@ class TriageItemNotFound(Exception):
 
 class InvalidTriageTransition(Exception):
     """Raised when a triage item status change is not allowed."""
+
+
+class TriageDraftNotApprovable(Exception):
+    """Raised when a triage item does not point to a held assistant draft."""
 
 
 async def create_open_triage_item(
@@ -132,3 +143,77 @@ async def update_triage_item_status(
         new_status=status,
     )
     return TriageItemView.model_validate(item)
+
+
+async def approve_triage_item_draft(
+    session: AsyncSession,
+    item_id: UUID,
+) -> TriageApprovalView:
+    """Approve a held assistant draft and resolve its pharmacist review item."""
+    item = await session.get(TriageItem, item_id)
+    if item is None:
+        raise TriageItemNotFound()
+    if item.status == "resolved":
+        raise InvalidTriageTransition()
+
+    message = await _get_approvable_draft(session, item)
+    old_message_status = message.status
+    old_triage_status = item.status
+
+    message.status = "approved"
+    item.status = "resolved"
+    await session.flush()
+
+    session.add(
+        AuditLogEntry(
+            event_type="triage_item_draft_approved",
+            resource_type="triage_item",
+            resource_id=item.id,
+            # The draft body may contain PHI. Audit only state transition metadata.
+            payload={
+                "triage_item_id": str(item.id),
+                "treatment_id": str(item.treatment_id),
+                "approved_message_id": str(message.id),
+                "old_message_status": old_message_status,
+                "new_message_status": message.status,
+                "old_triage_status": old_triage_status,
+                "new_triage_status": item.status,
+            },
+        )
+    )
+    await session.flush()
+
+    log.info(
+        "triage_item_draft_approved",
+        triage_item_id=str(item.id),
+        treatment_id=str(item.treatment_id),
+        approved_message_id=str(message.id),
+        old_triage_status=old_triage_status,
+        new_triage_status=item.status,
+    )
+    return TriageApprovalView(
+        triage_item=TriageItemView.model_validate(item),
+        approved_message=ConversationMessageView.model_validate(message),
+    )
+
+
+async def _get_approvable_draft(
+    session: AsyncSession,
+    item: TriageItem,
+) -> ConversationMessage:
+    if item.conversation_message_id is None:
+        raise TriageDraftNotApprovable()
+
+    message = await session.get(ConversationMessage, item.conversation_message_id)
+    if message is None:
+        raise TriageDraftNotApprovable()
+
+    if (
+        message.treatment_id != item.treatment_id
+        or message.direction != "outbound"
+        or message.sender_type != "assistant"
+        or message.status != "held_for_review"
+    ):
+        raise TriageDraftNotApprovable()
+
+    return message

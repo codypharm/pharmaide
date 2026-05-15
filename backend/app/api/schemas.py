@@ -29,7 +29,7 @@ AdherenceEventSource = Literal["patient", "pharmacist", "system"]
 ConversationMessageDirection = Literal["inbound", "outbound"]
 ConversationMessageSender = Literal["patient", "assistant", "pharmacist", "system"]
 ConversationMessageChannel = Literal["whatsapp", "dashboard", "system"]
-ConversationMessageStatus = Literal["received", "draft_ready", "held_for_review"]
+ConversationMessageStatus = Literal["received", "draft_ready", "held_for_review", "approved"]
 TriageReason = Literal[
     "input_guard",
     "referee",
@@ -264,6 +264,11 @@ class TriageItemView(BaseModel):
 
 class TriageItemList(BaseModel):
     items: list[TriageItemView]
+
+
+class TriageApprovalView(BaseModel):
+    triage_item: TriageItemView
+    approved_message: ConversationMessageView
 
 
 class TriageItemUpdate(BaseModel):

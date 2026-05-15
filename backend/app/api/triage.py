@@ -6,11 +6,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.schemas import TriageItemList, TriageItemUpdate, TriageItemView
+from app.api.schemas import TriageApprovalView, TriageItemList, TriageItemUpdate, TriageItemView
 from app.db.engine import get_session
 from app.services.triage import (
     InvalidTriageTransition,
+    TriageDraftNotApprovable,
     TriageItemNotFound,
+    approve_triage_item_draft,
     list_triage_items,
     update_triage_item_status,
 )
@@ -47,3 +49,24 @@ async def patch_triage_item(
         raise HTTPException(status_code=404, detail={"error": "triage_item_not_found"}) from exc
     except InvalidTriageTransition as exc:
         raise HTTPException(status_code=409, detail={"error": "invalid_triage_transition"}) from exc
+
+
+@router.post(
+    "/items/{item_id}/approve",
+    response_model=TriageApprovalView,
+)
+async def approve_triage_item(
+    item_id: UUID,
+    session: SessionDep,
+) -> TriageApprovalView:
+    try:
+        return await approve_triage_item_draft(session, item_id)
+    except TriageItemNotFound as exc:
+        raise HTTPException(status_code=404, detail={"error": "triage_item_not_found"}) from exc
+    except InvalidTriageTransition as exc:
+        raise HTTPException(status_code=409, detail={"error": "invalid_triage_transition"}) from exc
+    except TriageDraftNotApprovable as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "triage_draft_not_approvable"},
+        ) from exc

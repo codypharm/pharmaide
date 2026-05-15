@@ -13,7 +13,7 @@ from app.agents.safety_schemas import (
     RefereeResult,
     SafetyReview,
 )
-from app.db.models import AuditLogEntry
+from app.db.models import AuditLogEntry, ConversationMessage, TriageItem
 from app.services import task_runner
 
 
@@ -99,6 +99,82 @@ async def test_patch_triage_item_returns_404_for_unknown_item(app_client: AsyncC
 
     assert response.status_code == 404
     assert response.json() == {"detail": {"error": "triage_item_not_found"}}
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_triage_item_approve_marks_held_draft_approved_and_resolves(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    item_id = await _create_open_triage_item(app_client, monkeypatch, "TRIAGE-APPROVE-001")
+
+    response = await app_client.post(f"/triage/items/{item_id}/approve")
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["triage_item"]["id"] == str(item_id)
+    assert payload["triage_item"]["status"] == "resolved"
+    assert payload["approved_message"]["status"] == "approved"
+    assert payload["approved_message"]["body"] == "This draft must be reviewed."
+
+    message = await db_session.scalar(
+        select(ConversationMessage).where(
+            ConversationMessage.id == UUID(payload["approved_message"]["id"])
+        )
+    )
+    assert message is not None
+    assert message.status == "approved"
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(AuditLogEntry.event_type == "triage_item_draft_approved")
+    )
+    assert audit is not None
+    assert audit.payload == {
+        "triage_item_id": str(item_id),
+        "treatment_id": payload["triage_item"]["treatment_id"],
+        "approved_message_id": payload["approved_message"]["id"],
+        "old_message_status": "held_for_review",
+        "new_message_status": "approved",
+        "old_triage_status": "open",
+        "new_triage_status": "resolved",
+    }
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_triage_item_approve_rejects_resolved_item(
+    app_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    item_id = await _create_open_triage_item(app_client, monkeypatch, "TRIAGE-APPROVE-002")
+    approved = await app_client.post(f"/triage/items/{item_id}/approve")
+
+    response = await app_client.post(f"/triage/items/{item_id}/approve")
+
+    assert approved.status_code == 200, approved.text
+    assert response.status_code == 409
+    assert response.json() == {"detail": {"error": "invalid_triage_transition"}}
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_triage_item_approve_rejects_item_without_held_draft(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    treatment_id = await _create_treatment(app_client, "TRIAGE-APPROVE-003")
+    item = TriageItem(
+        treatment_id=treatment_id,
+        conversation_message_id=None,
+        reason="non_responsive",
+        status="open",
+    )
+    db_session.add(item)
+    await db_session.flush()
+
+    response = await app_client.post(f"/triage/items/{item.id}/approve")
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": {"error": "triage_draft_not_approvable"}}
 
 
 async def _create_open_triage_item(
