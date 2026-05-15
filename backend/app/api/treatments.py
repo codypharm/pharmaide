@@ -44,6 +44,7 @@ from app.services.analysis import (
     analyze_treatment,
     create_pending_analysis,
     get_latest_analysis,
+    get_latest_completed_analysis,
     mark_analysis_failed,
 )
 from app.services.patient_checkins import (
@@ -249,7 +250,12 @@ async def get_treatment_analysis(
     analysis = await get_latest_analysis(session, treatment_id)
     if analysis is None:
         return Response(status_code=204)
-    return TreatmentAnalysisView.model_validate(analysis)
+
+    response = TreatmentAnalysisView.model_validate(analysis)
+    completed = await get_latest_completed_analysis(session, treatment_id)
+    if completed is not None and completed.id != analysis.id:
+        response.last_completed = TreatmentAnalysisView.model_validate(completed)
+    return response
 
 
 def _parse_optional_uuid(value: str) -> UUID | None:

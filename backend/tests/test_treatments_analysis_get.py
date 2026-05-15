@@ -31,7 +31,11 @@ async def test_get_treatment_analysis_returns_latest_analysis(
     app_client: AsyncClient, db_session: AsyncSession
 ) -> None:
     treatment = await _create_treatment(db_session, "ANALYSIS-GET-001")
-    older = TreatmentAnalysis(treatment_id=treatment.id, status="completed")
+    older = TreatmentAnalysis(
+        treatment_id=treatment.id,
+        status="completed",
+        result={"degraded": False, "reasoning": {"summary": "Prior usable result."}},
+    )
     latest = TreatmentAnalysis(
         treatment_id=treatment.id,
         status="failed",
@@ -53,6 +57,9 @@ async def test_get_treatment_analysis_returns_latest_analysis(
     assert payload["started_at"] is None
     assert payload["completed_at"] is None
     assert "created_at" in payload
+    assert UUID(payload["last_completed"]["id"]) == older.id
+    assert payload["last_completed"]["status"] == "completed"
+    assert payload["last_completed"]["result"]["reasoning"]["summary"] == "Prior usable result."
 
 
 @pytest.mark.usefixtures("postgres_container")

@@ -171,7 +171,7 @@ class AdherenceEventList(BaseModel):
     items: list[AdherenceEventView]
 
 
-class TreatmentAnalysisView(BaseModel):
+class TreatmentAnalysisSnapshot(BaseModel):
     id: UUID
     treatment_id: UUID
     status: str
@@ -182,6 +182,10 @@ class TreatmentAnalysisView(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class TreatmentAnalysisView(TreatmentAnalysisSnapshot):
+    last_completed: TreatmentAnalysisSnapshot | None = None
 
 
 class PatientView(BaseModel):

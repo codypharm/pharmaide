@@ -33,6 +33,7 @@ import {
   type PatientCheckInReportType,
   type PatientCheckInView,
   type ReminderSlot,
+  type TreatmentAnalysisSnapshot,
   type TreatmentDetail,
 } from "../api/treatments";
 import { useAnalysisStatus } from "../hooks/useAnalysisStatus";
@@ -574,12 +575,14 @@ function ReasoningTab({ treatment }: { treatment: TreatmentDetail["treatment"] }
 
   const isActiveAnalysis =
     analysis.data.status === "pending" || analysis.data.status === "running";
+  const displayedAnalysis = analysisToDisplay(analysis.data);
+  const isShowingLastCompleted = displayedAnalysis.id !== analysis.data.id;
 
   return (
     <Section title="Reasoning" icon={<Brain size={16} />}>
       <AnalysisStatusHeader
         status={analysis.data.status}
-        result={analysis.data.result}
+        result={displayedAnalysis.result}
         isStarting={isStarting}
         isConfirmingRerun={isConfirmingRerun}
         onStartRerun={() => setIsConfirmingRerun(true)}
@@ -587,17 +590,19 @@ function ReasoningTab({ treatment }: { treatment: TreatmentDetail["treatment"] }
         onConfirmRerun={() => void handleStartAnalysis(true)}
       />
       {startError && <p className="mt-3 text-sm text-red-700">{startError}</p>}
-      {analysis.data.result ? (
+      {isActiveAnalysis && <ActiveAnalysisNotice status={analysis.data.status} />}
+      {isShowingLastCompleted && (
+        <LastCompletedAnalysisNotice latestStatus={analysis.data.status} />
+      )}
+      {displayedAnalysis.result ? (
         <AnalysisResultView
-          result={analysis.data.result}
+          result={displayedAnalysis.result}
           adherenceState={adherenceState}
           recordError={recordError}
           recordingKey={recordingKey}
           treatmentStartAt={treatment.treatment_start_at}
           onRecordAdherence={(reminder, status) => void handleRecordAdherence(reminder, status)}
         />
-      ) : isActiveAnalysis ? (
-        <ActiveAnalysisNotice status={analysis.data.status} />
       ) : (
         <p className="mt-6 text-sm text-slate-500">
           Analysis result is not available yet.
@@ -605,6 +610,14 @@ function ReasoningTab({ treatment }: { treatment: TreatmentDetail["treatment"] }
       )}
     </Section>
   );
+}
+
+function analysisToDisplay(analysis: TreatmentAnalysisSnapshot & {
+  last_completed?: TreatmentAnalysisSnapshot | null;
+}): TreatmentAnalysisSnapshot {
+  if (analysis.result) return analysis;
+  if (analysis.last_completed?.result) return analysis.last_completed;
+  return analysis;
 }
 
 function ActiveAnalysisNotice({ status }: { status: string }) {
@@ -617,6 +630,18 @@ function ActiveAnalysisNotice({ status }: { status: string }) {
           Current status is {status}. This page is polling for the completed reasoning result.
         </p>
       </div>
+    </div>
+  );
+}
+
+function LastCompletedAnalysisNotice({ latestStatus }: { latestStatus: string }) {
+  return (
+    <div className="mt-6 border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+      <p className="font-bold">Showing last completed analysis</p>
+      <p className="mt-1">
+        Latest attempt status is {latestStatus}. The result below is the most recent completed
+        analysis.
+      </p>
     </div>
   );
 }

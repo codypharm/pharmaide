@@ -132,6 +132,15 @@ const RUNNING_ANALYSIS: TreatmentAnalysisRow = {
   completed_at: null,
 };
 
+const FAILED_WITH_LAST_COMPLETED_ANALYSIS: TreatmentAnalysisRow = {
+  ...COMPLETED_ANALYSIS,
+  id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+  status: "failed",
+  result: null,
+  error_text: "analysis_failed",
+  last_completed: COMPLETED_ANALYSIS,
+};
+
 const SAMPLE_CHECK_INS: PatientCheckInView[] = [
   {
     id: "check-in-1",
@@ -367,6 +376,23 @@ describe("TreatmentDetailPage", () => {
     expect(screen.getByText("Planned Day 1 · +1h")).toBeTruthy();
     expect(screen.getByText("Day 1, 20:00")).toBeTruthy();
     expect(screen.getByText("Day 1, 21:00")).toBeTruthy();
+  });
+
+  it("shows latest failed attempt while rendering the last completed analysis", async () => {
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(SAMPLE);
+    vi.spyOn(treatmentsApi, "getAnalysis").mockResolvedValue(FAILED_WITH_LAST_COMPLETED_ANALYSIS);
+    const user = userEvent.setup();
+
+    renderAt(SAMPLE.treatment.id);
+
+    await screen.findByText("Eleanor Vance");
+    await user.click(screen.getByRole("tab", { name: /reasoning/i }));
+
+    expect(await screen.findByText("failed")).toBeTruthy();
+    expect(screen.getByText(/showing last completed analysis/i)).toBeTruthy();
+    expect(
+      screen.getByText("Patient should be monitored for cough and dizziness."),
+    ).toBeTruthy();
   });
 
   it("shows adherence status beside matching schedule reminders", async () => {

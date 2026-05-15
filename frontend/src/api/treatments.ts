@@ -256,7 +256,7 @@ export type AnalysisResult = {
   completed_stages: string[];
 };
 
-export type TreatmentAnalysisRow = {
+export type TreatmentAnalysisSnapshot = {
   id: string;
   treatment_id: string;
   status: AnalysisStatus;
@@ -265,6 +265,10 @@ export type TreatmentAnalysisRow = {
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
+};
+
+export type TreatmentAnalysisRow = TreatmentAnalysisSnapshot & {
+  last_completed?: TreatmentAnalysisSnapshot | null;
 };
 
 export type AnalyzeTreatmentResponse = {

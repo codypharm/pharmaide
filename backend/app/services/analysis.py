@@ -517,3 +517,20 @@ async def get_latest_analysis(
         .limit(1)
     )
     return result.scalar_one_or_none()
+
+
+async def get_latest_completed_analysis(
+    session: AsyncSession, treatment_id: UUID
+) -> TreatmentAnalysis | None:
+    """Return the newest completed analysis with a durable result, if any."""
+    result = await session.execute(
+        select(TreatmentAnalysis)
+        .where(
+            TreatmentAnalysis.treatment_id == treatment_id,
+            TreatmentAnalysis.status == "completed",
+            TreatmentAnalysis.result.is_not(None),
+        )
+        .order_by(TreatmentAnalysis.created_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
