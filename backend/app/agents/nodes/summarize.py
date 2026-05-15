@@ -12,6 +12,7 @@ from app.agents.analysis_schemas import (
     ReminderSlot,
     Schedule,
 )
+from app.agents.model_calls import run_model_with_retry
 
 log = structlog.get_logger(__name__)
 
@@ -78,7 +79,11 @@ async def summarize_treatment(
 
     summary_agent = agent or build_summary_agent()
     try:
-        result = await summary_agent.run(_summary_prompt(state))
+        result = await run_model_with_retry(
+            summary_agent,
+            _summary_prompt(state),
+            operation="summarize_treatment",
+        )
     except Exception as exc:
         return _fallback_summary_state(state, exc, needs_llm_parse=False)
 
@@ -97,7 +102,11 @@ async def _summarize_with_schedule(
 ) -> AnalysisState:
     summary_agent = agent or build_summary_with_schedule_agent()
     try:
-        result = await summary_agent.run(_summary_prompt(state))
+        result = await run_model_with_retry(
+            summary_agent,
+            _summary_prompt(state),
+            operation="summarize_treatment_with_schedule",
+        )
     except Exception as exc:
         return _fallback_summary_state(state, exc, needs_llm_parse=True)
 

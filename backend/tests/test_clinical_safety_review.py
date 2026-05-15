@@ -1,6 +1,7 @@
 """Clinical safety review node behavior."""
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from uuid import UUID
 
 import httpx
@@ -30,6 +31,25 @@ SECOND_MEDICATION_ID = UUID("22222222-2222-2222-2222-222222222222")
 class _FailingAgent:
     async def run(self, _prompt: str) -> object:
         raise httpx.ConnectTimeout("connect timed out")
+
+
+class _TransientSafetyAgent:
+    calls = 0
+
+    async def run(self, _prompt: str) -> object:
+        self.calls += 1
+        if self.calls == 1:
+            raise httpx.ConnectTimeout("connect timed out")
+        return SimpleNamespace(
+            output=ClinicalSafetyReview(
+                possible_interactions=["Lisinopril + Warfarin: review interaction risk."],
+                monitoring_concerns=[],
+                counseling_points=[],
+                missing_information=[],
+                confidence=0.7,
+                requires_pharmacist_review=True,
+            )
+        )
 
 
 @pytest.fixture(autouse=True)
@@ -218,6 +238,22 @@ async def test_review_clinical_safety_degrades_when_model_call_fails() -> None:
 
     assert reviewed["clinical_safety_review"] is None
     assert reviewed["degraded"] is True
+
+
+async def test_review_clinical_safety_retries_transient_model_failure() -> None:
+    agent = _TransientSafetyAgent()
+
+    reviewed = await review_clinical_safety(_state(), agent=agent)  # type: ignore[arg-type]
+
+    assert agent.calls == 2
+    assert reviewed["clinical_safety_review"] == ClinicalSafetyReview(
+        possible_interactions=["Lisinopril + Warfarin: review interaction risk."],
+        monitoring_concerns=[],
+        counseling_points=[],
+        missing_information=[],
+        confidence=0.7,
+        requires_pharmacist_review=True,
+    )
 
 
 async def test_review_clinical_safety_filters_hypothetical_interaction_entities() -> None:

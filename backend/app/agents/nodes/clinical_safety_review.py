@@ -14,6 +14,7 @@ from app.agents.analysis_schemas import (
     AnalysisState,
     ClinicalSafetyReview,
 )
+from app.agents.model_calls import run_model_with_retry
 
 log = structlog.get_logger(__name__)
 
@@ -57,7 +58,11 @@ async def review_clinical_safety(
         return result
 
     try:
-        response = await agent.run(_safety_review_prompt(state))
+        response = await run_model_with_retry(
+            agent,
+            _safety_review_prompt(state),
+            operation="clinical_safety_review",
+        )
     except Exception as exc:
         result = state.copy()
         result["clinical_safety_review"] = None

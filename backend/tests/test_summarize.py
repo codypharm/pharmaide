@@ -2,6 +2,7 @@
 
 import json
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from uuid import UUID
 
 import httpx
@@ -43,6 +44,22 @@ SECOND_MEDICATION_ID = UUID("22222222-2222-2222-2222-222222222222")
 class _FailingAgent:
     async def run(self, _prompt: str) -> object:
         raise httpx.ConnectTimeout("connect timed out")
+
+
+class _TransientSummaryAgent:
+    calls = 0
+
+    async def run(self, _prompt: str) -> object:
+        self.calls += 1
+        if self.calls == 1:
+            raise httpx.ConnectTimeout("connect timed out")
+        return SimpleNamespace(
+            output=ClinicalReasoning(
+                summary="Summary succeeded after retry.",
+                red_flags=[],
+                confidence=0.81,
+            )
+        )
 
 
 @pytest.fixture(autouse=True)
@@ -157,6 +174,19 @@ async def test_summarize_treatment_degrades_with_validated_fallback_when_model_c
             "Analysis is degraded; verify upstream results before acting.",
         ],
         confidence=0,
+    )
+
+
+async def test_summarize_treatment_retries_transient_model_failure() -> None:
+    agent = _TransientSummaryAgent()
+
+    summarized = await summarize_treatment(_state(), agent=agent)  # type: ignore[arg-type]
+
+    assert agent.calls == 2
+    assert summarized["reasoning"] == ClinicalReasoning(
+        summary="Summary succeeded after retry.",
+        red_flags=[],
+        confidence=0.81,
     )
 
 
