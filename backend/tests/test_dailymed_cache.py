@@ -15,6 +15,8 @@ from app.agents.knowledge_sources import KnowledgeSourceChunk
 from app.agents.knowledge_sources.dailymed import DailyMedClient
 from app.db.models import EMBEDDING_DIMENSIONS, AuditLogEntry, KnowledgeChunk, KnowledgeDocument
 from app.services.dailymed_cache import (
+    DAILYMED_FAILED_CACHE_RETENTION_DAYS,
+    cleanup_failed_dailymed_cache,
     ensure_dailymed_cached,
     ensure_dailymed_cached_for_groundings,
 )
@@ -290,6 +292,75 @@ async def test_ensure_dailymed_cached_refreshes_stale_global_document(
     assert chunks[0].content.endswith("Monitor dizziness.")
     assert audit is not None
     assert audit.payload["source_type"] == "dailymed"
+
+
+async def test_cleanup_failed_dailymed_cache_deletes_only_expired_failed_rows(
+    db_session: AsyncSession,
+) -> None:
+    expired_failed = KnowledgeDocument(
+        source_type="dailymed",
+        source_uri="dailymed://failed-old",
+        title="Old Failed Label",
+        mime="application/spl+xml",
+        status="failed",
+        uploaded_by=GLOBAL_DAILYMED_SCOPE_ID,
+        updated_at=datetime.now(UTC) - timedelta(days=DAILYMED_FAILED_CACHE_RETENTION_DAYS + 1),
+    )
+    recent_failed = KnowledgeDocument(
+        source_type="dailymed",
+        source_uri="dailymed://failed-recent",
+        title="Recent Failed Label",
+        mime="application/spl+xml",
+        status="failed",
+        uploaded_by=GLOBAL_DAILYMED_SCOPE_ID,
+        updated_at=datetime.now(UTC),
+    )
+    ready = KnowledgeDocument(
+        source_type="dailymed",
+        source_uri="dailymed://ready-old",
+        title="Ready Label",
+        mime="application/spl+xml",
+        status="ready",
+        uploaded_by=GLOBAL_DAILYMED_SCOPE_ID,
+        updated_at=datetime.now(UTC) - timedelta(days=DAILYMED_FAILED_CACHE_RETENTION_DAYS + 1),
+    )
+    db_session.add_all([expired_failed, recent_failed, ready])
+    await db_session.flush()
+    db_session.add(
+        KnowledgeChunk(
+            document_id=expired_failed.id,
+            ordinal=0,
+            content="Failed chunk.",
+            embedding="[" + ",".join("0.0" for _ in range(EMBEDDING_DIMENSIONS)) + "]",
+            tokens=2,
+        )
+    )
+    await db_session.flush()
+
+    deleted_count = await cleanup_failed_dailymed_cache(db_session)
+
+    remaining_uris = set(
+        (
+            await db_session.execute(
+                select(KnowledgeDocument.source_uri).where(
+                    KnowledgeDocument.source_type == "dailymed"
+                )
+            )
+        ).scalars()
+    )
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(AuditLogEntry.event_type == "dailymed_cache_cleaned")
+    )
+
+    assert deleted_count == 1
+    assert remaining_uris == {"dailymed://failed-recent", "dailymed://ready-old"}
+    assert audit is not None
+    assert audit.payload == {
+        "source_type": "dailymed",
+        "status": "failed",
+        "deleted_count": 1,
+        "retention_days": DAILYMED_FAILED_CACHE_RETENTION_DAYS,
+    }
 
 
 async def test_ensure_dailymed_cached_for_groundings_fetches_one_label_per_rxcui(

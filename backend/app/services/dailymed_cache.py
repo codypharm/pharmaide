@@ -8,6 +8,7 @@ call DailyMed directly.
 
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 import structlog
 from sqlalchemy import delete, func, select
@@ -23,6 +24,8 @@ from app.services.kb_scope import GLOBAL_DAILYMED_SCOPE_ID
 
 Embedder = Callable[[Sequence[str]], Awaitable[list[EmbeddingVector]]]
 DAILYMED_CACHE_MAX_AGE_DAYS = 90
+DAILYMED_FAILED_CACHE_RETENTION_DAYS = 30
+SYSTEM_RESOURCE_ID = UUID("00000000-0000-0000-0000-000000000000")
 
 log = structlog.get_logger(__name__)
 
@@ -192,6 +195,55 @@ async def ensure_dailymed_cached_for_groundings(
         cached_count=cached_count,
     )
     return cached_count
+
+
+async def cleanup_failed_dailymed_cache(
+    session: AsyncSession,
+    *,
+    retention_days: int = DAILYMED_FAILED_CACHE_RETENTION_DAYS,
+) -> int:
+    """Delete expired failed DailyMed cache rows while retaining ready labels."""
+    cutoff = datetime.now(UTC) - timedelta(days=max(retention_days, 0))
+    failed_documents = list(
+        (
+            await session.execute(
+                select(KnowledgeDocument).where(
+                    KnowledgeDocument.source_type == "dailymed",
+                    KnowledgeDocument.status == "failed",
+                    KnowledgeDocument.updated_at <= cutoff,
+                )
+            )
+        ).scalars()
+    )
+    deleted_count = len(failed_documents)
+    if not failed_documents:
+        return 0
+
+    # Ready public labels are retained and refreshed; only failed attempts are
+    # purged so future analyses can retry without storing dead cache rows.
+    for document in failed_documents:
+        await session.delete(document)
+
+    session.add(
+        AuditLogEntry(
+            event_type="dailymed_cache_cleaned",
+            resource_type="system",
+            resource_id=SYSTEM_RESOURCE_ID,
+            payload={
+                "source_type": "dailymed",
+                "status": "failed",
+                "deleted_count": deleted_count,
+                "retention_days": retention_days,
+            },
+        )
+    )
+    log.info(
+        "dailymed_cache_cleaned",
+        deleted_count=deleted_count,
+        retention_days=retention_days,
+    )
+    await session.flush()
+    return deleted_count
 
 
 async def _use_cached_document(
