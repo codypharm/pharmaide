@@ -69,6 +69,7 @@ describe("TriageQueuePage", () => {
     vi.spyOn(triageApi, "listTriageItems").mockResolvedValue({
       items: [OPEN_ITEM],
     } satisfies TriageItemList);
+    vi.spyOn(treatmentsApi, "listConversationMessages").mockResolvedValue(CONVERSATION_MESSAGES);
     const updateSpy = vi
       .spyOn(triageApi, "updateTriageItemStatus")
       .mockResolvedValueOnce({ ...OPEN_ITEM, status: "acknowledged" })
@@ -80,11 +81,12 @@ describe("TriageQueuePage", () => {
     expect(screen.getByText("22222222")).toBeTruthy();
     expect(screen.getAllByText("Open").length).toBeGreaterThan(0);
 
-    await user.click(screen.getByRole("button", { name: /acknowledge review item/i }));
+    await user.click(screen.getByRole("button", { name: /review item/i }));
+    await user.click(screen.getByRole("button", { name: /start review item/i }));
     await waitFor(() => expect(updateSpy).toHaveBeenCalledWith("triage-1", "acknowledged"));
     expect(screen.getAllByText("Acknowledged").length).toBeGreaterThan(0);
 
-    await user.click(screen.getByRole("button", { name: /resolve review item/i }));
+    await user.click(screen.getByRole("button", { name: /mark reviewed item/i }));
     await waitFor(() => expect(updateSpy).toHaveBeenCalledWith("triage-1", "resolved"));
     expect(screen.getAllByText("Resolved").length).toBeGreaterThan(0);
   });
@@ -110,7 +112,7 @@ describe("TriageQueuePage", () => {
     renderPage();
 
     await screen.findByText("Clinical draft review");
-    await user.click(screen.getByRole("button", { name: /view conversation/i }));
+    await user.click(screen.getByRole("button", { name: /review item/i }));
 
     await waitFor(() =>
       expect(conversationSpy).toHaveBeenCalledWith(OPEN_ITEM.treatment_id, {
@@ -118,8 +120,11 @@ describe("TriageQueuePage", () => {
         offset: 0,
       }),
     );
-    expect(screen.getByText("I feel dizzy after the second dose.")).toBeTruthy();
-    expect(screen.getByText("You can skip the next dose.")).toBeTruthy();
+    expect(screen.getByText("Pharmacist review")).toBeTruthy();
+    expect(screen.getByText("Patient message")).toBeTruthy();
+    expect(screen.getByText("Held assistant draft")).toBeTruthy();
+    expect(screen.getAllByText("I feel dizzy after the second dose.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("You can skip the next dose.").length).toBeGreaterThan(0);
     expect(screen.getByText("Held draft")).toBeTruthy();
   });
 });

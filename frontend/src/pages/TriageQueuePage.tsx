@@ -411,13 +411,8 @@ function TriageTable({
                         onClick={() => void onToggleConversation(item)}
                         className="inline-flex min-w-36 items-center justify-center px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 cursor-pointer"
                       >
-                        {expandedItemId === item.id ? "Hide conversation" : "View conversation"}
+                        {expandedItemId === item.id ? "Close review" : "Review item"}
                       </button>
-                      <ReviewAction
-                        item={item}
-                        isBusy={actionItemId === item.id}
-                        onMoveItem={onMoveItem}
-                      />
                     </div>
                   </td>
                 </tr>
@@ -426,7 +421,9 @@ function TriageTable({
                     <td colSpan={5} className="px-6 py-5">
                       <ConversationPanel
                         item={item}
+                        isBusy={actionItemId === item.id}
                         state={conversationByItem[item.id] ?? { kind: "loading" }}
+                        onMoveItem={onMoveItem}
                       />
                     </td>
                   </tr>
@@ -442,10 +439,14 @@ function TriageTable({
 
 function ConversationPanel({
   item,
+  isBusy,
   state,
+  onMoveItem,
 }: {
   item: TriageItemView;
+  isBusy: boolean;
   state: ConversationState;
+  onMoveItem: (itemId: string, status: TriageStatus) => Promise<void>;
 }) {
   if (state.kind === "loading") {
     return (
@@ -476,12 +477,13 @@ function ConversationPanel({
     <div className="space-y-3">
       <div>
         <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-          Conversation context
+          Pharmacist review
         </p>
         <p className="text-xs text-slate-500 mt-1">
           Review the patient message and held assistant draft before changing queue status.
         </p>
       </div>
+      <ReviewFocusPanel item={item} messages={state.items} />
       <div className="grid gap-3">
         {state.items.map((message) => (
           <ConversationMessageRow
@@ -491,6 +493,69 @@ function ConversationPanel({
           />
         ))}
       </div>
+      <div className="flex items-center justify-end border-t border-slate-200 pt-4">
+        <ReviewAction item={item} isBusy={isBusy} onMoveItem={onMoveItem} />
+      </div>
+    </div>
+  );
+}
+
+function ReviewFocusPanel({
+  item,
+  messages,
+}: {
+  item: TriageItemView;
+  messages: ConversationMessageView[];
+}) {
+  const heldDraft = messages.find((message) => message.id === item.conversation_message_id);
+  const heldDraftIndex = heldDraft ? messages.findIndex((message) => message.id === heldDraft.id) : -1;
+  const patientMessage =
+    heldDraftIndex > 0
+      ? [...messages.slice(0, heldDraftIndex)]
+          .reverse()
+          .find((message) => message.sender_type === "patient")
+      : messages.find((message) => message.sender_type === "patient");
+
+  return (
+    <div className="grid gap-3 lg:grid-cols-2">
+      <ReviewFocusCard
+        label="Patient message"
+        body={patientMessage?.body ?? "No patient message found for this review item."}
+        createdAt={patientMessage?.created_at}
+      />
+      <ReviewFocusCard
+        label="Held assistant draft"
+        body={heldDraft?.body ?? "No held draft found for this review item."}
+        createdAt={heldDraft?.created_at}
+        intent="amber"
+      />
+    </div>
+  );
+}
+
+function ReviewFocusCard({
+  label,
+  body,
+  createdAt,
+  intent = "slate",
+}: {
+  label: string;
+  body: string;
+  createdAt?: string;
+  intent?: "slate" | "amber";
+}) {
+  const classes =
+    intent === "amber"
+      ? "border-amber-200 bg-amber-50/60"
+      : "border-slate-200 bg-white";
+
+  return (
+    <div className={`rounded-xl border p-4 ${classes}`}>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
+        {createdAt && <span className="text-xs text-slate-500">{formatCreatedAt(createdAt)}</span>}
+      </div>
+      <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-800">{body}</p>
     </div>
   );
 }
@@ -569,14 +634,14 @@ function ReviewAction({
   }
 
   const nextStatus: TriageStatus = item.status === "open" ? "acknowledged" : "resolved";
-  const label = item.status === "open" ? "Acknowledge" : "Resolve";
+  const label = item.status === "open" ? "Start review" : "Mark reviewed";
 
   return (
     <button
       type="button"
       onClick={() => void onMoveItem(item.id, nextStatus)}
       disabled={isBusy}
-      aria-label={`${label} review item ${shortId(item.id)}`}
+      aria-label={`${label} item ${shortId(item.id)}`}
       className="inline-flex min-w-32 items-center justify-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 disabled:opacity-50 cursor-pointer"
     >
       {isBusy && <Loader2 size={16} className="animate-spin" />}
