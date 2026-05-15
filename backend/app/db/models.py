@@ -83,6 +83,7 @@ class Treatment(Base):
     # Lifecycle: pending → active (after Start Cycle) → completed | terminated.
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'pending'"))
     clinical_objective: Mapped[str | None] = mapped_column(Text)
+    treatment_start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Populated by Sprint 3 when the LangGraph thread is materialised.
     langgraph_thread_id: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(

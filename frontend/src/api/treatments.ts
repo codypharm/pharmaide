@@ -23,7 +23,10 @@ export type MedicationCreate = {
 
 export type TreatmentCreatePayload = {
   patient: PatientCreate;
-  treatment: { clinical_objective: string | null };
+  treatment: {
+    clinical_objective: string | null;
+    treatment_start_at: string | null;
+  };
   medications: MedicationCreate[];
   ingestion_method: IngestionMethod;
 };
@@ -56,6 +59,7 @@ export type TreatmentView = {
   patient_id: string;
   status: string;
   clinical_objective: string | null;
+  treatment_start_at: string | null;
   created_at: string; // ISO 8601
 };
 

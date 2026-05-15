@@ -9,6 +9,14 @@ from uuid import uuid4
 import pytest
 from httpx import AsyncClient
 
+from app.services import task_runner
+
+
+@pytest.fixture(autouse=True)
+def disable_analysis_schedule(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep these read-path tests focused on retrieval, not worker startup."""
+    monkeypatch.setattr(task_runner, "schedule", lambda *args, **kwargs: None)
+
 
 @pytest.mark.usefixtures("postgres_container")
 async def test_get_returns_full_lineage_after_create(app_client: AsyncClient) -> None:
@@ -19,7 +27,10 @@ async def test_get_returns_full_lineage_after_create(app_client: AsyncClient) ->
             "mrn": "GET-RT-001",
             "phone": "+18005551212",
         },
-        "treatment": {"clinical_objective": "Monitor for cough"},
+        "treatment": {
+            "clinical_objective": "Monitor for cough",
+            "treatment_start_at": "2026-05-16T08:30:00Z",
+        },
         "medications": [
             {
                 "name": "Lisinopril",
@@ -43,10 +54,13 @@ async def test_get_returns_full_lineage_after_create(app_client: AsyncClient) ->
     assert detail["patient"]["mrn"] == "GET-RT-001"
     assert detail["patient"]["phone"] == "+18005551212"
     assert detail["treatment"]["clinical_objective"] == "Monitor for cough"
+    assert detail["treatment"]["treatment_start_at"].startswith("2026-05-16T08:30:00")
     assert detail["treatment"]["status"] == "pending"
     # created_at is needed by the Treatment Detail page header.
     assert isinstance(detail["treatment"]["created_at"], str)
-    assert detail["treatment"]["created_at"].endswith("Z") or "+" in detail["treatment"]["created_at"]
+    assert detail["treatment"]["created_at"].endswith("Z") or (
+        "+" in detail["treatment"]["created_at"]
+    )
     assert len(detail["medications"]) == 1
     assert detail["medications"][0]["name"] == "Lisinopril"
     assert detail["medications"][0]["ordinal"] == 0

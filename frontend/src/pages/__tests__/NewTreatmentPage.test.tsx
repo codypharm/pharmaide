@@ -29,7 +29,10 @@ function renderPage() {
   );
 }
 
-async function submitValidTreatment({ allergies = "" }: { allergies?: string } = {}) {
+async function submitValidTreatment({
+  allergies = "",
+  treatmentStartAt = "",
+}: { allergies?: string; treatmentStartAt?: string } = {}) {
   const user = userEvent.setup();
 
   await user.type(screen.getByLabelText(/full name/i), "Eleanor Vance");
@@ -46,6 +49,11 @@ async function submitValidTreatment({ allergies = "" }: { allergies?: string } =
   await user.type(screen.getByPlaceholderText(/e.g. 500mg/i), "10 mg");
   await user.type(screen.getByPlaceholderText(/twice daily/i), "Once Daily (QD)");
   await user.type(screen.getByPlaceholderText(/e.g. 10 days/i), "30 days");
+  if (treatmentStartAt) {
+    fireEvent.change(screen.getByLabelText(/treatment starts/i), {
+      target: { value: treatmentStartAt },
+    });
+  }
   await user.type(screen.getByLabelText(/treatment objective/i), "Monitor for cough");
 
   await user.click(screen.getByRole("button", { name: /review & approve/i }));
@@ -356,6 +364,28 @@ describe("NewTreatmentPage", () => {
         expect.objectContaining({
           patient: expect.objectContaining({
             allergies: ["Penicillin", "Sulfa", "latex"],
+          }),
+        }),
+      );
+    });
+  });
+
+  it("submits the treatment start as a timezone-aware timestamp", async () => {
+    const create = vi.spyOn(treatmentsApi, "createTreatment").mockResolvedValue({
+      treatment_id: "treatment-1",
+      patient_id: "patient-1",
+      analysis_id: "analysis-1",
+    });
+    const localStart = "2026-05-16T09:30";
+
+    renderPage();
+    await submitValidTreatment({ treatmentStartAt: localStart });
+
+    await waitFor(() => {
+      expect(create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          treatment: expect.objectContaining({
+            treatment_start_at: new Date(localStart).toISOString(),
           }),
         }),
       );

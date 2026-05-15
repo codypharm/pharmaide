@@ -61,6 +61,7 @@ export default function NewTreatmentPage() {
   const [patientAllergies, setPatientAllergies] = useState<string[]>([]);
   const [allergyDraft, setAllergyDraft] = useState("");
   const [clinicalObjective, setClinicalObjective] = useState("");
+  const [treatmentStartAt, setTreatmentStartAt] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -216,6 +217,7 @@ export default function NewTreatmentPage() {
         },
         treatment: {
           clinical_objective: clinicalObjective.trim() || null,
+          treatment_start_at: toTreatmentStartIso(treatmentStartAt),
         },
         medications: medications.map(m => ({
           name: m.name.trim(),
@@ -245,6 +247,7 @@ export default function NewTreatmentPage() {
       setPatientAllergies([]);
       setAllergyDraft("");
       setClinicalObjective("");
+      setTreatmentStartAt("");
       setMedications([
         { id: crypto.randomUUID(), name: "", dosage: "", frequency: "", duration: "" },
       ]);
@@ -837,6 +840,22 @@ export default function NewTreatmentPage() {
                 )}
 
                 <div className="flex flex-col gap-1.5 mt-4">
+                  <label htmlFor="treatment-start-at" className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    Treatment Starts
+                  </label>
+                  <input
+                    id="treatment-start-at"
+                    type="datetime-local"
+                    value={treatmentStartAt}
+                    onChange={(e) => setTreatmentStartAt(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all"
+                  />
+                  <p className="text-[11px] text-slate-500 px-1">
+                    Used to anchor planned reminders and follow-up timing once monitoring starts.
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-1.5 mt-4">
                   <label htmlFor="clinical-objective" className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                     Treatment Objective <span className="text-slate-400 normal-case font-medium tracking-normal">— what the agent should focus on</span>
                   </label>
@@ -926,6 +945,7 @@ export default function NewTreatmentPage() {
             phone: patientPhone,
             allergies: currentPatientAllergies,
           }}
+          treatmentStartAt={treatmentStartAt}
           objective={clinicalObjective}
           medications={medications.filter(m => m.name.trim())}
           onCancel={() => setShowConfirm(false)}
@@ -1126,8 +1146,28 @@ function parsePatientAllergyDraft(value: string): string[] {
     .filter(Boolean);
 }
 
+function toTreatmentStartIso(value: string): string | null {
+  if (!value) {
+    return null;
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function formatTreatmentStartDraft(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
 interface ConfirmTreatmentModalProps {
   patient: { name: string; dob: string; mrn: string; phone: string; allergies: string[] };
+  treatmentStartAt: string;
   objective: string;
   medications: Medication[];
   onCancel: () => void;
@@ -1136,7 +1176,7 @@ interface ConfirmTreatmentModalProps {
 }
 
 function ConfirmTreatmentModal({
-  patient, objective, medications, onCancel, onConfirm, submitting,
+  patient, treatmentStartAt, objective, medications, onCancel, onConfirm, submitting,
 }: ConfirmTreatmentModalProps) {
   return (
     <div
@@ -1193,6 +1233,16 @@ function ConfirmTreatmentModal({
               ) : (
                 <p className="text-xs font-semibold text-slate-500">No allergies recorded.</p>
               )}
+            </div>
+          </section>
+
+          <section>
+            <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Treatment Timeline</h3>
+            <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 text-sm">
+              <span className="text-slate-500">Starts:</span>{" "}
+              <span className="font-semibold text-slate-900 tabular-nums">
+                {treatmentStartAt ? formatTreatmentStartDraft(treatmentStartAt) : "Not set"}
+              </span>
             </div>
           </section>
 

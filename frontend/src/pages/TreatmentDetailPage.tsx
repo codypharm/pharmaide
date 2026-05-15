@@ -768,6 +768,10 @@ function TreatmentCard({ data }: { data: TreatmentDetail }) {
     <Section title="Treatment" icon={<ClipboardList size={16} />}>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
         <Field label="Status" value={t.status} />
+        <Field
+          label="Treatment Starts"
+          value={t.treatment_start_at ? formatCreatedAt(t.treatment_start_at) : "Not set"}
+        />
         <Field label="Created" value={formatCreatedAt(t.created_at)} />
         <Field label="Treatment ID" value={t.id} />
       </div>

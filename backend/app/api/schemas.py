@@ -47,6 +47,15 @@ class MedicationCreate(BaseModel):
 
 class TreatmentCreate(BaseModel):
     clinical_objective: str | None = Field(default=None, max_length=1000)
+    treatment_start_at: datetime | None = None
+
+    @field_validator("treatment_start_at")
+    @classmethod
+    def require_timezone_for_start(cls, value: datetime | None) -> datetime | None:
+        """Reject ambiguous local times before schedule math depends on them."""
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValueError("treatment_start_at must include a timezone")
+        return value
 
 
 class CreateTreatmentRequest(BaseModel):
@@ -95,6 +104,7 @@ class TreatmentView(BaseModel):
     patient_id: UUID
     status: str
     clinical_objective: str | None
+    treatment_start_at: datetime | None
     created_at: datetime
 
     model_config = {"from_attributes": True}

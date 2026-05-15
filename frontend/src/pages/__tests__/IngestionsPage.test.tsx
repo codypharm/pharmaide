@@ -23,6 +23,7 @@ function row(suffix: string): TreatmentListItem {
       patient_id: `p-${suffix}`,
       status: "pending",
       clinical_objective: null,
+      treatment_start_at: null,
       created_at: "2026-05-11T12:00:00Z",
     },
     medication_count: 1,

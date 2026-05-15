@@ -7,6 +7,14 @@ can render a queue/feed view without per-row roundtrips.
 import pytest
 from httpx import AsyncClient
 
+from app.services import task_runner
+
+
+@pytest.fixture(autouse=True)
+def disable_analysis_schedule(monkeypatch: pytest.MonkeyPatch) -> None:
+    """List tests create rows as setup; analysis execution is covered elsewhere."""
+    monkeypatch.setattr(task_runner, "schedule", lambda *args, **kwargs: None)
+
 
 def _body(mrn: str, name: str, med_name: str, objective: str | None = None) -> dict:
     return {
@@ -16,7 +24,10 @@ def _body(mrn: str, name: str, med_name: str, objective: str | None = None) -> d
             "mrn": mrn,
             "phone": "+18005551212",
         },
-        "treatment": {"clinical_objective": objective},
+        "treatment": {
+            "clinical_objective": objective,
+            "treatment_start_at": "2026-05-16T08:30:00Z",
+        },
         "medications": [
             {
                 "name": med_name,
@@ -32,7 +43,9 @@ def _body(mrn: str, name: str, med_name: str, objective: str | None = None) -> d
 
 @pytest.mark.usefixtures("postgres_container")
 async def test_list_returns_lean_summary_rows(app_client: AsyncClient) -> None:
-    create = await app_client.post("/treatments", json=_body("LIST-001", "Eleanor Vance", "Lisinopril"))
+    create = await app_client.post(
+        "/treatments", json=_body("LIST-001", "Eleanor Vance", "Lisinopril")
+    )
     assert create.status_code == 201
 
     response = await app_client.get("/treatments")
@@ -43,6 +56,7 @@ async def test_list_returns_lean_summary_rows(app_client: AsyncClient) -> None:
     assert len(body["items"]) >= 1
     row = next(r for r in body["items"] if r["patient"]["mrn"] == "LIST-001")
     assert row["treatment"]["status"] == "pending"
+    assert row["treatment"]["treatment_start_at"].startswith("2026-05-16T08:30:00")
     assert isinstance(row["treatment"]["created_at"], str)
     assert row["patient"]["name"] == "Eleanor Vance"
     # Lean: no nested medications array, just count + first-name preview.
@@ -54,7 +68,9 @@ async def test_list_returns_lean_summary_rows(app_client: AsyncClient) -> None:
 @pytest.mark.usefixtures("postgres_container")
 async def test_list_orders_newest_first(app_client: AsyncClient) -> None:
     for i in range(3):
-        await app_client.post("/treatments", json=_body(f"ORDER-{i:03d}", f"Patient {i}", "Lisinopril"))
+        await app_client.post(
+            "/treatments", json=_body(f"ORDER-{i:03d}", f"Patient {i}", "Lisinopril")
+        )
 
     response = await app_client.get("/treatments")
     assert response.status_code == 200
@@ -67,7 +83,9 @@ async def test_list_orders_newest_first(app_client: AsyncClient) -> None:
 @pytest.mark.usefixtures("postgres_container")
 async def test_list_respects_limit_and_offset(app_client: AsyncClient) -> None:
     for i in range(5):
-        await app_client.post("/treatments", json=_body(f"PAGE-{i:03d}", f"Patient {i}", "Lisinopril"))
+        await app_client.post(
+            "/treatments", json=_body(f"PAGE-{i:03d}", f"Patient {i}", "Lisinopril")
+        )
 
     page_1 = (await app_client.get("/treatments", params={"limit": 2, "offset": 0})).json()
     page_2 = (await app_client.get("/treatments", params={"limit": 2, "offset": 2})).json()

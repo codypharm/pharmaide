@@ -61,6 +61,7 @@ async def create_treatment(
     treatment = Treatment(
         patient_id=patient.id,
         clinical_objective=request.treatment.clinical_objective,
+        treatment_start_at=request.treatment.treatment_start_at,
     )
     session.add(treatment)
     await session.flush()
@@ -92,6 +93,7 @@ async def create_treatment(
             "medication_count": len(medications),
             "medication_names": [m.name for m in medications],
             "allergy_count": len(patient.allergies),
+            "treatment_start_at_present": request.treatment.treatment_start_at is not None,
             "ingestion_method": request.ingestion_method,
             "clinical_objective_present": request.treatment.clinical_objective is not None,
         },

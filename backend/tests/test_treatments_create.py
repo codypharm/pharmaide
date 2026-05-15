@@ -35,7 +35,10 @@ async def test_post_treatments_creates_full_lineage(
             "phone": "+18005551212",
             "allergies": [" Penicillin ", "Sulfa"],
         },
-        "treatment": {"clinical_objective": "Monitor for ACE-inhibitor cough"},
+        "treatment": {
+            "clinical_objective": "Monitor for ACE-inhibitor cough",
+            "treatment_start_at": "2026-05-16T08:30:00Z",
+        },
         "medications": [
             {
                 "name": "Lisinopril",
@@ -79,6 +82,7 @@ async def test_post_treatments_creates_full_lineage(
     assert treatment.patient_id == patient_id
     assert treatment.status == "pending"
     assert treatment.clinical_objective == "Monitor for ACE-inhibitor cough"
+    assert treatment.treatment_start_at is not None
 
     analysis = await db_session.get(TreatmentAnalysis, analysis_id)
     assert analysis is not None
@@ -107,7 +111,11 @@ async def test_post_treatments_creates_full_lineage(
     assert audits[0].event_type == "treatment_created"
     assert audits[0].resource_type == "treatment"
     assert audits[0].payload["allergy_count"] == 2
+    assert audits[0].payload["treatment_start_at_present"] is True
 
     detail_response = await app_client.get(f"/treatments/{treatment_id}")
     assert detail_response.status_code == 200
     assert detail_response.json()["patient"]["allergies"] == ["Penicillin", "Sulfa"]
+    assert detail_response.json()["treatment"]["treatment_start_at"].startswith(
+        "2026-05-16T08:30:00"
+    )

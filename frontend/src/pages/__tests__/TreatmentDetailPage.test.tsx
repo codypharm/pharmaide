@@ -22,6 +22,7 @@ const SAMPLE: TreatmentDetail = {
     patient_id: "11111111-1111-1111-1111-111111111111",
     status: "pending",
     clinical_objective: "Monitor for cough",
+    treatment_start_at: "2026-05-16T08:30:00Z",
     created_at: "2026-05-11T12:00:00Z",
   },
   medications: [
@@ -166,6 +167,7 @@ describe("TreatmentDetailPage", () => {
     expect(screen.getByText("+18005551212")).toBeTruthy();
     expect(screen.getByText("Penicillin")).toBeTruthy();
     expect(screen.getByText("Sulfa")).toBeTruthy();
+    expect(screen.getByText(/May 16, 2026/i)).toBeTruthy();
     expect(screen.getByText("Monitor for cough")).toBeTruthy();
     expect(screen.getByText("Lisinopril")).toBeTruthy();
     expect(screen.getByText("10 mg")).toBeTruthy();
