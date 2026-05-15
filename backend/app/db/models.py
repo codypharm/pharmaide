@@ -103,6 +103,9 @@ class Treatment(Base):
     adherence_events: Mapped[list["AdherenceEvent"]] = relationship(
         back_populates="treatment", cascade="all, delete-orphan"
     )
+    conversation_messages: Mapped[list["ConversationMessage"]] = relationship(
+        back_populates="treatment", cascade="all, delete-orphan"
+    )
 
 
 class Medication(Base):
@@ -232,6 +235,38 @@ class AdherenceEvent(Base):
     __table_args__ = (
         Index("idx_adherence_events_treatment_created", "treatment_id", created_at.desc()),
         Index("idx_adherence_events_medication_scheduled", "medication_id", "scheduled_for"),
+    )
+
+
+class ConversationMessage(Base):
+    __tablename__ = "conversation_messages"
+
+    id: Mapped[UUID] = mapped_column(
+        Uuid, primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    treatment_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey("treatments.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    direction: Mapped[str] = mapped_column(Text, nullable=False)
+    sender_type: Mapped[str] = mapped_column(Text, nullable=False)
+    channel: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    # Patient conversations are clinical data. Store it once here, but keep
+    # message text out of logs and audit payloads.
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    safety_hold_reason: Mapped[str | None] = mapped_column(Text)
+    external_message_id: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+    )
+
+    treatment: Mapped[Treatment] = relationship(back_populates="conversation_messages")
+
+    __table_args__ = (
+        Index("idx_conversation_messages_treatment_created", "treatment_id", created_at.desc()),
     )
 
 

@@ -13,6 +13,8 @@ from uuid import UUID
 from pydantic import BaseModel, Field, field_validator
 from pydantic_extra_types.phone_numbers import PhoneNumber
 
+from app.agents.safety_schemas import PatientDraftSafetyDecision
+
 IngestionMethod = Literal["structured", "manual", "vision"]
 PatientCheckInReportType = Literal[
     "not_improving",
@@ -24,6 +26,10 @@ PatientCheckInReportType = Literal[
 PatientCheckInSource = Literal["patient", "pharmacist", "system"]
 AdherenceEventStatus = Literal["taken", "missed", "held", "skipped"]
 AdherenceEventSource = Literal["patient", "pharmacist", "system"]
+ConversationMessageDirection = Literal["inbound", "outbound"]
+ConversationMessageSender = Literal["patient", "assistant", "pharmacist", "system"]
+ConversationMessageChannel = Literal["whatsapp", "dashboard", "system"]
+ConversationMessageStatus = Literal["received", "draft_ready", "held_for_review"]
 AllergyName = Annotated[str, Field(min_length=1, max_length=200)]
 
 
@@ -169,6 +175,27 @@ class AdherenceEventView(BaseModel):
 
 class AdherenceEventList(BaseModel):
     items: list[AdherenceEventView]
+
+
+class ConversationMessageView(BaseModel):
+    id: UUID
+    treatment_id: UUID
+    direction: ConversationMessageDirection
+    sender_type: ConversationMessageSender
+    channel: ConversationMessageChannel
+    status: ConversationMessageStatus
+    body: str
+    safety_hold_reason: str | None
+    external_message_id: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ConversationTurnView(BaseModel):
+    inbound_message: ConversationMessageView
+    assistant_message: ConversationMessageView
+    safety_decision: PatientDraftSafetyDecision
 
 
 class TreatmentAnalysisSnapshot(BaseModel):
