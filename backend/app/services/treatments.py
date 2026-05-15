@@ -48,6 +48,7 @@ async def create_treatment(
         dob=request.patient.dob,
         mrn=request.patient.mrn,
         phone=_to_e164(str(request.patient.phone)),
+        allergies=request.patient.allergies,
     )
     session.add(patient)
     try:
@@ -84,12 +85,13 @@ async def create_treatment(
         resource_type="treatment",
         resource_id=treatment.id,
         # Per HIPAA "minimum necessary" — IDs and a non-PHI summary only.
-        # No name, dob, mrn, phone, dosages, frequencies, durations.
+        # No name, dob, mrn, phone, allergy names, dosages, frequencies, durations.
         payload={
             "patient_id": str(patient.id),
             "treatment_id": str(treatment.id),
             "medication_count": len(medications),
             "medication_names": [m.name for m in medications],
+            "allergy_count": len(patient.allergies),
             "ingestion_method": request.ingestion_method,
             "clinical_objective_present": request.treatment.clinical_objective is not None,
         },

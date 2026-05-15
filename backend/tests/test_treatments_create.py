@@ -33,6 +33,7 @@ async def test_post_treatments_creates_full_lineage(
             "dob": "1955-10-12",
             "mrn": "TEST-MRN-001",
             "phone": "+18005551212",
+            "allergies": [" Penicillin ", "Sulfa"],
         },
         "treatment": {"clinical_objective": "Monitor for ACE-inhibitor cough"},
         "medications": [
@@ -71,6 +72,7 @@ async def test_post_treatments_creates_full_lineage(
     assert patient.name == "Eleanor Vance"
     assert patient.mrn == "TEST-MRN-001"
     assert patient.phone == "+18005551212"
+    assert patient.allergies == ["Penicillin", "Sulfa"]
 
     treatment = await db_session.get(Treatment, treatment_id)
     assert treatment is not None
@@ -104,3 +106,8 @@ async def test_post_treatments_creates_full_lineage(
     assert len(audits) == 1
     assert audits[0].event_type == "treatment_created"
     assert audits[0].resource_type == "treatment"
+    assert audits[0].payload["allergy_count"] == 2
+
+    detail_response = await app_client.get(f"/treatments/{treatment_id}")
+    assert detail_response.status_code == 200
+    assert detail_response.json()["patient"]["allergies"] == ["Penicillin", "Sulfa"]

@@ -74,6 +74,15 @@ async def test_empty_patient_name_rejected(app_client: AsyncClient) -> None:
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_blank_patient_allergy_rejected(app_client: AsyncClient) -> None:
+    body = _base()
+    body["patient"]["allergies"] = ["Penicillin", "   "]
+    response = await app_client.post("/treatments", json=body)
+    assert response.status_code == 422
+    assert ("body", "patient", "allergies") in _error_locs(response.json())
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_unknown_ingestion_method_rejected(app_client: AsyncClient) -> None:
     body = _base()
     body["ingestion_method"] = "telepathy"

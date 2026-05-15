@@ -13,12 +13,21 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import AuditLogEntry
+from app.services import task_runner
 
 
 @pytest.mark.usefixtures("postgres_container")
 async def test_audit_payload_excludes_phi(
-    app_client: AsyncClient, db_session: AsyncSession
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    def capture_schedule(coro_fn: object, *args: object, **kwargs: object) -> None:
+        """Keep this audit test isolated from async analysis side effects."""
+        return None
+
+    monkeypatch.setattr(task_runner, "schedule", capture_schedule)
+
     body = {
         "patient": {
             "name": "Eleanor Vance",
@@ -60,6 +69,7 @@ async def test_audit_payload_excludes_phi(
     # Expected non-PHI fields are present and useful for forensics.
     assert payload["medication_count"] == 2
     assert payload["medication_names"] == ["Lisinopril", "Hydrochlorothiazide"]
+    assert payload["allergy_count"] == 0
     assert payload["ingestion_method"] == "structured"
     assert payload["clinical_objective_present"] is True
 

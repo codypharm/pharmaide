@@ -7,13 +7,14 @@ need to change.
 """
 
 from datetime import date, datetime
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from pydantic_extra_types.phone_numbers import PhoneNumber
 
 IngestionMethod = Literal["structured", "manual", "vision"]
+AllergyName = Annotated[str, Field(min_length=1, max_length=200)]
 
 
 class PatientCreate(BaseModel):
@@ -23,6 +24,16 @@ class PatientCreate(BaseModel):
     # PhoneNumber normalises to RFC3966 ("tel:+15551234567"); rejects
     # non-E.164 input. Required because WhatsApp Business API needs it.
     phone: PhoneNumber
+    allergies: list[AllergyName] = Field(default_factory=list, max_length=50)
+
+    @field_validator("allergies")
+    @classmethod
+    def normalise_allergies(cls, allergies: list[str]) -> list[str]:
+        """Strip display whitespace and reject blank allergy entries."""
+        normalised = [allergy.strip() for allergy in allergies]
+        if any(not allergy for allergy in normalised):
+            raise ValueError("allergy entries must not be blank")
+        return normalised
 
 
 class MedicationCreate(BaseModel):
@@ -74,6 +85,7 @@ class PatientView(BaseModel):
     dob: date
     mrn: str
     phone: str
+    allergies: list[str]
 
     model_config = {"from_attributes": True}
 

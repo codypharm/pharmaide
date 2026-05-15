@@ -54,6 +54,11 @@ class Patient(Base):
     # status='active'), or warn-but-allow with a lookup. Defer until
     # the routing consumer exists.
     phone: Mapped[str] = mapped_column(Text, nullable=False)
+    # Patient-specific allergy history used by later safety/CDS checks. Stored
+    # as structured JSONB so we can add richer allergy metadata later.
+    allergies: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
     )
