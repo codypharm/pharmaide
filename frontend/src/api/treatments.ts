@@ -163,6 +163,48 @@ export function listAdherenceEvents(treatmentId: string): Promise<AdherenceEvent
   return getJson<AdherenceEventList>(`/treatments/${treatmentId}/adherence-events`);
 }
 
+// GET /treatments/:id/conversation-messages — treatment chat history.
+
+export type ConversationMessageDirection = "inbound" | "outbound";
+export type ConversationMessageSender = "patient" | "assistant" | "pharmacist" | "system";
+export type ConversationMessageChannel = "whatsapp" | "dashboard" | "system";
+export type ConversationMessageStatus = "received" | "draft_ready" | "held_for_review";
+
+export type ConversationMessageView = {
+  id: string;
+  treatment_id: string;
+  direction: ConversationMessageDirection;
+  sender_type: ConversationMessageSender;
+  channel: ConversationMessageChannel;
+  status: ConversationMessageStatus;
+  body: string;
+  safety_hold_reason: string | null;
+  external_message_id: string | null;
+  created_at: string;
+};
+
+export type ConversationMessageList = {
+  items: ConversationMessageView[];
+};
+
+export type ListConversationMessagesParams = {
+  limit?: number;
+  offset?: number;
+};
+
+export function listConversationMessages(
+  treatmentId: string,
+  params: ListConversationMessagesParams = {},
+): Promise<ConversationMessageList> {
+  const query = new URLSearchParams();
+  if (params.limit !== undefined) query.set("limit", String(params.limit));
+  if (params.offset !== undefined) query.set("offset", String(params.offset));
+  const qs = query.toString();
+  return getJson<ConversationMessageList>(
+    `/treatments/${treatmentId}/conversation-messages${qs ? `?${qs}` : ""}`,
+  );
+}
+
 // GET /treatments — paginated list. Mirrors backend TreatmentList.
 
 export type TreatmentListItem = {

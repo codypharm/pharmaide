@@ -4,6 +4,7 @@ import {
   createPatientCheckIn,
   getAnalysis,
   listAdherenceEvents,
+  listConversationMessages,
   listPatientCheckIns,
   listTreatments,
   triggerAnalysis,
@@ -227,6 +228,38 @@ describe("adherence events", () => {
       scheduled_for: "2026-05-18T08:00:00Z",
     });
     expect(result.status).toBe("held");
+  });
+});
+
+describe("conversation messages", () => {
+  it("lists conversation messages for a treatment", async () => {
+    const spy = mockFetch({
+      status: 200,
+      body: {
+        items: [
+          {
+            id: "msg-1",
+            treatment_id: "t1",
+            direction: "inbound",
+            sender_type: "patient",
+            channel: "whatsapp",
+            status: "received",
+            body: "I feel dizzy after taking it.",
+            safety_hold_reason: null,
+            external_message_id: null,
+            created_at: "2026-05-18T10:00:00Z",
+          },
+        ],
+      },
+    });
+
+    const result = await listConversationMessages("t1", { limit: 25, offset: 50 });
+
+    const calledUrl = spy.mock.calls[0]?.[0] as string;
+    expect(calledUrl).toContain("/treatments/t1/conversation-messages?");
+    expect(calledUrl).toContain("limit=25");
+    expect(calledUrl).toContain("offset=50");
+    expect(result.items[0].body).toBe("I feel dizzy after taking it.");
   });
 });
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   AlertCircle,
@@ -10,6 +10,10 @@ import {
 } from "lucide-react";
 
 import { ApiError } from "../api/client";
+import {
+  listConversationMessages,
+  type ConversationMessageView,
+} from "../api/treatments";
 import {
   listTriageItems,
   updateTriageItemStatus,
@@ -29,6 +33,11 @@ type ActionError = {
   itemId: string;
   requestId: string | null;
 };
+
+type ConversationState =
+  | { kind: "loading" }
+  | { kind: "ok"; items: ConversationMessageView[] }
+  | { kind: "error"; requestId: string | null };
 
 const REASON_LABELS: Record<TriageReason, string> = {
   input_guard: "Incoming message safety review",
@@ -59,6 +68,10 @@ export default function TriageQueuePage() {
   const [state, setState] = useState<FetchState>({ kind: "loading" });
   const [actionItemId, setActionItemId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<ActionError | null>(null);
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
+  const [conversationByItem, setConversationByItem] = useState<
+    Record<string, ConversationState>
+  >({});
 
   useEffect(() => {
     let cancelled = false;
@@ -117,6 +130,39 @@ export default function TriageQueuePage() {
     }
   }
 
+  async function toggleConversation(item: TriageItemView) {
+    if (expandedItemId === item.id) {
+      setExpandedItemId(null);
+      return;
+    }
+
+    setExpandedItemId(item.id);
+    if (conversationByItem[item.id]) return;
+
+    setConversationByItem((current) => ({
+      ...current,
+      [item.id]: { kind: "loading" },
+    }));
+    try {
+      const res = await listConversationMessages(item.treatment_id, {
+        limit: 100,
+        offset: 0,
+      });
+      setConversationByItem((current) => ({
+        ...current,
+        [item.id]: { kind: "ok", items: res.items },
+      }));
+    } catch (err: unknown) {
+      setConversationByItem((current) => ({
+        ...current,
+        [item.id]: {
+          kind: "error",
+          requestId: err instanceof ApiError ? err.requestId : null,
+        },
+      }));
+    }
+  }
+
   const items = state.kind === "ok" ? state.items : [];
   const stats = useMemo(() => buildStats(items), [items]);
 
@@ -135,7 +181,10 @@ export default function TriageQueuePage() {
           <TriageTable
             items={state.items}
             actionItemId={actionItemId}
+            expandedItemId={expandedItemId}
+            conversationByItem={conversationByItem}
             onMoveItem={moveItem}
+            onToggleConversation={toggleConversation}
           />
         )}
       </div>
@@ -301,11 +350,17 @@ function ActionErrorCard({ error }: { error: ActionError }) {
 function TriageTable({
   items,
   actionItemId,
+  expandedItemId,
+  conversationByItem,
   onMoveItem,
+  onToggleConversation,
 }: {
   items: TriageItemView[];
   actionItemId: string | null;
+  expandedItemId: string | null;
+  conversationByItem: Record<string, ConversationState>;
   onMoveItem: (itemId: string, status: TriageStatus) => Promise<void>;
+  onToggleConversation: (item: TriageItemView) => Promise<void>;
 }) {
   return (
     <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">
@@ -322,48 +377,160 @@ function TriageTable({
           </thead>
           <tbody>
             {items.map((item, index) => (
-              <tr
-                key={item.id}
-                className={`border-b border-slate-100 last:border-b-0 ${
-                  index % 2 === 1 ? "bg-slate-50/60" : "bg-white"
-                }`}
-              >
-                <td className="px-6 py-4 text-slate-600 whitespace-nowrap">
-                  <div className="flex items-center gap-2">
-                    <Clock size={14} className="text-slate-400" />
-                    {formatCreatedAt(item.created_at)}
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <p className="font-bold text-slate-900">{REASON_LABELS[item.reason]}</p>
-                  <p className="text-xs text-slate-500 mt-1">Review ID {shortId(item.id)}</p>
-                </td>
-                <td className="px-6 py-4">
-                  <Link
-                    to={`/dashboard/treatments/${item.treatment_id}`}
-                    className="font-mono font-bold text-blue-700 hover:underline"
-                  >
-                    {shortId(item.treatment_id)}
-                  </Link>
-                </td>
-                <td className="px-6 py-4">
-                  <StatusBadge status={item.status} />
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex justify-end">
-                    <ReviewAction
-                      item={item}
-                      isBusy={actionItemId === item.id}
-                      onMoveItem={onMoveItem}
-                    />
-                  </div>
-                </td>
-              </tr>
+              <Fragment key={item.id}>
+                <tr
+                  className={`border-b border-slate-100 ${
+                    index % 2 === 1 ? "bg-slate-50/60" : "bg-white"
+                  }`}
+                >
+                  <td className="px-6 py-4 text-slate-600 whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      <Clock size={14} className="text-slate-400" />
+                      {formatCreatedAt(item.created_at)}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <p className="font-bold text-slate-900">{REASON_LABELS[item.reason]}</p>
+                    <p className="text-xs text-slate-500 mt-1">Review ID {shortId(item.id)}</p>
+                  </td>
+                  <td className="px-6 py-4">
+                    <Link
+                      to={`/dashboard/treatments/${item.treatment_id}`}
+                      className="font-mono font-bold text-blue-700 hover:underline"
+                    >
+                      {shortId(item.treatment_id)}
+                    </Link>
+                  </td>
+                  <td className="px-6 py-4">
+                    <StatusBadge status={item.status} />
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void onToggleConversation(item)}
+                        className="inline-flex min-w-36 items-center justify-center px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 cursor-pointer"
+                      >
+                        {expandedItemId === item.id ? "Hide conversation" : "View conversation"}
+                      </button>
+                      <ReviewAction
+                        item={item}
+                        isBusy={actionItemId === item.id}
+                        onMoveItem={onMoveItem}
+                      />
+                    </div>
+                  </td>
+                </tr>
+                {expandedItemId === item.id && (
+                  <tr key={`${item.id}-conversation`} className="bg-slate-50/80">
+                    <td colSpan={5} className="px-6 py-5">
+                      <ConversationPanel
+                        item={item}
+                        state={conversationByItem[item.id] ?? { kind: "loading" }}
+                      />
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             ))}
           </tbody>
         </table>
       </div>
     </section>
+  );
+}
+
+function ConversationPanel({
+  item,
+  state,
+}: {
+  item: TriageItemView;
+  state: ConversationState;
+}) {
+  if (state.kind === "loading") {
+    return (
+      <div className="flex items-center gap-2 text-sm text-slate-500">
+        <Loader2 size={16} className="animate-spin" />
+        Loading conversation context...
+      </div>
+    );
+  }
+
+  if (state.kind === "error") {
+    return (
+      <div className="flex items-start gap-2 text-sm text-amber-700">
+        <AlertCircle size={16} className="mt-0.5" />
+        <span>
+          Could not load conversation context. Reference ID:{" "}
+          <code>{state.requestId ?? "unknown"}</code>
+        </span>
+      </div>
+    );
+  }
+
+  if (state.items.length === 0) {
+    return <p className="text-sm text-slate-500">No conversation messages recorded yet.</p>;
+  }
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+          Conversation context
+        </p>
+        <p className="text-xs text-slate-500 mt-1">
+          Review the patient message and held assistant draft before changing queue status.
+        </p>
+      </div>
+      <div className="grid gap-3">
+        {state.items.map((message) => (
+          <ConversationMessageRow
+            key={message.id}
+            message={message}
+            isHeldDraft={message.id === item.conversation_message_id}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ConversationMessageRow({
+  message,
+  isHeldDraft,
+}: {
+  message: ConversationMessageView;
+  isHeldDraft: boolean;
+}) {
+  const senderLabel = {
+    patient: "Patient",
+    assistant: "Assistant",
+    pharmacist: "Pharmacist",
+    system: "System",
+  }[message.sender_type];
+
+  return (
+    <div className="border border-slate-200 bg-white rounded-xl p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            {senderLabel}
+          </span>
+          {isHeldDraft && (
+            <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
+              Held draft
+            </span>
+          )}
+        </div>
+        <span className="text-xs text-slate-500">{formatCreatedAt(message.created_at)}</span>
+      </div>
+      <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-800">{message.body}</p>
+      {message.safety_hold_reason && (
+        <p className="mt-3 text-xs font-semibold text-amber-700">
+          Hold reason: {REASON_LABELS[message.safety_hold_reason as TriageReason] ?? message.safety_hold_reason}
+        </p>
+      )}
+    </div>
   );
 }
 

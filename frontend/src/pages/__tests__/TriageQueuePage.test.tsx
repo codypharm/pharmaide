@@ -3,6 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import * as treatmentsApi from "../../api/treatments";
+import type { ConversationMessageList } from "../../api/treatments";
 import * as triageApi from "../../api/triage";
 import type { TriageItemList, TriageItemView } from "../../api/triage";
 import TriageQueuePage from "../TriageQueuePage";
@@ -14,6 +16,35 @@ const OPEN_ITEM: TriageItemView = {
   reason: "referee",
   status: "open",
   created_at: "2026-05-15T10:00:00Z",
+};
+
+const CONVERSATION_MESSAGES: ConversationMessageList = {
+  items: [
+    {
+      id: "44444444-4444-4444-4444-444444444444",
+      treatment_id: OPEN_ITEM.treatment_id,
+      direction: "inbound",
+      sender_type: "patient",
+      channel: "whatsapp",
+      status: "received",
+      body: "I feel dizzy after the second dose.",
+      safety_hold_reason: null,
+      external_message_id: null,
+      created_at: "2026-05-15T10:01:00Z",
+    },
+    {
+      id: OPEN_ITEM.conversation_message_id!,
+      treatment_id: OPEN_ITEM.treatment_id,
+      direction: "outbound",
+      sender_type: "assistant",
+      channel: "whatsapp",
+      status: "held_for_review",
+      body: "You can skip the next dose.",
+      safety_hold_reason: "referee",
+      external_message_id: null,
+      created_at: "2026-05-15T10:02:00Z",
+    },
+  ],
 };
 
 function renderPage() {
@@ -65,5 +96,30 @@ describe("TriageQueuePage", () => {
 
     await screen.findByText(/no patients need review right now/i);
     expect(screen.queryByText(/could not load/i)).toBeNull();
+  });
+
+  it("expands a triage item and displays its conversation context", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(triageApi, "listTriageItems").mockResolvedValue({
+      items: [OPEN_ITEM],
+    });
+    const conversationSpy = vi
+      .spyOn(treatmentsApi, "listConversationMessages")
+      .mockResolvedValue(CONVERSATION_MESSAGES);
+
+    renderPage();
+
+    await screen.findByText("Clinical draft review");
+    await user.click(screen.getByRole("button", { name: /view conversation/i }));
+
+    await waitFor(() =>
+      expect(conversationSpy).toHaveBeenCalledWith(OPEN_ITEM.treatment_id, {
+        limit: 100,
+        offset: 0,
+      }),
+    );
+    expect(screen.getByText("I feel dizzy after the second dose.")).toBeTruthy();
+    expect(screen.getByText("You can skip the next dose.")).toBeTruthy();
+    expect(screen.getByText("Held draft")).toBeTruthy();
   });
 });
