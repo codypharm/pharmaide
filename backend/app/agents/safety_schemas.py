@@ -12,6 +12,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 SafetyAction = Literal["allow", "block", "escalate"]
+PatientDraftSafetyStatus = Literal["send", "hold_for_pharmacist"]
 GuardStage = Literal["input", "output"]
 ActorRole = Literal["patient", "assistant", "pharmacist"]
 GuardCategory = Literal[
@@ -113,3 +114,11 @@ class SafetyReview(SafetyEnvelope):
     input_guard: GuardResult
     referee: RefereeResult
     output_guard: GuardResult
+
+
+class PatientDraftSafetyDecision(SafetyEnvelope):
+    """Final send/hold decision for one patient-facing assistant draft."""
+
+    status: PatientDraftSafetyStatus
+    review: SafetyReview
+    message_to_send: str | None = None

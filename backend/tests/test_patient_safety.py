@@ -46,7 +46,7 @@ async def test_review_patient_draft_safety_returns_review_and_audits(
     )
     referee_provider = FakeRefereeProvider(_referee_payload("allow"))
 
-    review = await review_patient_draft_safety(
+    decision = await review_patient_draft_safety(
         db_session,
         treatment_id=treatment_id,
         patient_message="Can I take this after food?",
@@ -63,9 +63,11 @@ async def test_review_patient_draft_safety_returns_review_and_audits(
         select(AuditLogEntry).where(AuditLogEntry.event_type == "safety_review_completed")
     )
 
-    assert review.input_guard.action == "allow"
-    assert review.referee.action == "allow"
-    assert review.output_guard.action == "allow"
+    assert decision.status == "send"
+    assert decision.message_to_send == "Please follow the timing your pharmacist approved."
+    assert decision.review.input_guard.action == "allow"
+    assert decision.review.referee.action == "allow"
+    assert decision.review.output_guard.action == "allow"
     assert [request.stage for request in guard_provider.seen_requests] == ["input", "output"]
     assert len(referee_provider.seen_requests) == 1
     assert audit is not None
@@ -78,7 +80,7 @@ async def test_review_patient_draft_safety_fails_closed_without_configured_key(
 ) -> None:
     treatment_id = uuid4()
 
-    review = await review_patient_draft_safety(
+    decision = await review_patient_draft_safety(
         db_session,
         treatment_id=treatment_id,
         patient_message="Can I take more medicine?",
@@ -92,9 +94,11 @@ async def test_review_patient_draft_safety_fails_closed_without_configured_key(
         select(AuditLogEntry).where(AuditLogEntry.event_type == "safety_review_completed")
     )
 
-    assert review.input_guard.action == "block"
-    assert review.referee.action == "block"
-    assert review.output_guard.action == "block"
+    assert decision.status == "hold_for_pharmacist"
+    assert decision.message_to_send is None
+    assert decision.review.input_guard.action == "block"
+    assert decision.review.referee.action == "block"
+    assert decision.review.output_guard.action == "block"
     assert audit is not None
     assert audit.payload["requires_pharmacist_review"] is True
 

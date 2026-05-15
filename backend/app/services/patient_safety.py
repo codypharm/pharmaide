@@ -14,8 +14,8 @@ from app.agents.safety_provider_factory import (
     ConfiguredSafetyProviders,
     build_configured_safety_providers,
 )
-from app.agents.safety_sandwich import run_safety_sandwich
-from app.agents.safety_schemas import SafetyReview
+from app.agents.safety_sandwich import can_send_to_patient, run_safety_sandwich
+from app.agents.safety_schemas import PatientDraftSafetyDecision
 from app.services.safety_audit import audit_safety_review
 
 
@@ -28,7 +28,7 @@ async def review_patient_draft_safety(
     prescription_context: str,
     openai_api_key: SecretStr | None = None,
     providers: ConfiguredSafetyProviders | None = None,
-) -> SafetyReview:
+) -> PatientDraftSafetyDecision:
     """Run safety sandwich for a patient-facing draft and audit the result."""
     configured = providers or build_configured_safety_providers(openai_api_key)
     review = await run_safety_sandwich(
@@ -40,4 +40,14 @@ async def review_patient_draft_safety(
         referee_provider=configured.referee_provider,
     )
     await audit_safety_review(session, review)
-    return review
+    if can_send_to_patient(review):
+        return PatientDraftSafetyDecision(
+            status="send",
+            review=review,
+            message_to_send=assistant_draft,
+        )
+    return PatientDraftSafetyDecision(
+        status="hold_for_pharmacist",
+        review=review,
+        message_to_send=None,
+    )
