@@ -19,6 +19,7 @@ from app.agents.model_safety_providers import (
     build_guard_agent,
     build_referee_agent,
 )
+from app.agents.remote_safety_providers import RemoteHttpGuardProvider, RemoteHttpRefereeProvider
 from app.agents.safety_providers import (
     SafetyGuardProvider,
     SafetyRefereeProvider,
@@ -26,7 +27,7 @@ from app.agents.safety_providers import (
     UnconfiguredRefereeProvider,
 )
 
-SafetyProviderMode = Literal["model", "unconfigured"]
+SafetyProviderMode = Literal["model", "remote_http", "unconfigured"]
 
 
 @dataclass(frozen=True)
@@ -41,9 +42,38 @@ def build_configured_safety_providers(
     openai_api_key: SecretStr | None,
     *,
     provider_mode: SafetyProviderMode = "model",
+    llama_guard_url: str | None = None,
+    agentdog_url: str | None = None,
+    safety_provider_api_key: SecretStr | None = None,
+    safety_provider_timeout_seconds: float = 10,
 ) -> ConfiguredSafetyProviders:
     """Build safety providers from explicit safety mode and OpenAI key."""
-    if provider_mode == "unconfigured" or openai_api_key is None:
+    if provider_mode == "unconfigured":
+        return ConfiguredSafetyProviders(
+            guard_provider=UnconfiguredGuardProvider(),
+            referee_provider=UnconfiguredRefereeProvider(),
+        )
+
+    if provider_mode == "remote_http":
+        if not llama_guard_url or not agentdog_url:
+            return ConfiguredSafetyProviders(
+                guard_provider=UnconfiguredGuardProvider(),
+                referee_provider=UnconfiguredRefereeProvider(),
+            )
+        return ConfiguredSafetyProviders(
+            guard_provider=RemoteHttpGuardProvider(
+                url=llama_guard_url,
+                api_key=safety_provider_api_key,
+                timeout_seconds=safety_provider_timeout_seconds,
+            ),
+            referee_provider=RemoteHttpRefereeProvider(
+                url=agentdog_url,
+                api_key=safety_provider_api_key,
+                timeout_seconds=safety_provider_timeout_seconds,
+            ),
+        )
+
+    if openai_api_key is None:
         return ConfiguredSafetyProviders(
             guard_provider=UnconfiguredGuardProvider(),
             referee_provider=UnconfiguredRefereeProvider(),

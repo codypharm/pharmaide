@@ -134,7 +134,10 @@ def _output_guard_not_run(rationale: str) -> GuardResult:
 
 
 def _log_safety_review(review: SafetyReview) -> None:
-    log.info(
+    # Resolve after test/runtime logging configuration so cached structlog
+    # proxies do not pin an older renderer.
+    current_log = structlog.get_logger(__name__)
+    current_log.info(
         "safety_sandwich_completed",
         input_action=review.input_guard.action,
         referee_action=review.referee.action,

@@ -7,7 +7,7 @@ checkpointer paths, debug gates) reads the same values everywhere.
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -33,8 +33,13 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr | None = None
 
     # Explicit safety-provider mode. "model" is the current interim path using
-    # typed PydanticAI checks; "unconfigured" deliberately fails closed.
-    safety_provider: Literal["model", "unconfigured"] = "model"
+    # typed PydanticAI checks; "remote_http" calls a private safety gateway;
+    # "unconfigured" deliberately fails closed.
+    safety_provider: Literal["model", "remote_http", "unconfigured"] = "model"
+    llama_guard_url: str | None = None
+    agentdog_url: str | None = None
+    safety_provider_api_key: SecretStr | None = None
+    safety_provider_timeout_seconds: float = Field(default=10, gt=0, le=60)
 
     # Caps a single analysis run so a stuck graph cannot pin background
     # capacity indefinitely. Route-level test overrides use the same bounds.
@@ -71,6 +76,15 @@ class Settings(BaseSettings):
                 if number.isdigit():
                     return int(number) * multiplier
         return value
+
+    @model_validator(mode="after")
+    def require_remote_safety_urls(self) -> "Settings":
+        """Remote safety mode needs both private provider endpoints."""
+        if self.safety_provider == "remote_http" and (
+            not self.llama_guard_url or not self.agentdog_url
+        ):
+            raise ValueError("remote_http safety provider requires both safety URLs")
+        return self
 
 
 # lru_cache so Settings is parsed once per process. Cheap insurance against

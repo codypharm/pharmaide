@@ -62,7 +62,10 @@ async def run_guard_check(
     try:
         payload = await provider.check(request)
     except SafetyProviderUnavailable:
-        log.warning(
+        # Resolve after test/runtime logging configuration so cached structlog
+        # proxies do not pin an older renderer.
+        current_log = structlog.get_logger(__name__)
+        current_log.warning(
             "safety_guard_provider_unconfigured",
             stage=request.stage,
         )
@@ -79,7 +82,10 @@ async def run_referee_check(
     try:
         payload = await provider.review(request)
     except SafetyProviderUnavailable:
-        log.warning("safety_referee_provider_unconfigured")
+        # Resolve after test/runtime logging configuration so cached structlog
+        # proxies do not pin an older renderer.
+        current_log = structlog.get_logger(__name__)
+        current_log.warning("safety_referee_provider_unconfigured")
         return _blocked_referee_result()
 
     return validate_referee_result(payload)

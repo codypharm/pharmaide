@@ -33,12 +33,20 @@ async def review_patient_draft_safety(
     prescription_context: str,
     openai_api_key: SecretStr | None = None,
     safety_provider: SafetyProviderMode = "model",
+    llama_guard_url: str | None = None,
+    agentdog_url: str | None = None,
+    safety_provider_api_key: SecretStr | None = None,
+    safety_provider_timeout_seconds: float = 10,
     providers: ConfiguredSafetyProviders | None = None,
 ) -> PatientDraftSafetyDecision:
     """Run safety sandwich for a patient-facing draft and audit the result."""
     configured = providers or build_configured_safety_providers(
         openai_api_key,
         provider_mode=safety_provider,
+        llama_guard_url=llama_guard_url,
+        agentdog_url=agentdog_url,
+        safety_provider_api_key=safety_provider_api_key,
+        safety_provider_timeout_seconds=safety_provider_timeout_seconds,
     )
     review = await run_safety_sandwich(
         treatment_id=treatment_id,

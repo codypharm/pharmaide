@@ -3,6 +3,7 @@
 from pydantic import SecretStr
 
 from app.agents.model_safety_providers import ModelGuardProvider, ModelRefereeProvider
+from app.agents.remote_safety_providers import RemoteHttpGuardProvider, RemoteHttpRefereeProvider
 from app.agents.safety_provider_factory import build_configured_safety_providers
 from app.agents.safety_providers import UnconfiguredGuardProvider, UnconfiguredRefereeProvider
 
@@ -32,3 +33,26 @@ def test_safety_provider_factory_uses_model_providers_with_openai_key() -> None:
 
     assert isinstance(providers.guard_provider, ModelGuardProvider)
     assert isinstance(providers.referee_provider, ModelRefereeProvider)
+
+
+def test_safety_provider_factory_uses_remote_http_providers_when_configured() -> None:
+    providers = build_configured_safety_providers(
+        None,
+        provider_mode="remote_http",
+        llama_guard_url="https://safety.test/v1/guard/check",
+        agentdog_url="https://safety.test/v1/referee/review",
+        safety_provider_api_key=SecretStr("safety-key"),
+    )
+
+    assert isinstance(providers.guard_provider, RemoteHttpGuardProvider)
+    assert isinstance(providers.referee_provider, RemoteHttpRefereeProvider)
+
+
+def test_safety_provider_factory_fails_closed_when_remote_http_urls_are_missing() -> None:
+    providers = build_configured_safety_providers(
+        None,
+        provider_mode="remote_http",
+    )
+
+    assert isinstance(providers.guard_provider, UnconfiguredGuardProvider)
+    assert isinstance(providers.referee_provider, UnconfiguredRefereeProvider)
