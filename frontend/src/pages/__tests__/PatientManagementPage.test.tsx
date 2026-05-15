@@ -5,12 +5,14 @@ import { toast } from "sonner";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import * as treatmentsApi from "../../api/treatments";
+import * as triageApi from "../../api/triage";
 import type {
   ConversationMessageList,
   ConversationTurnView,
   TreatmentDetail,
   TreatmentList,
 } from "../../api/treatments";
+import type { TriageItemList } from "../../api/triage";
 import PatientManagementPage from "../PatientManagementPage";
 
 vi.mock("sonner", () => ({
@@ -132,6 +134,19 @@ const HELD_TURN: ConversationTurnView = {
   },
 };
 
+const TRIAGE_ITEMS: TriageItemList = {
+  items: [
+    {
+      id: "triage-1",
+      treatment_id: TREATMENTS.items[0].treatment.id,
+      conversation_message_id: "msg-3",
+      reason: "referee",
+      status: "open",
+      created_at: "2026-05-15T10:02:00Z",
+    },
+  ],
+};
+
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={["/dashboard/surveillance"]}>
@@ -154,6 +169,7 @@ describe("PatientManagementPage", () => {
     vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue(TREATMENTS);
     vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(DETAIL);
     vi.spyOn(treatmentsApi, "listConversationMessages").mockResolvedValue(MESSAGES);
+    vi.spyOn(triageApi, "listTriageItems").mockResolvedValue(TRIAGE_ITEMS);
 
     renderPage();
 
@@ -168,6 +184,12 @@ describe("PatientManagementPage", () => {
     expect(await screen.findByRole("columnheader", { name: "Dosage" })).toBeTruthy();
     expect(screen.getByText("10mg")).toBeTruthy();
     expect(screen.getByText("Amlodipine")).toBeTruthy();
+    expect(await screen.findByText("Needs pharmacist review")).toBeTruthy();
+    expect(screen.getByText("Clinical draft review")).toBeTruthy();
+    expect(screen.getByRole("link", { name: /open triage queue/i })).toHaveAttribute(
+      "href",
+      "/dashboard/triage",
+    );
     expect(await screen.findByText("I feel dizzy today.")).toBeTruthy();
   });
 
@@ -175,6 +197,7 @@ describe("PatientManagementPage", () => {
     const user = userEvent.setup();
     vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue(TREATMENTS);
     vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(DETAIL);
+    vi.spyOn(triageApi, "listTriageItems").mockResolvedValue(TRIAGE_ITEMS);
     vi.spyOn(treatmentsApi, "listConversationMessages")
       .mockResolvedValueOnce(MESSAGES)
       .mockResolvedValueOnce({

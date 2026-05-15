@@ -12,7 +12,7 @@ import {
   User,
   Zap,
 } from "lucide-react";
-import { useOutletContext } from "react-router-dom";
+import { Link, useOutletContext } from "react-router-dom";
 import { toast } from "sonner";
 
 import { ApiError } from "../api/client";
@@ -26,6 +26,11 @@ import {
   type TreatmentDetail,
   type TreatmentListItem,
 } from "../api/treatments";
+import {
+  listTriageItems,
+  type TriageItemView,
+  type TriageReason,
+} from "../api/triage";
 
 type OutletContext = {
   isPrivacyMode: boolean;
@@ -54,6 +59,14 @@ type PatientTreatmentGroup = {
 };
 
 const PAGE_SIZE = 50;
+
+const TRIAGE_REASON_LABELS: Record<TriageReason, string> = {
+  input_guard: "Incoming message safety review",
+  referee: "Clinical draft review",
+  output_guard: "Response safety review",
+  adverse_event: "Possible adverse event",
+  non_responsive: "Patient follow-up needed",
+};
 
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
@@ -106,6 +119,7 @@ export default function PatientManagementPage() {
   const [treatmentDetailState, setTreatmentDetailState] = useState<TreatmentDetailState>({
     kind: "idle",
   });
+  const [triageItems, setTriageItems] = useState<TriageItemView[]>([]);
   const [selectedTreatmentId, setSelectedTreatmentId] = useState<string | null>(null);
   const [activeProfileTab, setActiveProfileTab] = useState<"patient" | "reasoning">("patient");
   const [searchQuery, setSearchQuery] = useState("");
@@ -126,6 +140,22 @@ export default function PatientManagementPage() {
           kind: "error",
           requestId: err instanceof ApiError ? err.requestId : null,
         });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    listTriageItems({ limit: PAGE_SIZE, offset: 0 })
+      .then((res) => {
+        if (cancelled) return;
+        setTriageItems(res.items);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setTriageItems([]);
       });
     return () => {
       cancelled = true;
@@ -194,6 +224,14 @@ export default function PatientManagementPage() {
 
   const selectedTreatment =
     treatments.find((item) => item.treatment.id === selectedTreatmentId) ?? null;
+  const selectedTreatmentTriageItems = useMemo(() => {
+    if (!selectedTreatmentId) return [];
+    return triageItems.filter(
+      (item) =>
+        item.treatment_id === selectedTreatmentId &&
+        (item.status === "open" || item.status === "acknowledged"),
+    );
+  }, [selectedTreatmentId, triageItems]);
 
   async function refreshConversation(treatmentId: string): Promise<ConversationMessageList> {
     const res = await listConversationMessages(treatmentId, { limit: 100, offset: 0 });
@@ -217,6 +255,7 @@ export default function PatientManagementPage() {
       });
       setIncomingMessage("");
       await refreshConversation(selectedTreatment.treatment.id);
+      await refreshTriageItems();
 
       if (turn.assistant_message.status === "held_for_review") {
         toast.success("Draft held for pharmacist review", {
@@ -234,6 +273,15 @@ export default function PatientManagementPage() {
       });
     } finally {
       setIsSubmittingMessage(false);
+    }
+  }
+
+  async function refreshTriageItems(): Promise<void> {
+    try {
+      const res = await listTriageItems({ limit: PAGE_SIZE, offset: 0 });
+      setTriageItems(res.items);
+    } catch {
+      setTriageItems([]);
     }
   }
 
@@ -291,7 +339,11 @@ export default function PatientManagementPage() {
           <>
             <PatientHeader item={selectedTreatment} isPrivacyMode={isPrivacyMode} />
             <div className="flex-1 flex overflow-hidden">
-              <ClinicalWorkspace item={selectedTreatment} treatmentDetailState={treatmentDetailState} />
+              <ClinicalWorkspace
+                item={selectedTreatment}
+                activeTriageItems={selectedTreatmentTriageItems}
+                treatmentDetailState={treatmentDetailState}
+              />
               <InteractionLog
                 activeProfileTab={activeProfileTab}
                 conversationState={conversationState}
@@ -479,13 +531,18 @@ function PatientHeader({
 
 function ClinicalWorkspace({
   item,
+  activeTriageItems,
   treatmentDetailState,
 }: {
   item: TreatmentListItem;
+  activeTriageItems: TriageItemView[];
   treatmentDetailState: TreatmentDetailState;
 }) {
   return (
     <div className="flex-1 overflow-y-auto p-8 flex flex-col gap-6">
+      {activeTriageItems.length > 0 && (
+        <NeedsReviewAlert items={activeTriageItems} />
+      )}
       <section className="bg-white border border-slate-200 rounded-2xl p-6">
         <div className="flex items-center gap-2 mb-5">
           <Activity size={18} className="text-slate-400" />
@@ -517,6 +574,37 @@ function ClinicalWorkspace({
         </p>
       </section>
     </div>
+  );
+}
+
+function NeedsReviewAlert({ items }: { items: TriageItemView[] }) {
+  const firstItem = items[0];
+  const reason = TRIAGE_REASON_LABELS[firstItem.reason];
+  const itemCountLabel = `${items.length} active flag${items.length === 1 ? "" : "s"}`;
+
+  return (
+    <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-start gap-3">
+          <AlertCircle size={18} className="mt-0.5 text-amber-700" />
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-amber-700">
+              Needs pharmacist review
+            </p>
+            <p className="mt-1 text-sm font-bold text-slate-900">{reason}</p>
+            <p className="mt-1 text-xs font-semibold text-slate-600">
+              {itemCountLabel} from patient conversation
+            </p>
+          </div>
+        </div>
+        <Link
+          to="/dashboard/triage"
+          className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-slate-800"
+        >
+          Open Triage Queue
+        </Link>
+      </div>
+    </section>
   );
 }
 
