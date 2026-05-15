@@ -8,19 +8,25 @@ import {
   Loader2,
   AlertCircle,
   Brain,
+  MessageSquare,
   Play,
+  Send,
   ShieldCheck,
 } from "lucide-react";
 
 import { ApiError, NotFoundError } from "../api/client";
 import {
   getTreatment,
+  createPatientCheckIn,
+  listPatientCheckIns,
   triggerAnalysis,
   type AnalysisResult,
   type ClinicalSafetyReview,
   type DDIWarning,
   type KBCitation,
   type MedicationGrounding,
+  type PatientCheckInReportType,
+  type PatientCheckInView,
   type ReminderSlot,
   type TreatmentDetail,
 } from "../api/treatments";
@@ -90,6 +96,10 @@ export default function TreatmentDetailPage() {
                 <PatientCard data={state.data} isPrivacyMode={isPrivacyMode} />
                 <TreatmentCard data={state.data} />
                 <MedicationsCard data={state.data} />
+                <PatientUpdatesCard
+                  treatmentId={state.data.treatment.id}
+                  isPrivacyMode={isPrivacyMode}
+                />
               </>
             ) : (
               <ReasoningTab treatmentId={state.data.treatment.id} />
@@ -98,6 +108,221 @@ export default function TreatmentDetailPage() {
         )}
       </div>
     </div>
+  );
+}
+
+type CheckInState =
+  | { kind: "loading" }
+  | { kind: "ok"; items: PatientCheckInView[] }
+  | { kind: "error"; requestId: string | null };
+
+const REPORT_TYPE_OPTIONS: { value: PatientCheckInReportType; label: string }[] = [
+  { value: "not_improving", label: "Not improving" },
+  { value: "side_effect", label: "Side effect" },
+  { value: "feeling_better", label: "Feeling better" },
+  { value: "general_update", label: "General update" },
+  { value: "missed_dose", label: "Missed dose" },
+];
+
+function PatientUpdatesCard({
+  treatmentId,
+  isPrivacyMode,
+}: {
+  treatmentId: string;
+  isPrivacyMode: boolean;
+}) {
+  const [state, setState] = useState<CheckInState>({ kind: "loading" });
+  const [reportType, setReportType] = useState<PatientCheckInReportType>("general_update");
+  const [message, setMessage] = useState("");
+  const [observedAt, setObservedAt] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setState({ kind: "loading" });
+    listPatientCheckIns(treatmentId)
+      .then((result) => {
+        if (!cancelled) setState({ kind: "ok", items: result.items });
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setState({
+          kind: "error",
+          requestId: err instanceof ApiError ? err.requestId : null,
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [treatmentId]);
+
+  async function handleSubmit(): Promise<void> {
+    if (!message.trim()) {
+      setSaveError("Enter the patient-reported clinical update before saving.");
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      const created = await createPatientCheckIn(treatmentId, {
+        report_type: reportType,
+        source: "pharmacist",
+        message: message.trim(),
+        observed_at: toOptionalIso(observedAt),
+      });
+      setState((current) =>
+        current.kind === "ok" ? { kind: "ok", items: [created, ...current.items] } : current,
+      );
+      setMessage("");
+      setObservedAt("");
+      setReportType("general_update");
+    } catch (err) {
+      const requestId = err instanceof ApiError ? err.requestId : null;
+      setSaveError(
+        `Could not save patient-reported clinical update. Reference ID: ${
+          requestId ?? "unknown"
+        }`,
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  const phi = isPrivacyMode ? "blur-sm select-none" : "";
+
+  return (
+    <Section title="Patient-Reported Updates" icon={<MessageSquare size={16} />}>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div>
+          {state.kind === "loading" && (
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <Loader2 size={16} className="animate-spin" />
+              Loading patient-reported updates…
+            </div>
+          )}
+          {state.kind === "error" && (
+            <div className="flex items-start gap-2 text-sm text-red-700">
+              <AlertCircle size={16} className="mt-0.5" />
+              <span>
+                Could not load patient-reported updates. Reference ID:{" "}
+                {state.requestId ?? "unknown"}
+              </span>
+            </div>
+          )}
+          {state.kind === "ok" && (
+            <>
+              {state.items.length === 0 ? (
+                <div className="border border-slate-200 bg-slate-50 px-4 py-5">
+                  <p className="text-sm font-bold text-slate-900">
+                    No patient-reported updates recorded
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Use this section when a patient reports symptoms, progress, concerns, or a
+                    missed dose.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {state.items.map((item) => (
+                    <div key={item.id} className="border border-slate-200 bg-slate-50 px-4 py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                          {reportTypeLabel(item.report_type)}
+                        </span>
+                        <span className="text-xs font-semibold text-slate-500 tabular-nums">
+                          {formatCreatedAt(item.observed_at ?? item.created_at)}
+                        </span>
+                      </div>
+                      <p className={`mt-2 text-sm leading-6 text-slate-900 ${phi}`}>
+                        {item.message}
+                      </p>
+                      <p className="mt-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        Source: {sourceLabel(item.source)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <form
+          className="border border-slate-200 bg-white p-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleSubmit();
+          }}
+        >
+          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            Record Clinical Update
+          </div>
+          <div className="mt-4 space-y-4">
+            <div>
+              <label
+                htmlFor="patient-update-type"
+                className="text-[11px] font-bold uppercase tracking-wider text-slate-500"
+              >
+                Update Type
+              </label>
+              <select
+                id="patient-update-type"
+                value={reportType}
+                onChange={(event) => setReportType(event.target.value as PatientCheckInReportType)}
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              >
+                {REPORT_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label
+                htmlFor="patient-update-message"
+                className="text-[11px] font-bold uppercase tracking-wider text-slate-500"
+              >
+                Patient-Reported Update
+              </label>
+              <textarea
+                id="patient-update-message"
+                value={message}
+                onChange={(event) => setMessage(event.target.value)}
+                placeholder="e.g. Patient reports dizziness after the morning dose."
+                className="mt-1 min-h-28 w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="patient-update-observed-at"
+                className="text-[11px] font-bold uppercase tracking-wider text-slate-500"
+              >
+                Observed At
+              </label>
+              <input
+                id="patient-update-observed-at"
+                type="datetime-local"
+                value={observedAt}
+                onChange={(event) => setObservedAt(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+            {saveError && <p className="text-sm text-red-700">{saveError}</p>}
+            <button
+              type="submit"
+              disabled={isSaving}
+              className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-wait disabled:bg-slate-400"
+            >
+              {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+              Save Clinical Update
+            </button>
+          </div>
+        </form>
+      </div>
+    </Section>
   );
 }
 
@@ -659,6 +884,32 @@ function formatReminderTiming(offset: string): string {
   const relativeTime = timeParts.length > 0 ? `+${timeParts.join(" ")}` : "at start";
 
   return `Planned Day ${plannedDay} · ${relativeTime}`;
+}
+
+function toOptionalIso(value: string): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function reportTypeLabel(reportType: string): string {
+  return (
+    REPORT_TYPE_OPTIONS.find((option) => option.value === reportType)?.label ??
+    reportType.replaceAll("_", " ")
+  );
+}
+
+function sourceLabel(source: string): string {
+  switch (source) {
+    case "patient":
+      return "Patient";
+    case "pharmacist":
+      return "Pharmacist";
+    case "system":
+      return "System";
+    default:
+      return source;
+  }
 }
 
 function StatusChip({ label }: { label: string }) {

@@ -83,6 +83,48 @@ export function getTreatment(id: string): Promise<TreatmentDetail> {
   return getJson<TreatmentDetail>(`/treatments/${id}`);
 }
 
+// POST/GET /treatments/:id/check-ins — patient-reported clinical status.
+
+export type PatientCheckInReportType =
+  | "not_improving"
+  | "side_effect"
+  | "feeling_better"
+  | "general_update"
+  | "missed_dose";
+
+export type PatientCheckInSource = "patient" | "pharmacist" | "system";
+
+export type PatientCheckInCreate = {
+  report_type: PatientCheckInReportType;
+  source: PatientCheckInSource;
+  message: string;
+  observed_at: string | null;
+};
+
+export type PatientCheckInView = PatientCheckInCreate & {
+  id: string;
+  treatment_id: string;
+  created_at: string;
+};
+
+export type PatientCheckInList = {
+  items: PatientCheckInView[];
+};
+
+export function createPatientCheckIn(
+  treatmentId: string,
+  payload: PatientCheckInCreate,
+): Promise<PatientCheckInView> {
+  return postJson<PatientCheckInCreate, PatientCheckInView>(
+    `/treatments/${treatmentId}/check-ins`,
+    payload,
+  );
+}
+
+export function listPatientCheckIns(treatmentId: string): Promise<PatientCheckInList> {
+  return getJson<PatientCheckInList>(`/treatments/${treatmentId}/check-ins`);
+}
+
 // GET /treatments — paginated list. Mirrors backend TreatmentList.
 
 export type TreatmentListItem = {

@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getAnalysis, listTreatments, triggerAnalysis } from "../treatments";
+import {
+  createPatientCheckIn,
+  getAnalysis,
+  listPatientCheckIns,
+  listTreatments,
+  triggerAnalysis,
+} from "../treatments";
 
 function mockFetch(response: { status: number; body: unknown }) {
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
@@ -93,6 +99,65 @@ describe("triggerAnalysis", () => {
 
     const calledUrl = spy.mock.calls[0]?.[0] as string;
     expect(calledUrl).toContain("/treatments/t1/analyze?force=true");
+  });
+});
+
+describe("patient check-ins", () => {
+  it("lists patient updates for a treatment", async () => {
+    const spy = mockFetch({
+      status: 200,
+      body: {
+        items: [
+          {
+            id: "c1",
+            treatment_id: "t1",
+            report_type: "not_improving",
+            source: "patient",
+            message: "Not better yet",
+            observed_at: null,
+            created_at: "2026-05-18T10:00:00Z",
+          },
+        ],
+      },
+    });
+
+    const result = await listPatientCheckIns("t1");
+
+    const calledUrl = spy.mock.calls[0]?.[0] as string;
+    expect(calledUrl).toMatch(/\/treatments\/t1\/check-ins$/);
+    expect(result.items[0].report_type).toBe("not_improving");
+  });
+
+  it("creates a patient update for a treatment", async () => {
+    const spy = mockFetch({
+      status: 201,
+      body: {
+        id: "c1",
+        treatment_id: "t1",
+        report_type: "side_effect",
+        source: "pharmacist",
+        message: "Dizziness after dose",
+        observed_at: null,
+        created_at: "2026-05-18T10:00:00Z",
+      },
+    });
+
+    const result = await createPatientCheckIn("t1", {
+      report_type: "side_effect",
+      source: "pharmacist",
+      message: "Dizziness after dose",
+      observed_at: null,
+    });
+
+    const calledUrl = spy.mock.calls[0]?.[0] as string;
+    const init = spy.mock.calls[0]?.[1] as RequestInit;
+    expect(calledUrl).toMatch(/\/treatments\/t1\/check-ins$/);
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      report_type: "side_effect",
+      source: "pharmacist",
+    });
+    expect(result.message).toBe("Dizziness after dose");
   });
 });
 

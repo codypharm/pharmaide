@@ -1,12 +1,16 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import TreatmentDetailPage from "../TreatmentDetailPage";
 import { ApiError, NotFoundError } from "../../api/client";
 import * as treatmentsApi from "../../api/treatments";
-import type { TreatmentAnalysisRow, TreatmentDetail } from "../../api/treatments";
+import type {
+  PatientCheckInView,
+  TreatmentAnalysisRow,
+  TreatmentDetail,
+} from "../../api/treatments";
 
 const SAMPLE: TreatmentDetail = {
   patient: {
@@ -127,6 +131,18 @@ const RUNNING_ANALYSIS: TreatmentAnalysisRow = {
   completed_at: null,
 };
 
+const SAMPLE_CHECK_INS: PatientCheckInView[] = [
+  {
+    id: "check-in-1",
+    treatment_id: SAMPLE.treatment.id,
+    report_type: "not_improving",
+    source: "patient",
+    message: "I am not feeling better after three days.",
+    observed_at: "2026-05-18T09:15:00Z",
+    created_at: "2026-05-18T10:00:00Z",
+  },
+];
+
 function renderAt(treatmentId: string, { isPrivacyMode = false }: { isPrivacyMode?: boolean } = {}) {
   // TreatmentDetailPage reads isPrivacyMode via useOutletContext, so it must
   // be rendered as a nested route under a parent that supplies the context.
@@ -140,6 +156,10 @@ function renderAt(treatmentId: string, { isPrivacyMode = false }: { isPrivacyMod
     </MemoryRouter>,
   );
 }
+
+beforeEach(() => {
+  vi.spyOn(treatmentsApi, "listPatientCheckIns").mockResolvedValue({ items: [] });
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -171,6 +191,7 @@ describe("TreatmentDetailPage", () => {
     expect(screen.getByText("Monitor for cough")).toBeTruthy();
     expect(screen.getByText("Lisinopril")).toBeTruthy();
     expect(screen.getByText("10 mg")).toBeTruthy();
+    expect(await screen.findByText(/no patient-reported updates recorded/i)).toBeTruthy();
     expect(screen.getByRole("link", { name: /back/i })).toHaveAttribute(
       "href",
       "/dashboard/ingestions",
@@ -198,6 +219,55 @@ describe("TreatmentDetailPage", () => {
     expect(name.className).toMatch(/blur-sm/);
     expect(mrn.className).toMatch(/blur-sm/);
     expect(phone.className).toMatch(/blur-sm/);
+  });
+
+  it("renders patient-reported updates on the overview tab", async () => {
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(SAMPLE);
+    vi.spyOn(treatmentsApi, "listPatientCheckIns").mockResolvedValue({
+      items: SAMPLE_CHECK_INS,
+    });
+
+    renderAt(SAMPLE.treatment.id);
+
+    expect(await screen.findByText("I am not feeling better after three days.")).toBeTruthy();
+    expect(screen.getAllByText("Not improving").length).toBeGreaterThan(0);
+    expect(screen.getByText("Source: Patient")).toBeTruthy();
+  });
+
+  it("lets the pharmacist record a patient-reported clinical update", async () => {
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(SAMPLE);
+    vi.spyOn(treatmentsApi, "listPatientCheckIns").mockResolvedValue({ items: [] });
+    const create = vi.spyOn(treatmentsApi, "createPatientCheckIn").mockResolvedValue({
+      id: "check-in-created",
+      treatment_id: SAMPLE.treatment.id,
+      report_type: "side_effect",
+      source: "pharmacist",
+      message: "Patient reports dizziness after the morning dose.",
+      observed_at: null,
+      created_at: "2026-05-18T10:30:00Z",
+    });
+    const user = userEvent.setup();
+
+    renderAt(SAMPLE.treatment.id);
+
+    await screen.findByText(/no patient-reported updates recorded/i);
+    await user.selectOptions(screen.getByLabelText(/update type/i), "side_effect");
+    await user.type(
+      screen.getByLabelText(/patient-reported update/i),
+      "Patient reports dizziness after the morning dose.",
+    );
+    await user.click(screen.getByRole("button", { name: /save clinical update/i }));
+
+    expect(create).toHaveBeenCalledWith(SAMPLE.treatment.id, {
+      report_type: "side_effect",
+      source: "pharmacist",
+      message: "Patient reports dizziness after the morning dose.",
+      observed_at: null,
+    });
+    expect(
+      await screen.findByText("Patient reports dizziness after the morning dose."),
+    ).toBeTruthy();
+    expect(screen.getByText("Source: Pharmacist")).toBeTruthy();
   });
 
   it("shows a generic error state with the request id on other failures", async () => {
