@@ -88,7 +88,15 @@ const COMPLETED_ANALYSIS: TreatmentAnalysisRow = {
         score: 0.83,
       },
     ],
-    clinical_safety_review: null,
+    clinical_safety_review: {
+      source_type: "model_review",
+      possible_interactions: ["AI review suggests checking dizziness risk."],
+      monitoring_concerns: ["Monitor blood pressure and dizziness."],
+      counseling_points: ["Ask patient to report fainting."],
+      missing_information: ["Recent blood pressure readings unavailable."],
+      confidence: 0.72,
+      requires_pharmacist_review: true,
+    },
     reasoning: {
       summary: "Patient should be monitored for cough and dizziness.",
       red_flags: ["Escalate worsening dizziness."],
@@ -248,6 +256,16 @@ describe("TreatmentDetailPage", () => {
     expect(
       screen.getByText("ACE inhibitors require monitoring for cough and dizziness."),
     ).toBeTruthy();
+    expect(screen.getByText("AI Safety Review")).toBeTruthy();
+    expect(screen.getByText("Requires pharmacist review")).toBeTruthy();
+    expect(
+      screen.getByText(/not a licensed interaction database result/i),
+    ).toBeTruthy();
+    expect(screen.getByText(/confidence 72%/i)).toBeTruthy();
+    expect(screen.getByText("AI review suggests checking dizziness risk.")).toBeTruthy();
+    expect(screen.getByText("Monitor blood pressure and dizziness.")).toBeTruthy();
+    expect(screen.getByText("Ask patient to report fainting.")).toBeTruthy();
+    expect(screen.getByText("Recent blood pressure readings unavailable.")).toBeTruthy();
     expect(screen.getAllByText(/Lisinopril/).length).toBeGreaterThan(1);
     expect(screen.getByText(/RxCUI 29046/)).toBeTruthy();
     expect(screen.getByText("Monitor INR closely.")).toBeTruthy();
@@ -280,6 +298,25 @@ describe("TreatmentDetailPage", () => {
     await user.click(screen.getByRole("button", { name: /confirm re-run/i }));
 
     expect(trigger).toHaveBeenCalledWith(SAMPLE.treatment.id, { force: true });
+  });
+
+  it("does not render AI safety review when no model review was returned", async () => {
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(SAMPLE);
+    vi.spyOn(treatmentsApi, "getAnalysis").mockResolvedValue({
+      ...COMPLETED_ANALYSIS,
+      result: COMPLETED_ANALYSIS.result
+        ? { ...COMPLETED_ANALYSIS.result, clinical_safety_review: null }
+        : null,
+    });
+    const user = userEvent.setup();
+
+    renderAt(SAMPLE.treatment.id);
+
+    await screen.findByText("Eleanor Vance");
+    await user.click(screen.getByRole("tab", { name: /reasoning/i }));
+
+    await screen.findByText("Patient should be monitored for cough and dizziness.");
+    expect(screen.queryByText("AI Safety Review")).toBeNull();
   });
 
   it("does not show re-run while analysis is still running", async () => {

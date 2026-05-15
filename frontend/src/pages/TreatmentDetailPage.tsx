@@ -9,6 +9,7 @@ import {
   AlertCircle,
   Brain,
   Play,
+  ShieldCheck,
 } from "lucide-react";
 
 import { ApiError, NotFoundError } from "../api/client";
@@ -16,6 +17,7 @@ import {
   getTreatment,
   triggerAnalysis,
   type AnalysisResult,
+  type ClinicalSafetyReview,
   type DDIWarning,
   type KBCitation,
   type MedicationGrounding,
@@ -391,6 +393,7 @@ function AnalysisResultView({ result }: { result: AnalysisResult }) {
     <div className="mt-6 space-y-6">
       <ClinicalSummary result={result} />
       <SourcesList citations={result.kb_citations ?? []} />
+      <ClinicalSafetyReviewPanel review={result.clinical_safety_review} />
       <GroundingsList groundings={result.groundings} />
       <InteractionsList warnings={result.ddi_warnings} />
       <SchedulePreview
@@ -461,6 +464,57 @@ function SourcesList({ citations }: { citations: KBCitation[] }) {
         </div>
       ) : (
         <EmptyAnalysisText>No uploaded clinical assets were cited.</EmptyAnalysisText>
+      )}
+    </div>
+  );
+}
+
+function ClinicalSafetyReviewPanel({
+  review,
+}: {
+  review: ClinicalSafetyReview | null;
+}) {
+  if (review === null) return null;
+
+  return (
+    <div className="border-t border-slate-200 pt-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <SubsectionTitle>AI Safety Review</SubsectionTitle>
+        <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-amber-900">
+          <ShieldCheck size={13} aria-hidden="true" />
+          Requires pharmacist review
+        </span>
+      </div>
+      <p className="mt-2 text-xs font-semibold text-slate-500">
+        Interim model review, not a licensed interaction database result. Confidence{" "}
+        {formatRelevance(review.confidence)}.
+      </p>
+      <div className="mt-3 grid gap-3 lg:grid-cols-2">
+        <ReviewList title="Possible Interactions" items={review.possible_interactions} />
+        <ReviewList title="Monitoring Concerns" items={review.monitoring_concerns} />
+        <ReviewList title="Counseling Points" items={review.counseling_points} />
+        <ReviewList title="Missing Information" items={review.missing_information} />
+      </div>
+    </div>
+  );
+}
+
+function ReviewList({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div className="border border-slate-200 bg-slate-50 px-4 py-3">
+      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+        {title}
+      </div>
+      {items.length > 0 ? (
+        <ul className="mt-2 space-y-1">
+          {items.map((item) => (
+            <li key={item} className="text-sm leading-6 text-slate-800">
+              {item}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 text-sm text-slate-500">None noted.</p>
       )}
     </div>
   );
