@@ -15,6 +15,7 @@ import {
   type ConversationMessageView,
 } from "../api/treatments";
 import {
+  approveTriageItem,
   listTriageItems,
   updateTriageItemStatus,
   type TriageItemView,
@@ -130,6 +131,45 @@ export default function TriageQueuePage() {
     }
   }
 
+  async function approveItem(itemId: string) {
+    setActionItemId(itemId);
+    setActionError(null);
+    try {
+      const approval = await approveTriageItem(itemId);
+      setState((current) => {
+        if (current.kind !== "ok") return current;
+        return {
+          kind: "ok",
+          items: current.items.map((item) =>
+            item.id === approval.triage_item.id ? approval.triage_item : item,
+          ),
+        };
+      });
+      setConversationByItem((current) => {
+        const existing = current[itemId];
+        if (!existing || existing.kind !== "ok") return current;
+        return {
+          ...current,
+          [itemId]: {
+            kind: "ok",
+            items: existing.items.map((message) =>
+              message.id === approval.approved_message.id
+                ? approval.approved_message
+                : message,
+            ),
+          },
+        };
+      });
+    } catch (err: unknown) {
+      setActionError({
+        itemId,
+        requestId: err instanceof ApiError ? err.requestId : null,
+      });
+    } finally {
+      setActionItemId(null);
+    }
+  }
+
   async function toggleConversation(item: TriageItemView) {
     if (expandedItemId === item.id) {
       setExpandedItemId(null);
@@ -183,6 +223,7 @@ export default function TriageQueuePage() {
             actionItemId={actionItemId}
             expandedItemId={expandedItemId}
             conversationByItem={conversationByItem}
+            onApproveItem={approveItem}
             onMoveItem={moveItem}
             onToggleConversation={toggleConversation}
           />
@@ -352,6 +393,7 @@ function TriageTable({
   actionItemId,
   expandedItemId,
   conversationByItem,
+  onApproveItem,
   onMoveItem,
   onToggleConversation,
 }: {
@@ -359,6 +401,7 @@ function TriageTable({
   actionItemId: string | null;
   expandedItemId: string | null;
   conversationByItem: Record<string, ConversationState>;
+  onApproveItem: (itemId: string) => Promise<void>;
   onMoveItem: (itemId: string, status: TriageStatus) => Promise<void>;
   onToggleConversation: (item: TriageItemView) => Promise<void>;
 }) {
@@ -423,6 +466,7 @@ function TriageTable({
                         item={item}
                         isBusy={actionItemId === item.id}
                         state={conversationByItem[item.id] ?? { kind: "loading" }}
+                        onApproveItem={onApproveItem}
                         onMoveItem={onMoveItem}
                       />
                     </td>
@@ -441,11 +485,13 @@ function ConversationPanel({
   item,
   isBusy,
   state,
+  onApproveItem,
   onMoveItem,
 }: {
   item: TriageItemView;
   isBusy: boolean;
   state: ConversationState;
+  onApproveItem: (itemId: string) => Promise<void>;
   onMoveItem: (itemId: string, status: TriageStatus) => Promise<void>;
 }) {
   if (state.kind === "loading") {
@@ -473,6 +519,9 @@ function ConversationPanel({
     return <p className="text-sm text-slate-500">No conversation messages recorded yet.</p>;
   }
 
+  const heldDraft = state.items.find((message) => message.id === item.conversation_message_id);
+  const canApproveDraft = item.status === "acknowledged" && heldDraft?.status === "held_for_review";
+
   return (
     <div className="space-y-3">
       <div>
@@ -494,7 +543,13 @@ function ConversationPanel({
         ))}
       </div>
       <div className="flex items-center justify-end border-t border-slate-200 pt-4">
-        <ReviewAction item={item} isBusy={isBusy} onMoveItem={onMoveItem} />
+        <ReviewAction
+          item={item}
+          canApproveDraft={canApproveDraft}
+          isBusy={isBusy}
+          onApproveItem={onApproveItem}
+          onMoveItem={onMoveItem}
+        />
       </div>
     </div>
   );
@@ -581,7 +636,12 @@ function ConversationMessageRow({
           <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
             {senderLabel}
           </span>
-          {isHeldDraft && (
+          {isHeldDraft && message.status === "approved" && (
+            <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+              Approved
+            </span>
+          )}
+          {isHeldDraft && message.status !== "approved" && (
             <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
               Held draft
             </span>
@@ -617,11 +677,15 @@ function StatusBadge({ status }: { status: TriageStatus }) {
 
 function ReviewAction({
   item,
+  canApproveDraft,
   isBusy,
+  onApproveItem,
   onMoveItem,
 }: {
   item: TriageItemView;
+  canApproveDraft: boolean;
   isBusy: boolean;
+  onApproveItem: (itemId: string) => Promise<void>;
   onMoveItem: (itemId: string, status: TriageStatus) => Promise<void>;
 }) {
   if (item.status === "resolved") {
@@ -634,12 +698,19 @@ function ReviewAction({
   }
 
   const nextStatus: TriageStatus = item.status === "open" ? "acknowledged" : "resolved";
-  const label = item.status === "open" ? "Start review" : "Mark reviewed";
+  const label = canApproveDraft
+    ? "Approve draft"
+    : item.status === "open"
+      ? "Start review"
+      : "Mark reviewed";
+  const onClick = canApproveDraft
+    ? () => void onApproveItem(item.id)
+    : () => void onMoveItem(item.id, nextStatus);
 
   return (
     <button
       type="button"
-      onClick={() => void onMoveItem(item.id, nextStatus)}
+      onClick={onClick}
       disabled={isBusy}
       aria-label={`${label} item ${shortId(item.id)}`}
       className="inline-flex min-w-32 items-center justify-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 disabled:opacity-50 cursor-pointer"

@@ -72,8 +72,14 @@ describe("TriageQueuePage", () => {
     vi.spyOn(treatmentsApi, "listConversationMessages").mockResolvedValue(CONVERSATION_MESSAGES);
     const updateSpy = vi
       .spyOn(triageApi, "updateTriageItemStatus")
-      .mockResolvedValueOnce({ ...OPEN_ITEM, status: "acknowledged" })
-      .mockResolvedValueOnce({ ...OPEN_ITEM, status: "resolved" });
+      .mockResolvedValueOnce({ ...OPEN_ITEM, status: "acknowledged" });
+    const approveSpy = vi.spyOn(triageApi, "approveTriageItem").mockResolvedValue({
+      triage_item: { ...OPEN_ITEM, status: "resolved" },
+      approved_message: {
+        ...CONVERSATION_MESSAGES.items[1],
+        status: "approved",
+      },
+    });
 
     renderPage();
 
@@ -86,9 +92,10 @@ describe("TriageQueuePage", () => {
     await waitFor(() => expect(updateSpy).toHaveBeenCalledWith("triage-1", "acknowledged"));
     expect(screen.getAllByText("Acknowledged").length).toBeGreaterThan(0);
 
-    await user.click(screen.getByRole("button", { name: /mark reviewed item/i }));
-    await waitFor(() => expect(updateSpy).toHaveBeenCalledWith("triage-1", "resolved"));
+    await user.click(screen.getByRole("button", { name: /approve draft item/i }));
+    await waitFor(() => expect(approveSpy).toHaveBeenCalledWith("triage-1"));
     expect(screen.getAllByText("Resolved").length).toBeGreaterThan(0);
+    expect(screen.getByText("Approved")).toBeTruthy();
   });
 
   it("shows a calm empty state when no patients need review", async () => {
