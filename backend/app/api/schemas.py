@@ -22,6 +22,8 @@ PatientCheckInReportType = Literal[
     "missed_dose",
 ]
 PatientCheckInSource = Literal["patient", "pharmacist", "system"]
+AdherenceEventStatus = Literal["taken", "missed", "held", "skipped"]
+AdherenceEventSource = Literal["patient", "pharmacist", "system"]
 AllergyName = Annotated[str, Field(min_length=1, max_length=200)]
 
 
@@ -121,6 +123,52 @@ class PatientCheckInView(BaseModel):
 
 class PatientCheckInList(BaseModel):
     items: list[PatientCheckInView]
+
+
+class AdherenceEventCreate(BaseModel):
+    medication_id: UUID
+    status: AdherenceEventStatus
+    source: AdherenceEventSource = "patient"
+    scheduled_for: datetime | None = None
+    occurred_at: datetime | None = None
+    note: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("scheduled_for", "occurred_at")
+    @classmethod
+    def require_timezone_for_event_time(cls, value: datetime | None) -> datetime | None:
+        """Reminder state needs absolute instants, not browser-local ambiguity."""
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValueError("event times must include a timezone")
+        return value
+
+    @field_validator("note")
+    @classmethod
+    def normalise_note(cls, value: str | None) -> str | None:
+        """Keep optional notes useful without storing whitespace-only strings."""
+        if value is None:
+            return None
+        stripped = value.strip()
+        if not stripped:
+            return None
+        return stripped
+
+
+class AdherenceEventView(BaseModel):
+    id: UUID
+    treatment_id: UUID
+    medication_id: UUID
+    status: str
+    source: str
+    scheduled_for: datetime | None
+    occurred_at: datetime | None
+    note: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AdherenceEventList(BaseModel):
+    items: list[AdherenceEventView]
 
 
 class TreatmentAnalysisView(BaseModel):

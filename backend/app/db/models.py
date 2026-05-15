@@ -100,6 +100,9 @@ class Treatment(Base):
     check_ins: Mapped[list["PatientCheckIn"]] = relationship(
         back_populates="treatment", cascade="all, delete-orphan"
     )
+    adherence_events: Mapped[list["AdherenceEvent"]] = relationship(
+        back_populates="treatment", cascade="all, delete-orphan"
+    )
 
 
 class Medication(Base):
@@ -130,6 +133,9 @@ class Medication(Base):
     )
 
     treatment: Mapped[Treatment] = relationship(back_populates="medications")
+    adherence_events: Mapped[list["AdherenceEvent"]] = relationship(
+        back_populates="medication", cascade="all, delete-orphan"
+    )
 
 
 class TreatmentAnalysis(Base):
@@ -189,6 +195,43 @@ class PatientCheckIn(Base):
 
     __table_args__ = (
         Index("idx_patient_check_ins_treatment_created", "treatment_id", created_at.desc()),
+    )
+
+
+class AdherenceEvent(Base):
+    __tablename__ = "adherence_events"
+
+    id: Mapped[UUID] = mapped_column(
+        Uuid, primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    treatment_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey("treatments.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    medication_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey("medications.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    source: Mapped[str] = mapped_column(Text, nullable=False)
+    scheduled_for: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    occurred_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # May contain patient-provided context. Keep it out of audit/log payloads.
+    note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+    )
+
+    treatment: Mapped[Treatment] = relationship(back_populates="adherence_events")
+    medication: Mapped[Medication] = relationship(back_populates="adherence_events")
+
+    __table_args__ = (
+        Index("idx_adherence_events_treatment_created", "treatment_id", created_at.desc()),
+        Index("idx_adherence_events_medication_scheduled", "medication_id", "scheduled_for"),
     )
 
 

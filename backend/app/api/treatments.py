@@ -13,6 +13,9 @@ from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.schemas import (
+    AdherenceEventCreate,
+    AdherenceEventList,
+    AdherenceEventView,
     AnalyzeTreatmentResponse,
     CreateTreatmentRequest,
     CreateTreatmentResponse,
@@ -26,6 +29,16 @@ from app.api.schemas import (
 from app.config import Settings, get_settings
 from app.db.engine import get_session, get_session_factory
 from app.services import task_runner
+from app.services.adherence_events import (
+    MedicationNotFound as AdherenceMedicationNotFound,
+)
+from app.services.adherence_events import (
+    TreatmentNotFound as AdherenceTreatmentNotFound,
+)
+from app.services.adherence_events import (
+    create_adherence_event,
+    list_adherence_events,
+)
 from app.services.analysis import (
     AnalysisInProgress,
     analyze_treatment,
@@ -144,6 +157,41 @@ async def get_patient_check_ins(
     try:
         return await list_patient_check_ins(session, treatment_id, limit=limit, offset=offset)
     except CheckInTreatmentNotFound as exc:
+        raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
+
+
+@router.post(
+    "/treatments/{treatment_id}/adherence-events",
+    status_code=201,
+    response_model=AdherenceEventView,
+)
+async def post_adherence_event(
+    treatment_id: UUID,
+    body: AdherenceEventCreate,
+    session_factory: SessionFactoryDep,
+) -> AdherenceEventView:
+    try:
+        async with session_factory() as session, session.begin():
+            return await create_adherence_event(session, treatment_id, body)
+    except AdherenceTreatmentNotFound as exc:
+        raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
+    except AdherenceMedicationNotFound as exc:
+        raise HTTPException(status_code=404, detail={"error": "medication_not_found"}) from exc
+
+
+@router.get(
+    "/treatments/{treatment_id}/adherence-events",
+    response_model=AdherenceEventList,
+)
+async def get_adherence_events(
+    treatment_id: UUID,
+    session: SessionDep,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> AdherenceEventList:
+    try:
+        return await list_adherence_events(session, treatment_id, limit=limit, offset=offset)
+    except AdherenceTreatmentNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
 
 
