@@ -4,6 +4,8 @@ from uuid import UUID, uuid4
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.safety_schemas import (
     GuardResult,
@@ -11,6 +13,7 @@ from app.agents.safety_schemas import (
     RefereeResult,
     SafetyReview,
 )
+from app.db.models import AuditLogEntry
 from app.services import task_runner
 
 
@@ -83,6 +86,66 @@ async def test_post_conversation_turn_returns_404_for_unknown_treatment(
             "assistant_draft": "Draft",
             "prescription_context": "Amoxicillin 500 mg three times daily.",
         },
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": {"error": "treatment_not_found"}}
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_patient_message_records_inbound_message_and_non_phi_audit(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    treatment_id = await _create_treatment(app_client, "CONV-API-003")
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/patient-messages",
+        json={"message": "  I feel nauseous after the morning dose.  "},
+    )
+
+    assert response.status_code == 201, response.text
+    payload = response.json()
+    assert payload["treatment_id"] == str(treatment_id)
+    assert payload["direction"] == "inbound"
+    assert payload["sender_type"] == "patient"
+    assert payload["channel"] == "whatsapp"
+    assert payload["status"] == "received"
+    assert payload["body"] == "I feel nauseous after the morning dose."
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.event_type == "patient_conversation_message_recorded"
+        )
+    )
+    assert audit is not None
+    assert audit.payload == {
+        "treatment_id": str(treatment_id),
+        "message_id": payload["id"],
+        "channel": "whatsapp",
+    }
+    assert "nauseous" not in str(audit.payload).lower()
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_patient_message_rejects_blank_message(app_client: AsyncClient) -> None:
+    treatment_id = await _create_treatment(app_client, "CONV-API-004")
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/patient-messages",
+        json={"message": "   "},
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_patient_message_returns_404_for_unknown_treatment(
+    app_client: AsyncClient,
+) -> None:
+    response = await app_client.post(
+        f"/treatments/{uuid4()}/patient-messages",
+        json={"message": "Hello"},
     )
 
     assert response.status_code == 404

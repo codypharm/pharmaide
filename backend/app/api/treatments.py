@@ -17,6 +17,7 @@ from app.api.schemas import (
     AdherenceEventList,
     AdherenceEventView,
     AnalyzeTreatmentResponse,
+    ConversationMessageView,
     ConversationTurnCreate,
     ConversationTurnView,
     CreateTreatmentRequest,
@@ -24,6 +25,7 @@ from app.api.schemas import (
     PatientCheckInCreate,
     PatientCheckInList,
     PatientCheckInView,
+    PatientConversationMessageCreate,
     TreatmentAnalysisView,
     TreatmentDetail,
     TreatmentList,
@@ -53,6 +55,7 @@ from app.services.conversation_messages import (
     TreatmentNotFound as ConversationTreatmentNotFound,
 )
 from app.services.conversation_messages import (
+    record_patient_conversation_message,
     submit_patient_conversation_turn,
 )
 from app.services.patient_checkins import (
@@ -229,6 +232,27 @@ async def post_conversation_turn(
                 agentdog_url=settings.agentdog_url,
                 safety_provider_api_key=settings.safety_provider_api_key,
                 safety_provider_timeout_seconds=settings.safety_provider_timeout_seconds,
+            )
+    except ConversationTreatmentNotFound as exc:
+        raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
+
+
+@router.post(
+    "/treatments/{treatment_id}/patient-messages",
+    status_code=201,
+    response_model=ConversationMessageView,
+)
+async def post_patient_message(
+    treatment_id: UUID,
+    body: PatientConversationMessageCreate,
+    session_factory: SessionFactoryDep,
+) -> ConversationMessageView:
+    try:
+        async with session_factory() as session, session.begin():
+            return await record_patient_conversation_message(
+                session,
+                treatment_id=treatment_id,
+                message=body.message,
             )
     except ConversationTreatmentNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc

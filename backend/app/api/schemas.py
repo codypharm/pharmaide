@@ -213,6 +213,19 @@ class ConversationTurnCreate(BaseModel):
         return stripped
 
 
+class PatientConversationMessageCreate(BaseModel):
+    message: str = Field(min_length=1, max_length=4000)
+
+    @field_validator("message")
+    @classmethod
+    def normalise_message(cls, value: str) -> str:
+        """Store inbound patient messages without transport whitespace."""
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("message must not be blank")
+        return stripped
+
+
 class TreatmentAnalysisSnapshot(BaseModel):
     id: UUID
     treatment_id: UUID

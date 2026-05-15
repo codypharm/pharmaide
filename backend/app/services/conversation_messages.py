@@ -24,6 +24,36 @@ class TreatmentNotFound(Exception):
     """Raised when a conversation turn references a missing treatment."""
 
 
+async def record_patient_conversation_message(
+    session: AsyncSession,
+    *,
+    treatment_id: UUID,
+    message: str,
+) -> ConversationMessageView:
+    """Store one inbound patient message without generating a reply."""
+    treatment = await session.get(Treatment, treatment_id)
+    if treatment is None:
+        raise TreatmentNotFound()
+
+    inbound = _build_patient_inbound_message(
+        treatment_id=treatment_id,
+        body=_required_text(message, "message"),
+    )
+    session.add(inbound)
+    await session.flush()
+
+    _audit_patient_message(session, treatment_id, inbound)
+    await session.flush()
+
+    log.info(
+        "patient_conversation_message_recorded",
+        treatment_id=str(treatment_id),
+        message_id=str(inbound.id),
+        channel=inbound.channel,
+    )
+    return ConversationMessageView.model_validate(inbound)
+
+
 async def submit_patient_conversation_turn(
     session: AsyncSession,
     *,
@@ -47,14 +77,7 @@ async def submit_patient_conversation_turn(
     inbound_body = _required_text(patient_message, "patient_message")
     draft_body = _required_text(assistant_draft, "assistant_draft")
 
-    inbound = ConversationMessage(
-        treatment_id=treatment_id,
-        direction="inbound",
-        sender_type="patient",
-        channel="whatsapp",
-        status="received",
-        body=inbound_body,
-    )
+    inbound = _build_patient_inbound_message(treatment_id=treatment_id, body=inbound_body)
     session.add(inbound)
     await session.flush()
 
@@ -124,6 +147,38 @@ def _audit_conversation_turn(
                 "hold_reason": assistant.safety_hold_reason,
             },
         )
+    )
+
+
+def _audit_patient_message(
+    session: AsyncSession,
+    treatment_id: UUID,
+    message: ConversationMessage,
+) -> None:
+    session.add(
+        AuditLogEntry(
+            event_type="patient_conversation_message_recorded",
+            resource_type="conversation_message",
+            resource_id=message.id,
+            # Inbound message bodies can contain PHI and symptoms. Audit only
+            # metadata needed to prove intake happened.
+            payload={
+                "treatment_id": str(treatment_id),
+                "message_id": str(message.id),
+                "channel": message.channel,
+            },
+        )
+    )
+
+
+def _build_patient_inbound_message(*, treatment_id: UUID, body: str) -> ConversationMessage:
+    return ConversationMessage(
+        treatment_id=treatment_id,
+        direction="inbound",
+        sender_type="patient",
+        channel="whatsapp",
+        status="received",
+        body=body,
     )
 
 
