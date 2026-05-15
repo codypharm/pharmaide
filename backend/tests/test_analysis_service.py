@@ -23,6 +23,7 @@ from app.agents.analysis_graph import AnalysisGraphFailure
 from app.agents.analysis_schemas import AnalysisState, KBCitation
 from app.agents.kb_reranker import RerankedCitation, RerankResult
 from app.agents.knowledge_sources.dailymed import DailyMedLabel
+from app.agents.nodes.clinical_safety_review import build_clinical_safety_agent
 from app.agents.nodes.summarize import build_summary_agent
 from app.db.models import (
     EMBEDDING_DIMENSIONS,
@@ -209,6 +210,19 @@ async def test_analyze_treatment_runs_graph_and_persists_completed_result(
             }
         )
     )
+    safety_agent = build_clinical_safety_agent(
+        model=TestModel(
+            custom_output_args={
+                "source_type": "model_review",
+                "possible_interactions": [],
+                "monitoring_concerns": ["Review DDI provider availability."],
+                "counseling_points": [],
+                "missing_information": ["Licensed DDI provider unavailable."],
+                "confidence": 0.64,
+                "requires_pharmacist_review": True,
+            }
+        )
+    )
 
     async def kb_retriever(
         _query: str,
@@ -235,6 +249,7 @@ async def test_analyze_treatment_runs_graph_and_persists_completed_result(
         rxnorm_base_url="https://rxnav.test/REST",
         rxnorm_transport=httpx.MockTransport(_rxnorm_handler),
         summary_agent=summary_agent,
+        safety_agent=safety_agent,
         kb_retriever=kb_retriever,
     )
 
@@ -251,6 +266,15 @@ async def test_analyze_treatment_runs_graph_and_persists_completed_result(
     }
     assert analysis.result["degraded"] is True
     assert analysis.result["ddi_warnings"] == []
+    assert analysis.result["clinical_safety_review"] == {
+        "source_type": "model_review",
+        "possible_interactions": [],
+        "monitoring_concerns": ["Review DDI provider availability."],
+        "counseling_points": [],
+        "missing_information": ["Licensed DDI provider unavailable."],
+        "confidence": 0.64,
+        "requires_pharmacist_review": True,
+    }
     assert analysis.result["kb_citations"] == [
         {
             "chunk_id": "44444444-4444-4444-4444-444444444444",
@@ -314,6 +338,19 @@ async def test_analyze_treatment_configured_retriever_persists_clinic_and_dailym
             }
         )
     )
+    safety_agent = build_clinical_safety_agent(
+        model=TestModel(
+            custom_output_args={
+                "source_type": "model_review",
+                "possible_interactions": [],
+                "monitoring_concerns": ["Review retrieved evidence before patient outreach."],
+                "counseling_points": [],
+                "missing_information": [],
+                "confidence": 0.7,
+                "requires_pharmacist_review": True,
+            }
+        )
+    )
 
     monkeypatch.setattr("app.services.analysis.DailyMedClient", _FakeDailyMedClient)
     monkeypatch.setattr("app.services.analysis.build_embedding_client", _build_fake_client)
@@ -328,6 +365,7 @@ async def test_analyze_treatment_configured_retriever_persists_clinic_and_dailym
         rxnorm_transport=httpx.MockTransport(_rxnorm_handler),
         openai_api_key=SecretStr("test-openai-key"),
         summary_agent=summary_agent,
+        safety_agent=safety_agent,
         kb_scope_id=kb_scope_id,
     )
 
@@ -347,6 +385,15 @@ async def test_analyze_treatment_configured_retriever_persists_clinic_and_dailym
     assert citations[1]["source_uri"] == "dailymed://setid-1"
     assert "Monitor for symptomatic hypotension." in citations[1]["text"]
     assert citations[1]["score"] == 0.9
+    assert analysis.result["clinical_safety_review"] == {
+        "source_type": "model_review",
+        "possible_interactions": [],
+        "monitoring_concerns": ["Review retrieved evidence before patient outreach."],
+        "counseling_points": [],
+        "missing_information": [],
+        "confidence": 0.7,
+        "requires_pharmacist_review": True,
+    }
     assert analysis.result["groundings"][0]["medication_id"] == str(first_medication.id)
 
 

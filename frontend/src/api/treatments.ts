@@ -138,6 +138,16 @@ export type ClinicalReasoning = {
   confidence: number;
 };
 
+export type ClinicalSafetyReview = {
+  source_type: "model_review";
+  possible_interactions: string[];
+  monitoring_concerns: string[];
+  counseling_points: string[];
+  missing_information: string[];
+  confidence: number;
+  requires_pharmacist_review: true;
+};
+
 export type KBCitation = {
   chunk_id: string;
   document_id: string;
@@ -153,6 +163,7 @@ export type AnalysisResult = {
   ddi_warnings: DDIWarning[];
   schedule: Schedule | null;
   kb_citations: KBCitation[];
+  clinical_safety_review: ClinicalSafetyReview | null;
   reasoning: ClinicalReasoning | null;
   degraded: boolean;
   partial_results: boolean;

@@ -71,6 +71,7 @@ async def test_analysis_graph_runs_grounding_ddi_schedule_and_summary(
         "check_interactions",
         "generate_schedule",
         "retrieve_kb",
+        "clinical_safety_review",
         "summarize_treatment",
     ]
 
@@ -138,6 +139,7 @@ async def test_analysis_graph_retrieves_kb_citations_before_summary(
         "check_interactions",
         "generate_schedule",
         "retrieve_kb",
+        "clinical_safety_review",
         "summarize_treatment",
     ]
 
@@ -186,6 +188,7 @@ async def test_analysis_graph_live_llm_smoke(tmp_path: Path) -> None:
         "check_interactions",
         "generate_schedule",
         "retrieve_kb",
+        "clinical_safety_review",
         "summarize_treatment",
     ]
 

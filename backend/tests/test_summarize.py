@@ -21,6 +21,7 @@ from app.agents.analysis_schemas import (
     AnalysisState,
     ClinicalReasoning,
     ClinicalReasoningWithSchedule,
+    ClinicalSafetyReview,
     KBCitation,
     MedicationGrounding,
     ReminderSlot,
@@ -276,6 +277,45 @@ async def test_summarize_treatment_prompt_includes_kb_citations() -> None:
     assert "Anticoagulation Protocol" in seen["prompt"]
     assert "source_type=user_upload" in seen["prompt"]
     assert "Warfarin requires INR monitoring." in seen["prompt"]
+
+
+async def test_summarize_treatment_prompt_includes_clinical_safety_review() -> None:
+    seen: dict[str, str] = {}
+
+    def model_function(_messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        seen["prompt"] = _user_prompt(_messages)
+        output_tool = info.output_tools[0]
+        return ModelResponse(
+            parts=[
+                ToolCallPart(
+                    output_tool.name,
+                    {
+                        "summary": "Safety review was considered.",
+                        "red_flags": [],
+                        "confidence": 0.82,
+                    },
+                )
+            ],
+            model_name="summary-safety-review-test",
+        )
+
+    state = _state()
+    state["clinical_safety_review"] = ClinicalSafetyReview(
+        possible_interactions=["AI review suggests monitoring overlap."],
+        monitoring_concerns=["Monitor dizziness."],
+        counseling_points=["Report fainting."],
+        missing_information=["Recent BP unavailable."],
+        confidence=0.68,
+        requires_pharmacist_review=True,
+    )
+    agent: Agent[None, ClinicalReasoning] = build_summary_agent(model=FunctionModel(model_function))
+
+    await summarize_treatment(state, agent=agent)
+
+    assert "clinical_safety_review:" in seen["prompt"]
+    assert "source_type=model_review" in seen["prompt"]
+    assert "requires_pharmacist_review=True" in seen["prompt"]
+    assert "AI review suggests monitoring overlap." in seen["prompt"]
 
 
 async def test_summarize_treatment_prompt_requests_schedule_only_when_needed() -> None:

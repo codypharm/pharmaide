@@ -27,10 +27,12 @@ from app.agents.analysis_schemas import (
     AnalysisState,
     ClinicalReasoning,
     ClinicalReasoningWithSchedule,
+    ClinicalSafetyReview,
     KBCitation,
 )
 from app.agents.kb_reranker import build_reranker_agent, rerank_citations_with_agent
 from app.agents.knowledge_sources.dailymed import DailyMedClient
+from app.agents.nodes.clinical_safety_review import build_clinical_safety_agent
 from app.agents.nodes.retrieve_kb import KnowledgeRetriever
 from app.agents.nodes.summarize import build_summary_agent, build_summary_with_schedule_agent
 from app.config import get_settings
@@ -43,6 +45,7 @@ from app.services.kb_retrieval import Citation, retrieve
 ConfiguredSummaryAgents = tuple[
     Agent[None, ClinicalReasoning] | None,
     Agent[None, ClinicalReasoningWithSchedule] | None,
+    Agent[None, ClinicalSafetyReview] | None,
 ]
 
 
@@ -106,6 +109,7 @@ async def analyze_treatment(
     rxnorm_transport: httpx.AsyncBaseTransport | None = None,
     summary_agent: Agent[None, ClinicalReasoning] | None = None,
     schedule_agent: Agent[None, ClinicalReasoningWithSchedule] | None = None,
+    safety_agent: Agent[None, ClinicalSafetyReview] | None = None,
     kb_retriever: KnowledgeRetriever | None = None,
     kb_scope_id: UUID | None = None,
 ) -> None:
@@ -153,6 +157,7 @@ async def analyze_treatment(
                 rxnorm_transport=rxnorm_transport,
                 summary_agent=summary_agent,
                 schedule_agent=schedule_agent,
+                safety_agent=safety_agent,
                 session_factory=session_factory,
                 kb_retriever=kb_retriever,
                 kb_scope_id=kb_scope_id,
@@ -225,15 +230,17 @@ async def _run_analysis_graph(
     rxnorm_transport: httpx.AsyncBaseTransport | None,
     summary_agent: Agent[None, ClinicalReasoning] | None,
     schedule_agent: Agent[None, ClinicalReasoningWithSchedule] | None,
+    safety_agent: Agent[None, ClinicalSafetyReview] | None,
     session_factory: async_sessionmaker[AsyncSession],
     kb_retriever: KnowledgeRetriever | None,
     kb_scope_id: UUID | None,
 ) -> AnalysisState:
     """Invoke the compiled graph with shared runtime clients scoped to this run."""
-    summary_agent, schedule_agent = _configured_summary_agents(
+    summary_agent, schedule_agent, safety_agent = _configured_summary_agents(
         openai_api_key,
         summary_agent=summary_agent,
         schedule_agent=schedule_agent,
+        safety_agent=safety_agent,
     )
     configured_kb_retriever = _configured_kb_retriever(
         session_factory,
@@ -252,6 +259,7 @@ async def _run_analysis_graph(
             start_dt=datetime.now(UTC),
             summary_agent=summary_agent,
             schedule_agent=schedule_agent,
+            safety_agent=safety_agent,
             kb_retriever=configured_kb_retriever,
         ) as graph,
     ):
@@ -264,6 +272,7 @@ def _configured_summary_agents(
     *,
     summary_agent: Agent[None, ClinicalReasoning] | None,
     schedule_agent: Agent[None, ClinicalReasoningWithSchedule] | None,
+    safety_agent: Agent[None, ClinicalSafetyReview] | None,
 ) -> ConfiguredSummaryAgents:
     """Bridge PHARMAIDE_OPENAI_API_KEY into PydanticAI's OpenAI provider.
 
@@ -272,7 +281,7 @@ def _configured_summary_agents(
     environment variable being present.
     """
     if openai_api_key is None:
-        return summary_agent, schedule_agent
+        return summary_agent, schedule_agent, safety_agent
 
     secret = openai_api_key.get_secret_value()
     if summary_agent is None:
@@ -283,7 +292,11 @@ def _configured_summary_agents(
         schedule_agent = build_summary_with_schedule_agent(
             OpenAIResponsesModel("gpt-5-mini", provider=OpenAIProvider(api_key=secret))
         )
-    return summary_agent, schedule_agent
+    if safety_agent is None:
+        safety_agent = build_clinical_safety_agent(
+            OpenAIResponsesModel("gpt-5", provider=OpenAIProvider(api_key=secret))
+        )
+    return summary_agent, schedule_agent, safety_agent
 
 
 def _configured_kb_retriever(
@@ -409,6 +422,7 @@ def _result_from_state(
         ddi_warnings=state.get("ddi_warnings", []),
         schedule=state.get("schedule"),
         kb_citations=state.get("kb_citations", []),
+        clinical_safety_review=state.get("clinical_safety_review"),
         reasoning=state.get("reasoning"),
         degraded=state.get("degraded", False),
         partial_results=partial_results,

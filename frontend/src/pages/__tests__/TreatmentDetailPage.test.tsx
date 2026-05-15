@@ -88,6 +88,7 @@ const COMPLETED_ANALYSIS: TreatmentAnalysisRow = {
         score: 0.83,
       },
     ],
+    clinical_safety_review: null,
     reasoning: {
       summary: "Patient should be monitored for cough and dizziness.",
       red_flags: ["Escalate worsening dizziness."],

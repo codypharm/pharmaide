@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 DDISeverity = Literal["minor", "moderate", "major"]
 KnowledgeSourceType = Literal["user_upload", "dailymed"]
+ClinicalSafetySourceType = Literal["model_review"]
 
 
 class AnalysisEnvelope(BaseModel):
@@ -69,6 +70,22 @@ class ClinicalReasoningWithSchedule(AnalysisEnvelope):
     schedule: Schedule | None
 
 
+class ClinicalSafetyReview(AnalysisEnvelope):
+    """LLM fallback review when licensed clinical data is unavailable.
+
+    This is not a database-confirmed interaction result. It is pharmacist-review
+    support until a licensed Lexicomp/DrugBank-style provider is available.
+    """
+
+    source_type: ClinicalSafetySourceType = "model_review"
+    possible_interactions: list[str] = Field(default_factory=list)
+    monitoring_concerns: list[str] = Field(default_factory=list)
+    counseling_points: list[str] = Field(default_factory=list)
+    missing_information: list[str] = Field(default_factory=list)
+    confidence: float = Field(ge=0, le=1)
+    requires_pharmacist_review: Literal[True] = True
+
+
 class KBCitation(AnalysisEnvelope):
     """Knowledge-base passage retrieved for clinical reasoning citation."""
 
@@ -88,6 +105,7 @@ class AnalysisResult(AnalysisEnvelope):
     ddi_warnings: list[DDIWarning]
     schedule: Schedule | None
     kb_citations: list[KBCitation] = Field(default_factory=list)
+    clinical_safety_review: ClinicalSafetyReview | None = None
     reasoning: ClinicalReasoning | None
     degraded: bool
     partial_results: bool = False
@@ -114,6 +132,7 @@ class AnalysisState(TypedDict, total=False):
     ddi_warnings: list[DDIWarning]
     schedule: Schedule | None
     kb_citations: NotRequired[list[KBCitation]]
+    clinical_safety_review: NotRequired[ClinicalSafetyReview | None]
     reasoning: ClinicalReasoning | None
     degraded: bool
     needs_llm_parse: NotRequired[bool]

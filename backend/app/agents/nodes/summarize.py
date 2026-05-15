@@ -120,6 +120,7 @@ def _summary_prompt(state: AnalysisState) -> str:
             f"ddi_warnings:\n{_ddi_section(state)}",
             f"schedule:\n{_schedule_section(state)}",
             f"kb_citations:\n{_kb_citations_section(state)}",
+            f"clinical_safety_review:\n{_clinical_safety_review_section(state)}",
         ]
     )
 
@@ -189,6 +190,23 @@ def _kb_citations_section(state: AnalysisState) -> str:
             f"source_uri={citation.source_uri}\n  text={citation.text}"
         )
         for citation in citations
+    )
+
+
+def _clinical_safety_review_section(state: AnalysisState) -> str:
+    review = state.get("clinical_safety_review")
+    if review is None:
+        return "- none"
+    return "\n".join(
+        [
+            f"- source_type={review.source_type}",
+            f"- requires_pharmacist_review={review.requires_pharmacist_review}",
+            f"- confidence={review.confidence}",
+            f"- possible_interactions={review.possible_interactions}",
+            f"- monitoring_concerns={review.monitoring_concerns}",
+            f"- counseling_points={review.counseling_points}",
+            f"- missing_information={review.missing_information}",
+        ]
     )
 
 

@@ -14,7 +14,9 @@ from app.agents.analysis_schemas import (
     AnalysisState,
     ClinicalReasoning,
     ClinicalReasoningWithSchedule,
+    ClinicalSafetyReview,
 )
+from app.agents.nodes.clinical_safety_review import review_clinical_safety
 from app.agents.nodes.ground import ground_medications
 from app.agents.nodes.interactions import check_interactions
 from app.agents.nodes.retrieve_kb import KnowledgeRetriever, retrieve_kb_citations
@@ -41,6 +43,7 @@ def build_analysis_graph(
     start_dt: datetime,
     summary_agent: Agent[None, ClinicalReasoning] | None = None,
     schedule_agent: Agent[None, ClinicalReasoningWithSchedule] | None = None,
+    safety_agent: Agent[None, ClinicalSafetyReview] | None = None,
     kb_retriever: KnowledgeRetriever | None = None,
 ) -> AnalysisGraph:
     """Compose the medication analysis nodes into one checkpointed graph.
@@ -76,6 +79,13 @@ def build_analysis_graph(
             lambda current: retrieve_kb_citations(current, retriever=kb_retriever),
         )
 
+    async def clinical_safety_review(state: AnalysisState) -> AnalysisState:
+        return await _run_stage(
+            state,
+            "clinical_safety_review",
+            lambda current: review_clinical_safety(current, agent=safety_agent),
+        )
+
     # Tests pass typed PydanticAI test agents here; production can omit them and
     # let summarize_treatment build the real OpenAI-backed agents lazily.
     async def summarize(state: AnalysisState) -> AnalysisState:
@@ -96,12 +106,14 @@ def build_analysis_graph(
     builder.add_node("interactions", interactions)
     builder.add_node("schedule", schedule)
     builder.add_node("retrieve_kb", retrieve_kb)
+    builder.add_node("clinical_safety_review", clinical_safety_review)
     builder.add_node("summarize", summarize)
     builder.add_edge(START, "ground")
     builder.add_edge("ground", "interactions")
     builder.add_edge("interactions", "schedule")
     builder.add_edge("schedule", "retrieve_kb")
-    builder.add_edge("retrieve_kb", "summarize")
+    builder.add_edge("retrieve_kb", "clinical_safety_review")
+    builder.add_edge("clinical_safety_review", "summarize")
     builder.add_edge("summarize", END)
     return builder.compile(checkpointer=checkpointer)
 
@@ -139,6 +151,7 @@ async def open_analysis_graph(
     start_dt: datetime,
     summary_agent: Agent[None, ClinicalReasoning] | None = None,
     schedule_agent: Agent[None, ClinicalReasoningWithSchedule] | None = None,
+    safety_agent: Agent[None, ClinicalSafetyReview] | None = None,
     kb_retriever: KnowledgeRetriever | None = None,
 ) -> AsyncIterator[AnalysisGraph]:
     """Open an analysis graph with SQLite checkpoint ownership scoped to the caller."""
@@ -149,5 +162,6 @@ async def open_analysis_graph(
             start_dt=start_dt,
             summary_agent=summary_agent,
             schedule_agent=schedule_agent,
+            safety_agent=safety_agent,
             kb_retriever=kb_retriever,
         )
