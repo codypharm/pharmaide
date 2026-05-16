@@ -510,7 +510,7 @@ export default function PatientManagementPage() {
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="Search patients, MRN, or treatment..."
-              className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all"
+              className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#D9D5FB] focus:border-[#5548E8] transition-all"
             />
           </div>
         </div>
@@ -722,7 +722,7 @@ function TreatmentRow({
         onSelect();
       }}
       className={`mx-4 mt-2 w-[calc(100%-2rem)] rounded-lg border p-3 text-left cursor-pointer transition-all hover:bg-slate-50/80 ${
-        isSelected ? "border-blue-200 bg-blue-50/60" : "border-slate-100 bg-white"
+        isSelected ? "border-[#D9D5FB] bg-[#F0EFFF]" : "border-slate-100 bg-white"
       }`}
     >
       <div className="flex justify-between items-start gap-4">
@@ -776,7 +776,7 @@ function PatientHeader({
       <div className="flex flex-col">
         <div className="flex items-center gap-2 text-[10px] font-bold tracking-widest text-slate-400 uppercase mb-1">
           <span>Surveillance</span>
-          <span className="text-blue-600">{item.treatment.id.slice(0, 8)}</span>
+          <span className="text-[#5548E8]">{item.treatment.id.slice(0, 8)}</span>
         </div>
         <h1 className={`text-2xl font-bold text-slate-900 tracking-tight ${isPrivacyMode ? "blur-sm" : ""}`}>
           {isPrivacyMode ? maskedName : item.patient.name}, {patientAge(item.patient.dob)}
@@ -881,7 +881,7 @@ function ObjectiveEditor({
           onChange={(event) => setDraft(event.target.value)}
           placeholder="Add monitoring objective..."
           rows={3}
-          className="min-w-0 flex-1 resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-800 focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+          className="min-w-0 flex-1 resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-800 focus:border-[#5548E8] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#D9D5FB]"
         />
         <button
           type="submit"
@@ -1181,7 +1181,7 @@ function InteractionLog({
               value={pharmacistMessage}
               onChange={(event) => onChangePharmacistMessage(event.target.value)}
               placeholder="Type pharmacist reply..."
-              className="flex-1 pl-4 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-100 transition-all"
+              className="flex-1 pl-4 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-[#D9D5FB] transition-all"
             />
             <button
               type="button"
@@ -1214,7 +1214,7 @@ function InteractionLog({
               value={incomingMessage}
               onChange={(event) => onChangeIncomingMessage(event.target.value)}
               placeholder="Simulate patient reply..."
-              className="flex-1 pl-4 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-100 transition-all"
+              className="flex-1 pl-4 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-[#D9D5FB] transition-all"
             />
             <button
               type="button"
@@ -1365,7 +1365,7 @@ function ConversationBubble({
       <div
         className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
           isPatient
-            ? "bg-blue-100 text-blue-700"
+            ? "bg-[#F0EFFF] text-[#463AD4]"
             : isPharmacist
               ? "bg-emerald-100 text-emerald-700"
               : "bg-slate-900 text-white"
