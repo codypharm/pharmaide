@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import { toast } from "sonner";
@@ -220,6 +220,7 @@ function renderPage() {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.clearAllMocks();
 });
@@ -373,6 +374,39 @@ describe("PatientManagementPage", () => {
     expect(toast.success).toHaveBeenCalledWith("Message queued again", {
       description: "The delivery workflow will attempt to send it again.",
     });
+  });
+
+  it("auto-refreshes the selected conversation while surveillance is open", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue(TREATMENTS);
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(DETAIL);
+    const listTriageSpy = vi.spyOn(triageApi, "listTriageItems").mockResolvedValue(TRIAGE_ITEMS);
+    const listConversationSpy = vi
+      .spyOn(treatmentsApi, "listConversationMessages")
+      .mockResolvedValueOnce(MESSAGES)
+      .mockResolvedValueOnce({
+        items: [...MESSAGES.items, SENT_ASSISTANT_MESSAGE],
+      });
+
+    renderPage();
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText("I feel dizzy today.")).toBeTruthy();
+    expect(screen.queryByText("Please take the next dose with water.")).toBeNull();
+
+    await act(async () => {
+      vi.advanceTimersByTime(10_000);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("Please take the next dose with water.")).toBeTruthy();
+    expect(listConversationSpy).toHaveBeenCalledTimes(2);
+    expect(listTriageSpy).toHaveBeenCalledTimes(2);
+    expect(screen.getByText(/^Updated /)).toBeTruthy();
   });
 
   it("lets the pharmacist resume AI replies from takeover mode", async () => {

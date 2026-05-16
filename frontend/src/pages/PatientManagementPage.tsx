@@ -64,6 +64,7 @@ type PatientTreatmentGroup = {
 };
 
 const PAGE_SIZE = 50;
+const CONVERSATION_REFRESH_INTERVAL_MS = 10_000;
 
 const TRIAGE_REASON_LABELS: Record<TriageReason, string> = {
   input_guard: "Incoming message safety review",
@@ -78,6 +79,14 @@ function formatDateTime(iso: string): string {
     dateStyle: "medium",
     timeStyle: "short",
   });
+}
+
+function formatLastUpdated(date: Date | null): string {
+  if (!date) return "Updating...";
+  return `Updated ${date.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  })}`;
 }
 
 function initials(name: string): string {
@@ -134,6 +143,7 @@ export default function PatientManagementPage() {
   const [isSendingPharmacistMessage, setIsSendingPharmacistMessage] = useState(false);
   const [isUpdatingChatMode, setIsUpdatingChatMode] = useState(false);
   const [retryingMessageId, setRetryingMessageId] = useState<string | null>(null);
+  const [conversationLastUpdatedAt, setConversationLastUpdatedAt] = useState<Date | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -175,6 +185,7 @@ export default function PatientManagementPage() {
     if (!selectedTreatmentId) {
       setConversationState({ kind: "idle" });
       setTreatmentDetailState({ kind: "idle" });
+      setConversationLastUpdatedAt(null);
       return;
     }
 
@@ -199,6 +210,7 @@ export default function PatientManagementPage() {
       .then((res) => {
         if (cancelled) return;
         setConversationState({ kind: "ok", items: res.items });
+        setConversationLastUpdatedAt(new Date());
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -210,6 +222,32 @@ export default function PatientManagementPage() {
 
     return () => {
       cancelled = true;
+    };
+  }, [selectedTreatmentId]);
+
+  useEffect(() => {
+    if (!selectedTreatmentId) return;
+
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const [conversation, triage] = await Promise.all([
+          listConversationMessages(selectedTreatmentId, { limit: 100, offset: 0 }),
+          listTriageItems({ limit: PAGE_SIZE, offset: 0 }),
+        ]);
+        if (cancelled) return;
+        setConversationState({ kind: "ok", items: conversation.items });
+        setConversationLastUpdatedAt(new Date());
+        setTriageItems(triage.items);
+      } catch {
+        // Keep the current view visible during transient polling failures.
+      }
+    };
+
+    const intervalId = window.setInterval(refresh, CONVERSATION_REFRESH_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
     };
   }, [selectedTreatmentId]);
 
@@ -245,6 +283,7 @@ export default function PatientManagementPage() {
   async function refreshConversation(treatmentId: string): Promise<ConversationMessageList> {
     const res = await listConversationMessages(treatmentId, { limit: 100, offset: 0 });
     setConversationState({ kind: "ok", items: res.items });
+    setConversationLastUpdatedAt(new Date());
     return res;
   }
 
@@ -444,6 +483,7 @@ export default function PatientManagementPage() {
               <InteractionLog
                 activeProfileTab={activeProfileTab}
                 conversationState={conversationState}
+                conversationLastUpdatedAt={conversationLastUpdatedAt}
                 incomingMessage={incomingMessage}
                 pharmacistMessage={pharmacistMessage}
                 chatResponseMode={selectedTreatment.treatment.chat_response_mode}
@@ -796,6 +836,7 @@ function ClinicalFact({ label, value }: { label: string; value: string }) {
 function InteractionLog({
   activeProfileTab,
   conversationState,
+  conversationLastUpdatedAt,
   incomingMessage,
   pharmacistMessage,
   chatResponseMode,
@@ -814,6 +855,7 @@ function InteractionLog({
 }: {
   activeProfileTab: "patient" | "reasoning";
   conversationState: ConversationState;
+  conversationLastUpdatedAt: Date | null;
   incomingMessage: string;
   pharmacistMessage: string;
   chatResponseMode: TreatmentView["chat_response_mode"];
@@ -838,7 +880,7 @@ function InteractionLog({
           <h3 className="font-bold text-slate-900 text-sm">Interaction Log</h3>
         </div>
         <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
-          WhatsApp
+          {formatLastUpdated(conversationLastUpdatedAt)}
         </span>
       </div>
 
