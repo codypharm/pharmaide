@@ -80,11 +80,13 @@ async def capture_patient_reply_state(
     *,
     treatment_id: UUID,
     inbound_message: ConversationMessage,
+    message_text: str | None = None,
     classifier_agent: Agent[None, PatientReplyClassification] | None = None,
 ) -> PatientReplyClassification:
     """Create adherence state when an inbound reply clearly answers a reminder."""
+    captured_text = message_text if message_text is not None else inbound_message.body
     classification = await _classify_patient_reply(
-        inbound_message.body,
+        captured_text,
         classifier_agent=classifier_agent,
     )
     if classification.intent in {"side_effect", "not_improving"}:
@@ -92,6 +94,7 @@ async def capture_patient_reply_state(
             session,
             treatment_id=treatment_id,
             inbound_message=inbound_message,
+            message_text=captured_text,
             classification=classification,
         )
         return classification
@@ -211,6 +214,7 @@ async def _create_patient_status_check_in(
     *,
     treatment_id: UUID,
     inbound_message: ConversationMessage,
+    message_text: str,
     classification: PatientReplyClassification,
 ) -> None:
     report_type = "side_effect" if classification.intent == "side_effect" else "not_improving"
@@ -220,7 +224,7 @@ async def _create_patient_status_check_in(
         PatientCheckInCreate(
             report_type=report_type,
             source="patient",
-            message=inbound_message.body,
+            message=message_text,
             observed_at=datetime.now(UTC),
         ),
     )

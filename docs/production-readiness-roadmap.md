@@ -22,7 +22,6 @@ Keep each item as a small, reviewable slice.
 - Course completion report and archive flow.
 - Existing-patient search and treatment attachment.
 - Patient message storm buffering and turn aggregation.
-- Buffered-message processing endpoint: aggregate unprocessed patient messages and feed the existing patient-reply/safety flow from an internal worker seam.
 - Buffered-message debounce window: delay processing briefly so rapid WhatsApp bursts are grouped before classification and reply drafting.
 - Buffered-message concurrency safety: use per-treatment locking or `SELECT FOR UPDATE SKIP LOCKED` so parallel workers cannot process the same patient messages twice.
 - Buffered-message worker integration: connect the internal processing seam to Cloud Tasks/Pub/Sub once deployment infrastructure is available.

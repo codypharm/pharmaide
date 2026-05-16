@@ -6,6 +6,7 @@ assistant draft, and stores the draft as ready or held. A later provider slice
 can deliver only `draft_ready` messages.
 """
 
+from dataclasses import dataclass
 from uuid import UUID
 
 import structlog
@@ -45,6 +46,12 @@ class TreatmentNotFound(Exception):
 
 class InvalidDeliveryRetry(Exception):
     """Raised when a message is not eligible to be queued for another send."""
+
+
+@dataclass(frozen=True)
+class BufferedConversationTurnRecord:
+    assistant_message: ConversationMessageView
+    safety_decision: PatientDraftSafetyDecision
 
 
 async def record_patient_conversation_message(
@@ -300,6 +307,109 @@ async def submit_patient_conversation_turn(
     )
 
 
+async def submit_buffered_patient_conversation_turn(
+    session: AsyncSession,
+    *,
+    treatment_id: UUID,
+    patient_message: str,
+    source_message_ids: list[UUID],
+    assistant_draft: str,
+    prescription_context: str,
+    openai_api_key: SecretStr | None = None,
+    safety_provider: SafetyProviderMode = "model",
+    llama_guard_url: str | None = None,
+    agentdog_url: str | None = None,
+    safety_provider_api_key: SecretStr | None = None,
+    safety_provider_timeout_seconds: float = 10,
+    providers: ConfiguredSafetyProviders | None = None,
+    draft_review_reason: TriageReason | None = None,
+    reply_classifier_agent: Agent[None, PatientReplyClassification] | None = None,
+) -> BufferedConversationTurnRecord:
+    """Gate one aggregate patient turn without duplicating inbound chat rows."""
+    treatment = await session.get(Treatment, treatment_id)
+    if treatment is None or not source_message_ids:
+        raise TreatmentNotFound()
+
+    inbound_anchor = await _get_treatment_message(
+        session,
+        treatment_id=treatment_id,
+        message_id=source_message_ids[0],
+    )
+    if inbound_anchor is None:
+        raise TreatmentNotFound()
+
+    inbound_body = _required_text(patient_message, "patient_message")
+    draft_body = _required_text(assistant_draft, "assistant_draft")
+    patient_reply_classification = await capture_patient_reply_state(
+        session,
+        treatment_id=treatment_id,
+        inbound_message=inbound_anchor,
+        message_text=inbound_body,
+        classifier_agent=reply_classifier_agent,
+    )
+
+    decision = await review_patient_draft_safety(
+        session,
+        treatment_id=treatment_id,
+        patient_message=inbound_body,
+        assistant_draft=draft_body,
+        prescription_context=prescription_context,
+        openai_api_key=openai_api_key,
+        safety_provider=safety_provider,
+        llama_guard_url=llama_guard_url,
+        agentdog_url=agentdog_url,
+        safety_provider_api_key=safety_provider_api_key,
+        safety_provider_timeout_seconds=safety_provider_timeout_seconds,
+        providers=providers,
+    )
+    capture_triage_reason = triage_reason_for_patient_reply(patient_reply_classification)
+    effective_draft_review_reason = draft_review_reason or capture_triage_reason
+    decision = _apply_draft_review_hold(
+        decision,
+        draft_review_reason=effective_draft_review_reason,
+    )
+    triage_reason = _triage_reason_for_held_draft(decision, effective_draft_review_reason)
+    assistant = ConversationMessage(
+        treatment_id=treatment_id,
+        direction="outbound",
+        sender_type="assistant",
+        channel="whatsapp",
+        status="draft_ready" if decision.status == "send" else "held_for_review",
+        body=draft_body,
+        safety_hold_reason=decision.hold_reason,
+    )
+    session.add(assistant)
+    await session.flush()
+    if assistant.status == "held_for_review" and triage_reason is not None:
+        await create_open_triage_item(
+            session,
+            treatment_id=treatment_id,
+            conversation_message_id=assistant.id,
+            reason=triage_reason,
+        )
+
+    _audit_buffered_conversation_turn(
+        session,
+        treatment_id=treatment_id,
+        source_message_ids=source_message_ids,
+        assistant=assistant,
+        safety_status=decision.status,
+    )
+    await session.flush()
+    log.info(
+        "buffered_conversation_turn_recorded",
+        treatment_id=str(treatment_id),
+        source_message_count=len(source_message_ids),
+        assistant_message_id=str(assistant.id),
+        safety_status=decision.status,
+        hold_reason=decision.hold_reason,
+    )
+    return BufferedConversationTurnRecord(
+        assistant_message=ConversationMessageView.model_validate(assistant),
+        safety_decision=decision,
+    )
+
+
 def _triage_reason_for_held_draft(
     decision: PatientDraftSafetyDecision,
     draft_review_reason: TriageReason | None,
@@ -450,6 +560,32 @@ def _audit_conversation_turn(
             payload={
                 "treatment_id": str(treatment_id),
                 "inbound_message_id": str(inbound.id),
+                "assistant_message_id": str(assistant.id),
+                "safety_status": safety_status,
+                "hold_reason": assistant.safety_hold_reason,
+            },
+        )
+    )
+
+
+def _audit_buffered_conversation_turn(
+    session: AsyncSession,
+    *,
+    treatment_id: UUID,
+    source_message_ids: list[UUID],
+    assistant: ConversationMessage,
+    safety_status: str,
+) -> None:
+    session.add(
+        AuditLogEntry(
+            event_type="buffered_conversation_turn_recorded",
+            resource_type="conversation_message",
+            resource_id=assistant.id,
+            # Source messages contain the patient text; the audit trail only
+            # needs ids and routing status to prove the buffered turn ran.
+            payload={
+                "treatment_id": str(treatment_id),
+                "source_message_ids": [str(message_id) for message_id in source_message_ids],
                 "assistant_message_id": str(assistant.id),
                 "safety_status": safety_status,
                 "hold_reason": assistant.safety_hold_reason,
