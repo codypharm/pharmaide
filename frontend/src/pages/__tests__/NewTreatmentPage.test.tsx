@@ -545,6 +545,7 @@ describe("NewTreatmentPage", () => {
     });
 
     renderPage();
+    await user.click(screen.getByRole("tab", { name: /pending handoffs/i }));
 
     expect(await screen.findByText("Eleanor Vance")).toBeInTheDocument();
     expect(screen.getByText("Analyzing")).toBeInTheDocument();

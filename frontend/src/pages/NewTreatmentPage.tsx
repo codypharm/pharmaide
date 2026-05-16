@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ChangeEvent, type DragEvent, type KeyboardEvent } from "react";
 import {
-  FileText, Search, ZoomIn, ZoomOut,
+  FileText, Search,
   CheckCircle2, AlertCircle, MessageSquare,
   Play, X,
   Upload, Type, ClipboardList, Trash2,
@@ -20,6 +20,7 @@ import {
 } from "../api/treatments";
 
 type IngestionMethod = "structured" | "manual" | "vision";
+type TreatmentWorkspaceTab = "create" | "pending";
 
 // Crockford-style alphabet: no I, O, 0, 1 to avoid hand-transcription
 // errors when a pharmacist reads the MRN aloud or writes it down.
@@ -84,6 +85,7 @@ export default function NewTreatmentPage() {
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractionError, setExtractionError] = useState<ExtractionErrorState | null>(null);
   const [extractionWarnings, setExtractionWarnings] = useState<string[]>([]);
+  const [workspaceTab, setWorkspaceTab] = useState<TreatmentWorkspaceTab>("create");
   const [extractedFields, setExtractedFields] = useState<Set<ExtractionFieldKey>>(
     () => new Set(),
   );
@@ -399,8 +401,8 @@ export default function NewTreatmentPage() {
   };
 
   return (
-    <div className="h-full overflow-y-auto p-8">
-      <div className="flex flex-col gap-6">
+    <div className="h-full overflow-y-auto bg-slate-50 p-6">
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-[#F0EFFF] text-[#5548E8] rounded-xl flex items-center justify-center shadow-sm">
@@ -443,33 +445,78 @@ export default function NewTreatmentPage() {
             Inline field-level errors below stay (they belong next to the
             input they describe). */}
 
-        {/* Patient Selection Card */}
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden p-6 flex flex-col gap-6">
-          <div className="flex items-center justify-between">
-            <h3 className="font-bold text-slate-900 uppercase tracking-wider text-[11px]">Patient Registration</h3>
-          </div>
+        <div
+          role="tablist"
+          aria-label="New treatment workspace"
+          className="inline-flex w-fit rounded-2xl border border-slate-200 bg-white p-1 shadow-sm"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={workspaceTab === "create"}
+            onClick={() => setWorkspaceTab("create")}
+            className={`rounded-xl px-4 py-2 text-sm font-bold transition-colors cursor-pointer ${
+              workspaceTab === "create"
+                ? "bg-slate-900 text-white"
+                : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+            }`}
+          >
+            Create Treatment
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={workspaceTab === "pending"}
+            onClick={() => setWorkspaceTab("pending")}
+            className={`rounded-xl px-4 py-2 text-sm font-bold transition-colors cursor-pointer ${
+              workspaceTab === "pending"
+                ? "bg-slate-900 text-white"
+                : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+            }`}
+          >
+            Pending Handoffs
+            {pendingTreatments.length > 0 && (
+              <span className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-700">
+                {pendingTreatments.length}
+              </span>
+            )}
+          </button>
+        </div>
 
-          {/* Search-existing affordance: visually present, disabled until
-              GET /patients?search= ships in a follow-up slice. */}
-          <div className="flex flex-col gap-2">
-            <div className="relative opacity-60">
-              <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                disabled
-                placeholder="Search existing patients by Name or ID..."
-                className="w-full pl-12 pr-12 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-base shadow-inner cursor-not-allowed"
-                aria-describedby="search-disabled-note"
-              />
-              <Lock size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" />
-            </div>
-            <p id="search-disabled-note" className="text-[11px] text-slate-500 px-1">
-              Search not yet available — registering below creates a new patient profile.
-            </p>
-          </div>
+        {workspaceTab === "create" && (
+          <>
+            {/* Patient Section */}
+            <section className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden p-5 flex flex-col gap-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] font-bold text-[#5548E8] uppercase tracking-widest">Step 1</p>
+                  <h3 className="mt-1 font-bold text-slate-900">Patient</h3>
+                </div>
+                <p className="max-w-md text-right text-xs font-medium text-slate-500">
+                  Register the patient details used for treatment monitoring and WhatsApp follow-up.
+                </p>
+              </div>
 
-          <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 space-y-6">
-            <h4 className="font-bold text-slate-900">New Patient Registration</h4>
-            <div className="grid grid-cols-2 gap-6">
+              {/* Search-existing affordance: visually present, disabled until
+                  GET /patients?search= ships in a follow-up slice. */}
+              <div className="flex flex-col gap-2">
+                <div className="relative opacity-60">
+                  <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    disabled
+                    placeholder="Search existing patients by Name or ID..."
+                    className="w-full pl-12 pr-12 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-base shadow-inner cursor-not-allowed"
+                    aria-describedby="search-disabled-note"
+                  />
+                  <Lock size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                </div>
+                <p id="search-disabled-note" className="text-[11px] text-slate-500 px-1">
+                  Search not yet available — registering below creates a new patient profile.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div className="grid grid-cols-2 gap-6">
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="patient-name" className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Full Name</label>
                 <input
@@ -599,21 +646,22 @@ export default function NewTreatmentPage() {
                 )}
               </div>
             </div>
-          </div>
-        </div>
+              </div>
+            </section>
 
-        <div className="grid grid-cols-12 gap-6 items-start">
-          {/* Source Ingestion Column */}
-          <div className="col-span-7 flex flex-col gap-4">
-            <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col min-h-[700px]">
+            <div className="grid grid-cols-12 gap-6 items-start">
+              {/* Prescription Section */}
+              <section className="col-span-8 flex flex-col gap-4">
+            <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col min-h-[600px]">
               <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col gap-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Source Document Ingestion</span>
-                  <div className="flex items-center gap-3 text-slate-400">
-                    <button className="hover:text-[#5548E8] transition-colors cursor-pointer"><Search size={16} /></button>
-                    <button className="hover:text-[#5548E8] transition-colors cursor-pointer"><ZoomIn size={16} /></button>
-                    <button className="hover:text-[#5548E8] transition-colors cursor-pointer"><ZoomOut size={16} /></button>
+                  <div>
+                    <p className="text-[11px] font-bold text-[#5548E8] uppercase tracking-widest">Step 2</p>
+                    <h3 className="mt-1 font-bold text-slate-900">Prescription</h3>
                   </div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    Choose one input method
+                  </span>
                 </div>
                 
                 <div className="flex gap-4">
@@ -641,7 +689,7 @@ export default function NewTreatmentPage() {
                 </div>
               </div>
 
-              <div className="flex-1 bg-slate-50 p-8 flex flex-col relative overflow-hidden">
+              <div className="flex-1 bg-slate-50 p-5 flex flex-col relative overflow-hidden">
                 {method === "vision" && (
                   <div className="flex-1 flex flex-col gap-6">
                     <div className="flex items-center justify-between">
@@ -651,7 +699,7 @@ export default function NewTreatmentPage() {
                     
                     <div
                       aria-label="Drop prescription file"
-                      className={`flex-1 border-2 border-dashed rounded-[32px] flex flex-col items-center justify-center p-12 transition-all group cursor-pointer ${
+                      className={`flex-1 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center p-8 transition-all group cursor-pointer ${
                         dragActive ? 'border-[#5548E8] bg-[#F0EFFF]' : 'border-slate-200 bg-white hover:border-[#5548E8] hover:bg-slate-50/50'
                       }`}
                       onDragEnter={() => setDragActive(true)}
@@ -659,8 +707,8 @@ export default function NewTreatmentPage() {
                       onDrop={handleVisionDrop}
                       onDragOver={(e) => e.preventDefault()}
                     >
-                      <div className="w-20 h-20 bg-slate-50 text-slate-400 rounded-3xl flex items-center justify-center mb-6 group-hover:bg-[#F0EFFF] group-hover:text-[#5548E8] transition-all shadow-inner">
-                        <Upload size={32} />
+                      <div className="w-16 h-16 bg-slate-50 text-slate-400 rounded-2xl flex items-center justify-center mb-5 group-hover:bg-[#F0EFFF] group-hover:text-[#5548E8] transition-all">
+                        <Upload size={28} />
                       </div>
                       <div className="text-center space-y-2">
                         <p className="text-lg font-bold text-slate-900">
@@ -775,7 +823,7 @@ export default function NewTreatmentPage() {
                       placeholder="Paste prescription text, clinical notes, or regimen details here..."
                       value={manualText}
                       onChange={(event) => setManualText(event.target.value)}
-                      className="flex-1 w-full p-8 bg-white border border-slate-200 rounded-3xl text-slate-700 focus:outline-none focus:ring-4 focus:ring-[#D9D5FB] focus:border-[#5548E8] transition-all resize-none shadow-inner font-mono text-base leading-relaxed"
+                      className="flex-1 w-full p-5 bg-white border border-slate-200 rounded-2xl text-slate-700 focus:outline-none focus:ring-4 focus:ring-[#D9D5FB] focus:border-[#5548E8] transition-all resize-none font-mono text-base leading-relaxed"
                     />
                     <button
                       type="button"
@@ -802,7 +850,7 @@ export default function NewTreatmentPage() {
                     
                     <div className="space-y-6">
                       {medications.map((med) => (
-                        <div key={med.id} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm relative group">
+                        <div key={med.id} className="bg-white border border-slate-200 rounded-2xl p-5 relative group">
                           {medications.length > 1 && (
                             <button 
                               onClick={() => removeMedication(med.id)}
@@ -885,29 +933,24 @@ export default function NewTreatmentPage() {
                 )}
               </div>
             </div>
-          </div>
+              </section>
 
-          {/* Clinical Extraction Column */}
-          <div className="col-span-5 flex flex-col gap-4">
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 flex items-start gap-4 shadow-sm">
-              <div className="w-10 h-10 bg-slate-50 text-slate-500 rounded-xl flex items-center justify-center shrink-0 border border-slate-100">
-                <ClipboardList size={20} />
-              </div>
-              <div className="flex-1">
-                <p className="font-bold text-slate-900 text-sm">Regimen Summary</p>
-                <p className="text-xs text-slate-500 mt-1">
-                  Review the medications and treatment objective below, then submit to create the patient record.
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col gap-6">
+              {/* Treatment Setup Section */}
+              <section className="col-span-4 flex flex-col gap-4">
+            <div className="sticky top-4 bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col gap-5">
               <div className="flex items-center justify-between">
-                <h3 className="font-bold text-slate-900 uppercase tracking-wider text-[11px]">Clinical Extraction Overview</h3>
+                <div>
+                  <p className="text-[11px] font-bold text-[#5548E8] uppercase tracking-widest">Step 3</p>
+                  <h3 className="mt-1 font-bold text-slate-900">Treatment Setup</h3>
+                </div>
                 <span className="text-[10px] text-slate-400 font-medium">{medications.filter(m => m.name.trim()).length} medicine{medications.filter(m => m.name.trim()).length !== 1 ? 's' : ''} detected</span>
               </div>
 
-              <div className="space-y-4 max-h-[450px] overflow-y-auto pr-2">
+              <p className="text-xs font-medium leading-relaxed text-slate-500">
+                Review the extracted regimen, set the monitoring objective, then create the treatment.
+              </p>
+
+              <div className="space-y-4 max-h-[520px] overflow-y-auto pr-2">
                 {extractionWarnings.length > 0 && (
                   <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-3">
                     <AlertCircle size={16} className="text-amber-600 mt-0.5 shrink-0" />
@@ -1019,17 +1062,21 @@ export default function NewTreatmentPage() {
                 )}
               </button>
             </div>
-          </div>
-        </div>
+              </section>
+            </div>
+          </>
+        )}
 
-        <PendingTreatmentsPanel
-          rows={pendingTreatments}
-          isLoading={pendingTreatmentsLoading}
-          hasError={pendingTreatmentsError}
-          startingTreatmentId={startingTreatmentId}
-          onRetry={refreshPendingTreatments}
-          onStartCycle={(row) => void handleStartPendingCycle(row)}
-        />
+        {workspaceTab === "pending" && (
+          <PendingTreatmentsPanel
+            rows={pendingTreatments}
+            isLoading={pendingTreatmentsLoading}
+            hasError={pendingTreatmentsError}
+            startingTreatmentId={startingTreatmentId}
+            onRetry={refreshPendingTreatments}
+            onStartCycle={(row) => void handleStartPendingCycle(row)}
+          />
+        )}
       </div>
 
       {showConfirm && (
