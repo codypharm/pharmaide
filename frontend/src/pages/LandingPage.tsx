@@ -77,10 +77,10 @@ export default function LandingPage() {
 
           <button
             type="button"
-            onClick={() => navigate("/dashboard/surveillance")}
+            onClick={() => navigate("/dashboard/triage")}
             className="inline-flex items-center gap-2 rounded-lg border border-[#5548E8] bg-[#5548E8] px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-[#463AD4] cursor-pointer"
           >
-            Open Surveillance
+            Review Triage
             <ArrowRight size={15} />
           </button>
         </div>
@@ -103,19 +103,19 @@ export default function LandingPage() {
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <button
                 type="button"
-                onClick={() => navigate("/dashboard/surveillance")}
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#5548E8] bg-[#5548E8] px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-[#463AD4] cursor-pointer"
-              >
-                Open Surveillance
-                <Activity size={16} />
-              </button>
-              <button
-                type="button"
                 onClick={() => navigate("/dashboard/triage")}
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-900 transition-colors hover:bg-slate-50 cursor-pointer"
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#5548E8] bg-[#5548E8] px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-[#463AD4] cursor-pointer"
               >
                 Review Triage
                 <MessageSquareWarning size={16} />
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate("/dashboard/surveillance")}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-900 transition-colors hover:bg-slate-50 cursor-pointer"
+              >
+                Open Surveillance
+                <Activity size={16} />
               </button>
             </div>
           </div>
