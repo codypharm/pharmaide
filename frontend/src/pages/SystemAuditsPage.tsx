@@ -32,6 +32,37 @@ const EMPTY_EXACT_FILTERS: AuditExactFilters = {
   actor_id: "",
 };
 
+type AuditFilterOption = {
+  label: string;
+  value: string;
+};
+
+const EVENT_TYPE_OPTIONS: AuditFilterOption[] = [
+  { label: "Any event", value: "" },
+  { label: "Analysis started", value: "analysis_started" },
+  { label: "Analysis completed", value: "analysis_completed" },
+  { label: "Analysis failed", value: "analysis_failed" },
+  { label: "Triage status changed", value: "triage_item_status_changed" },
+  { label: "Draft approved", value: "triage_item_draft_approved" },
+  { label: "Draft rejected", value: "triage_item_draft_rejected" },
+  { label: "Draft queued for delivery", value: "triage_item_draft_queued_for_delivery" },
+  { label: "Message delivery failed", value: "conversation_message_delivery_failed" },
+  { label: "Treatment created", value: "treatment_created" },
+  { label: "Patient check-in recorded", value: "patient_check_in_recorded" },
+  { label: "Adherence event recorded", value: "adherence_event_recorded" },
+];
+
+const RESOURCE_TYPE_OPTIONS: AuditFilterOption[] = [
+  { label: "Any resource", value: "" },
+  { label: "Treatment", value: "treatment" },
+  { label: "Triage item", value: "triage_item" },
+  { label: "Conversation message", value: "conversation_message" },
+  { label: "Patient check-in", value: "patient_check_in" },
+  { label: "Adherence event", value: "adherence_event" },
+  { label: "Knowledge document", value: "knowledge_document" },
+  { label: "Safety review", value: "safety_review" },
+];
+
 type FetchState =
   | { kind: "loading" }
   | { kind: "ok"; items: AuditLogEntryView[]; hasMore: boolean }
@@ -279,18 +310,18 @@ function ExactAuditFilters({
         onApply();
       }}
     >
-      <ExactFilterInput
+      <ExactFilterSelect
         id="audit-event-type"
         label="Event type"
         value={value.event_type}
-        placeholder="analysis_started"
+        options={EVENT_TYPE_OPTIONS}
         onChange={(event_type) => onChange({ ...value, event_type })}
       />
-      <ExactFilterInput
+      <ExactFilterSelect
         id="audit-resource-type"
         label="Resource type"
         value={value.resource_type}
-        placeholder="treatment"
+        options={RESOURCE_TYPE_OPTIONS}
         onChange={(resource_type) => onChange({ ...value, resource_type })}
       />
       <ExactFilterInput
@@ -316,6 +347,40 @@ function ExactAuditFilters({
         </button>
       </div>
     </form>
+  );
+}
+
+function ExactFilterSelect({
+  id,
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  options: AuditFilterOption[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label htmlFor={id} className="block">
+      <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+        {label}
+      </span>
+      <select
+        id={id}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800 focus:border-[#5548E8] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#D9D5FB]"
+      >
+        {options.map((option) => (
+          <option key={option.label} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
