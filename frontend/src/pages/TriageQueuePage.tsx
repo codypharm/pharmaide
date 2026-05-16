@@ -552,7 +552,7 @@ function TriageTable({
                         onClick={() => void onToggleConversation(item)}
                         className="inline-flex min-w-36 items-center justify-center px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 cursor-pointer"
                       >
-                        {expandedItemId === item.id ? "Close review" : "Review item"}
+                        {expandedItemId === item.id ? "Back to queue" : "Review item"}
                       </button>
                     </div>
                   </td>
@@ -629,13 +629,33 @@ function ConversationPanel({
 
   return (
     <div className="space-y-3">
-      <div>
-        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-          Pharmacist review
-        </p>
-        <p className="text-xs text-slate-500 mt-1">
-          Review the patient message and held assistant draft before changing queue status.
-        </p>
+      <div className="sticky top-0 z-10 rounded-xl border border-slate-200 bg-white p-3">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              Pharmacist review
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <StatusBadge status={item.status} />
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                {REASON_LABELS[item.reason]}
+              </span>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                {getDraftStatusLabel(heldDraft?.status)}
+              </span>
+            </div>
+          </div>
+          <ReviewAction
+            item={item}
+            canApproveDraft={canApproveDraft}
+            canQueueDelivery={canQueueDelivery}
+            isBusy={isBusy}
+            onApproveItem={onApproveItem}
+            onMoveItem={onMoveItem}
+            onQueueDelivery={onQueueDelivery}
+            onRejectItem={onRejectItem}
+          />
+        </div>
       </div>
       <FlagSummary item={item} heldDraft={heldDraft} />
       <ReviewFocusPanel item={item} messages={state.items} />
@@ -647,18 +667,6 @@ function ConversationPanel({
             isHeldDraft={message.id === item.conversation_message_id}
           />
         ))}
-      </div>
-      <div className="flex items-center justify-end border-t border-slate-200 pt-4">
-        <ReviewAction
-          item={item}
-          canApproveDraft={canApproveDraft}
-          canQueueDelivery={canQueueDelivery}
-          isBusy={isBusy}
-          onApproveItem={onApproveItem}
-          onMoveItem={onMoveItem}
-          onQueueDelivery={onQueueDelivery}
-          onRejectItem={onRejectItem}
-        />
       </div>
     </div>
   );

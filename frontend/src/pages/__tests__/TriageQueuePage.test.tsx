@@ -171,9 +171,11 @@ describe("TriageQueuePage", () => {
       }),
     );
     expect(screen.getByText("Pharmacist review")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /start review item/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /back to queue/i })).toBeTruthy();
     expect(screen.getByText("Flag Summary")).toBeTruthy();
     expect(screen.getByText("Patient conversation")).toBeTruthy();
-    expect(screen.getByText("Held for review")).toBeTruthy();
+    expect(screen.getAllByText("Held for review").length).toBeGreaterThan(0);
     expect(screen.getByText("Approve draft or resolve manually")).toBeTruthy();
     expect(screen.getByText("Patient message")).toBeTruthy();
     expect(screen.getByText("Held assistant draft")).toBeTruthy();
