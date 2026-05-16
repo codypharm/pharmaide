@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { toast } from "sonner";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import NewTreatmentPage from "../NewTreatmentPage";
 import { ApiError } from "../../api/client";
@@ -78,6 +78,11 @@ async function submitValidTreatment({
 afterEach(() => {
   vi.clearAllMocks();
   vi.restoreAllMocks();
+});
+
+beforeEach(() => {
+  vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue({ items: [] });
+  vi.spyOn(treatmentsApi, "getAnalysis").mockResolvedValue(null);
 });
 
 describe("NewTreatmentPage", () => {
@@ -484,4 +489,105 @@ describe("NewTreatmentPage", () => {
       );
     });
   });
+
+  it("shows pending treatments and starts cycles once analysis is completed", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue({
+      items: [
+        treatmentListItem("pending-running", "Eleanor Vance", "Lisinopril", "pending"),
+        treatmentListItem("pending-ready", "Marcus Chen", "Metformin", "pending"),
+        treatmentListItem("active-treatment", "Ava Patel", "Amoxicillin", "active"),
+      ],
+    });
+    vi.spyOn(treatmentsApi, "getAnalysis").mockImplementation(async (treatmentId) => {
+      if (treatmentId === "pending-ready") {
+        return {
+          id: "analysis-ready",
+          treatment_id: treatmentId,
+          status: "completed",
+          result: {
+            groundings: [],
+            ddi_warnings: [],
+            schedule: null,
+            kb_citations: [],
+            clinical_safety_review: null,
+            reasoning: null,
+            degraded: false,
+            partial_results: false,
+            completed_stages: [],
+          },
+          error_text: null,
+          started_at: "2026-05-16T10:00:00Z",
+          completed_at: "2026-05-16T10:01:00Z",
+          created_at: "2026-05-16T10:00:00Z",
+        } as treatmentsApi.TreatmentAnalysisRow;
+      }
+      return {
+        id: "analysis-running",
+        treatment_id: treatmentId,
+        status: "running",
+        result: null,
+        error_text: null,
+        started_at: "2026-05-16T10:00:00Z",
+        completed_at: null,
+        created_at: "2026-05-16T10:00:00Z",
+      } as treatmentsApi.TreatmentAnalysisRow;
+    });
+    const startCycle = vi.spyOn(treatmentsApi, "startTreatmentCycle").mockResolvedValue({
+      id: "pending-ready",
+      patient_id: "patient-pending-ready",
+      status: "active",
+      chat_response_mode: "ai_active",
+      automation_mode: "active",
+      clinical_objective: null,
+      treatment_start_at: null,
+      created_at: "2026-05-16T10:00:00Z",
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Eleanor Vance")).toBeInTheDocument();
+    expect(screen.getByText("Analyzing")).toBeInTheDocument();
+    expect(screen.getByText("Marcus Chen")).toBeInTheDocument();
+    expect(screen.getByText("Ready to start")).toBeInTheDocument();
+    expect(screen.queryByText("Ava Patel")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /start cycle for marcus chen/i }));
+
+    expect(startCycle).toHaveBeenCalledWith("pending-ready");
+    await waitFor(() => expect(screen.queryByText("Marcus Chen")).not.toBeInTheDocument());
+    expect(toast.success).toHaveBeenCalledWith("Treatment cycle active", {
+      description: "Monitoring has started for Marcus Chen.",
+    });
+  });
 });
+
+function treatmentListItem(
+  id: string,
+  patientName: string,
+  medicationName: string,
+  status: string,
+): treatmentsApi.TreatmentListItem {
+  return {
+    patient: {
+      id: `patient-${id}`,
+      name: patientName,
+      dob: "1955-10-12",
+      mrn: `MRN-${id}`,
+      phone: "+18005551212",
+      allergies: [],
+    },
+    treatment: {
+      id,
+      patient_id: `patient-${id}`,
+      status,
+      chat_response_mode: "ai_active",
+      automation_mode: "active",
+      clinical_objective: null,
+      treatment_start_at: null,
+      created_at: "2026-05-16T10:00:00Z",
+    },
+    medication_count: 1,
+    first_medication_name: medicationName,
+  };
+}

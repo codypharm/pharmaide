@@ -1,16 +1,23 @@
-import { useState, type ChangeEvent, type DragEvent, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useState, type ChangeEvent, type DragEvent, type KeyboardEvent } from "react";
 import {
   FileText, Search, ZoomIn, ZoomOut,
   CheckCircle2, AlertCircle, MessageSquare,
-  Play, X, ShieldCheck,
+  Play, X,
   Upload, Type, ClipboardList, Trash2,
   Edit3, Loader2, Lock, Sparkles
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { ApiError, ConflictError, ValidationError } from "../api/client";
 import { ExtractionError, extractPrescription, type ExtractedPrescription } from "../api/prescriptions";
-import { createTreatment } from "../api/treatments";
+import {
+  createTreatment,
+  getAnalysis,
+  listTreatments,
+  startTreatmentCycle,
+  type TreatmentAnalysisRow,
+  type TreatmentListItem,
+} from "../api/treatments";
 
 type IngestionMethod = "structured" | "manual" | "vision";
 
@@ -34,6 +41,11 @@ interface Medication {
   frequency: string;
   duration: string;
 }
+
+type PendingTreatmentRow = {
+  item: TreatmentListItem;
+  analysis: TreatmentAnalysisRow | null;
+};
 
 type FieldErrors = Partial<Record<"name" | "dob" | "mrn" | "phone" | "allergies", string>>;
 type ExtractionFieldKey = string;
@@ -78,7 +90,38 @@ export default function NewTreatmentPage() {
   const [lowConfidenceFields, setLowConfidenceFields] = useState<Set<ExtractionFieldKey>>(
     () => new Set(),
   );
+  const [pendingTreatments, setPendingTreatments] = useState<PendingTreatmentRow[]>([]);
+  const [pendingTreatmentsLoading, setPendingTreatmentsLoading] = useState(true);
+  const [pendingTreatmentsError, setPendingTreatmentsError] = useState(false);
+  const [startingTreatmentId, setStartingTreatmentId] = useState<string | null>(null);
   const currentPatientAllergies = appendPatientAllergies(patientAllergies, allergyDraft);
+
+  const refreshPendingTreatments = useCallback(async () => {
+    try {
+      setPendingTreatmentsError(false);
+      const treatmentList = await listTreatments({ limit: 20, offset: 0 });
+      const pending = treatmentList.items.filter((row) => row.treatment.status === "pending");
+      const rows = await Promise.all(
+        pending.map(async (item) => ({
+          item,
+          analysis: await getAnalysis(item.treatment.id).catch(() => null),
+        })),
+      );
+      setPendingTreatments(rows);
+    } catch {
+      setPendingTreatmentsError(true);
+    } finally {
+      setPendingTreatmentsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Analysis completes outside this form, so the handoff panel refreshes
+    // while the pharmacist stays on the ingestion workflow.
+    void refreshPendingTreatments();
+    const timer = setInterval(() => void refreshPendingTreatments(), 5_000);
+    return () => clearInterval(timer);
+  }, [refreshPendingTreatments]);
 
   const resetDraft = () => {
     setMethod("structured");
@@ -288,6 +331,7 @@ export default function NewTreatmentPage() {
           onClick: () => navigate(`/dashboard/treatments/${result.treatment_id}`),
         },
       });
+      void refreshPendingTreatments();
       // Reset form so the pharmacist can register the next patient.
       resetDraft();
     } catch (err) {
@@ -326,6 +370,31 @@ export default function NewTreatmentPage() {
       }
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleStartPendingCycle = async (row: PendingTreatmentRow) => {
+    const treatmentId = row.item.treatment.id;
+    setStartingTreatmentId(treatmentId);
+    try {
+      const treatment = await startTreatmentCycle(treatmentId);
+      if (treatment.status === "active") {
+        setPendingTreatments((current) =>
+          current.filter((entry) => entry.item.treatment.id !== treatmentId),
+        );
+      } else {
+        await refreshPendingTreatments();
+      }
+      toast.success("Treatment cycle active", {
+        description: `Monitoring has started for ${row.item.patient.name}.`,
+      });
+    } catch {
+      toast.error("Could not start cycle", {
+        description: "Complete analysis first, then try again.",
+      });
+      await refreshPendingTreatments();
+    } finally {
+      setStartingTreatmentId(null);
     }
   };
 
@@ -953,33 +1022,14 @@ export default function NewTreatmentPage() {
           </div>
         </div>
 
-        {/* Schedule preview — populated by Sprint 3 once the schedule
-            generator and "Start Cycle" action ship. Today this is an
-            honest placeholder, not mock data dressed as real data. */}
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mb-8">
-          <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-            <div>
-              <h3 className="font-bold text-slate-900">Schedule Preview</h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Generated when the pharmacist clicks "Start Cycle" on an active treatment (coming next sprint).
-              </p>
-            </div>
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
-              <ShieldCheck size={14} className="text-slate-300" />
-              Awaiting activation
-            </div>
-          </div>
-
-          <div className="p-12 flex flex-col items-center justify-center text-center bg-slate-50/30">
-            <div className="w-12 h-12 bg-white text-slate-300 rounded-2xl flex items-center justify-center mb-4 border border-slate-100">
-              <MessageSquare size={20} />
-            </div>
-            <p className="text-sm font-bold text-slate-700">No schedule yet</p>
-            <p className="text-xs text-slate-500 font-medium max-w-md mt-2">
-              The agent's WhatsApp check-in cadence is derived from each medication's frequency × duration once you submit and start the cycle. It will appear here.
-            </p>
-          </div>
-        </div>
+        <PendingTreatmentsPanel
+          rows={pendingTreatments}
+          isLoading={pendingTreatmentsLoading}
+          hasError={pendingTreatmentsError}
+          startingTreatmentId={startingTreatmentId}
+          onRetry={refreshPendingTreatments}
+          onStartCycle={(row) => void handleStartPendingCycle(row)}
+        />
       </div>
 
       {showConfirm && (
@@ -1014,6 +1064,172 @@ function treatmentCreatedDescription(result: {
     ? `Analysis ID: ${result.analysis_id.slice(0, 8)}…`
     : "Analysis pending";
   return `${treatment} · ${patient} · ${analysis}`;
+}
+
+interface PendingTreatmentsPanelProps {
+  rows: PendingTreatmentRow[];
+  isLoading: boolean;
+  hasError: boolean;
+  startingTreatmentId: string | null;
+  onRetry: () => void;
+  onStartCycle: (row: PendingTreatmentRow) => void;
+}
+
+function PendingTreatmentsPanel({
+  rows,
+  isLoading,
+  hasError,
+  startingTreatmentId,
+  onRetry,
+  onStartCycle,
+}: PendingTreatmentsPanelProps) {
+  return (
+    <div className="mb-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between gap-4 border-b border-slate-100 bg-slate-50/60 p-5">
+        <div>
+          <h3 className="font-bold text-slate-900">Pending Treatments</h3>
+          <p className="mt-0.5 text-xs font-medium text-slate-500">
+            Recently created treatments waiting for analysis or monitoring start.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-slate-600 transition-colors hover:bg-slate-50 cursor-pointer"
+        >
+          Refresh
+        </button>
+      </div>
+
+      {hasError ? (
+        <div className="flex items-start gap-3 p-5 text-sm text-amber-800">
+          <AlertCircle size={18} className="mt-0.5 shrink-0" />
+          <div>
+            <p className="font-bold">Could not load pending treatments.</p>
+            <p className="mt-1 text-xs font-medium text-amber-700">
+              Retry, then open the treatment detail page if this continues.
+            </p>
+          </div>
+        </div>
+      ) : isLoading && rows.length === 0 ? (
+        <div className="flex items-center gap-3 p-5 text-sm font-semibold text-slate-500">
+          <Loader2 size={16} className="animate-spin" />
+          Loading pending treatments…
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="flex items-start gap-3 p-5 text-sm text-slate-500">
+          <MessageSquare size={18} className="mt-0.5 shrink-0 text-slate-400" />
+          <div>
+            <p className="font-bold text-slate-700">No treatment waiting for monitoring.</p>
+            <p className="mt-1 text-xs font-medium">
+              New treatments will appear here while analysis completes.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="divide-y divide-slate-100">
+          {rows.map((row) => (
+            <PendingTreatmentItem
+              key={row.item.treatment.id}
+              row={row}
+              isStarting={startingTreatmentId === row.item.treatment.id}
+              onStartCycle={onStartCycle}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface PendingTreatmentItemProps {
+  row: PendingTreatmentRow;
+  isStarting: boolean;
+  onStartCycle: (row: PendingTreatmentRow) => void;
+}
+
+function PendingTreatmentItem({
+  row,
+  isStarting,
+  onStartCycle,
+}: PendingTreatmentItemProps) {
+  const readiness = pendingTreatmentReadiness(row.analysis);
+  const medication = row.item.first_medication_name ?? "Medication not listed";
+  const medicationCount =
+    row.item.medication_count === 1 ? "1 medication" : `${row.item.medication_count} medications`;
+
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 p-5">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="truncate font-bold text-slate-900">{row.item.patient.name}</p>
+          <span className={readiness.className}>{readiness.label}</span>
+        </div>
+        <p className="mt-1 truncate text-sm font-medium text-slate-500">
+          {medication} · {medicationCount}
+        </p>
+      </div>
+
+      {readiness.canStart ? (
+        <button
+          type="button"
+          onClick={() => onStartCycle(row)}
+          disabled={isStarting}
+          aria-label={`Start cycle for ${row.item.patient.name}`}
+          className="inline-flex min-w-[132px] items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 transition-colors hover:border-slate-400 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60 cursor-pointer"
+        >
+          {isStarting ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
+          Start Cycle
+        </button>
+      ) : (
+        <Link
+          to={`/dashboard/treatments/${row.item.treatment.id}`}
+          className="inline-flex min-w-[132px] items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
+        >
+          Open Details
+        </Link>
+      )}
+    </div>
+  );
+}
+
+function pendingTreatmentReadiness(analysis: TreatmentAnalysisRow | null): {
+  label: string;
+  canStart: boolean;
+  className: string;
+} {
+  if (analysisReadyForCycle(analysis)) {
+    return {
+      label: "Ready to start",
+      canStart: true,
+      className: "rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-emerald-700",
+    };
+  }
+
+  if (analysis?.status === "failed") {
+    return {
+      label: "Analysis failed",
+      canStart: false,
+      className: "rounded-full bg-red-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-red-700",
+    };
+  }
+
+  const label =
+    analysis?.status === "running" || analysis?.status === "pending"
+      ? "Analyzing"
+      : "Analysis pending";
+
+  return {
+    label,
+    canStart: false,
+    className: "rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-amber-700",
+  };
+}
+
+function analysisReadyForCycle(analysis: TreatmentAnalysisRow | null): boolean {
+  const completedAnalysis =
+    analysis?.status === "completed" ? analysis : analysis?.last_completed ?? null;
+  return completedAnalysis?.status === "completed" && completedAnalysis.result !== null;
 }
 
 function toMedicationDrafts(prescription: ExtractedPrescription): Medication[] {
