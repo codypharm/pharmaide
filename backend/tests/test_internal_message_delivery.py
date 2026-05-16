@@ -121,6 +121,51 @@ async def test_run_message_delivery_marks_message_failed_when_provider_fails(
     assert "dose" not in str(audit.payload).lower()
 
 
+@pytest.mark.usefixtures("postgres_container")
+async def test_run_message_delivery_marks_message_failed_when_provider_raises(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    treatment_id = await _create_treatment(app_client, "DELIVERY-003")
+    queued = await app_client.post(
+        f"/treatments/{treatment_id}/pharmacist-messages",
+        json={"message": "Please call the pharmacy today."},
+    )
+    assert queued.status_code == 201, queued.text
+    message_id = UUID(queued.json()["id"])
+
+    result = await message_delivery.run_message_delivery_once(
+        db_session,
+        provider=RaisingDeliveryProvider(),
+    )
+
+    assert result.processed_count == 1
+    assert result.sent_count == 0
+    assert result.failed_count == 1
+
+    message = await db_session.get(ConversationMessage, message_id)
+    assert message is not None
+    assert message.status == "failed"
+    assert message.external_message_id is None
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.event_type == "conversation_message_delivery_failed"
+        )
+    )
+    assert audit is not None
+    assert audit.payload == {
+        "treatment_id": str(treatment_id),
+        "message_id": str(message_id),
+        "channel": "whatsapp",
+        "old_status": "queued",
+        "new_status": "failed",
+        "provider": "RaisingDeliveryProvider",
+        "error_code": "provider_exception",
+    }
+    assert "pharmacy" not in str(audit.payload).lower()
+
+
 class FailingDeliveryProvider:
     def __init__(self, error_code: str) -> None:
         self.error_code = error_code
@@ -135,6 +180,14 @@ class FailingDeliveryProvider:
             external_message_id=None,
             error_code=self.error_code,
         )
+
+
+class RaisingDeliveryProvider:
+    async def deliver(
+        self,
+        message: ConversationMessage,
+    ) -> message_delivery.DeliveryAttemptResult:
+        raise RuntimeError("provider transport failed")
 
 
 async def _create_treatment(app_client: AsyncClient, mrn: str) -> UUID:

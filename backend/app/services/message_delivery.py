@@ -59,7 +59,7 @@ async def run_message_delivery_once(
 
     for message in messages:
         old_status = message.status
-        attempt = await delivery_provider.deliver(message)
+        attempt = await _attempt_delivery(delivery_provider, message)
         if attempt.ok:
             _mark_message_sent(session, message, old_status=old_status, attempt=attempt)
             sent_count += 1
@@ -80,6 +80,26 @@ async def run_message_delivery_once(
         sent_count=sent_count,
         failed_count=failed_count,
     )
+
+
+async def _attempt_delivery(
+    provider: DeliveryProvider,
+    message: ConversationMessage,
+) -> DeliveryAttemptResult:
+    try:
+        return await provider.deliver(message)
+    except Exception:
+        log.exception(
+            "message_delivery_provider_failed",
+            message_id=str(message.id),
+            treatment_id=str(message.treatment_id),
+            provider=provider.__class__.__name__,
+        )
+        return DeliveryAttemptResult(
+            ok=False,
+            provider=provider.__class__.__name__,
+            error_code="provider_exception",
+        )
 
 
 def _mark_message_sent(
