@@ -17,7 +17,7 @@ import { listAuditLogEntries, type AuditLogEntryView } from "../api/audits";
 import { ApiError } from "../api/client";
 
 const PAGE_SIZE = 50;
-const ACTOR_FILTERS = ["All", "AI Agent", "Human", "System"] as const;
+const ACTOR_FILTERS = ["All", "Agent", "Human", "System"] as const;
 
 type ActorFilter = (typeof ACTOR_FILTERS)[number];
 
@@ -319,7 +319,7 @@ function AuditTable({ items }: { items: AuditLogEntryView[] }) {
 function ActorCell({ log }: { log: AuditLogEntryView }) {
   const label = actorLabel(log);
   const iconClass =
-    label === "AI Agent"
+    label === "Agent"
       ? "bg-blue-50 text-blue-700"
       : label === "Human"
         ? "bg-yellow-50 text-yellow-700"
@@ -327,7 +327,7 @@ function ActorCell({ log }: { log: AuditLogEntryView }) {
   return (
     <div className="flex items-center gap-2">
       <div className={`w-7 h-7 rounded-md flex items-center justify-center ${iconClass}`}>
-        {label === "AI Agent" ? (
+        {label === "Agent" ? (
           <Bot size={14} />
         ) : label === "Human" ? (
           <User size={14} />
@@ -409,7 +409,7 @@ function actorLabel(log: AuditLogEntryView): ActorFilter {
     log.event_type.includes("retrieval") ||
     log.event_type.includes("conversation_turn")
   ) {
-    return "AI Agent";
+    return "Agent";
   }
   return "System";
 }

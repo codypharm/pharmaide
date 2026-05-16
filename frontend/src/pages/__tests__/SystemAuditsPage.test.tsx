@@ -55,7 +55,7 @@ describe("SystemAuditsPage", () => {
 
     await screen.findByText("Analysis Started");
     expect(screen.getByText("Triage Item Status Changed")).toBeTruthy();
-    expect(screen.getAllByText("AI Agent").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Agent").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Human").length).toBeGreaterThan(0);
     expect(screen.getByText(/medication_count: 2/i)).toBeTruthy();
     expect(spy).toHaveBeenCalledWith({ limit: 50, offset: 0 });
