@@ -262,6 +262,16 @@ export function sendPharmacistMessage(
   );
 }
 
+export function retryConversationMessageDelivery(
+  treatmentId: string,
+  messageId: string,
+): Promise<ConversationMessageView> {
+  return postJson<undefined, ConversationMessageView>(
+    `/treatments/${treatmentId}/conversation-messages/${messageId}/retry-delivery`,
+    undefined,
+  );
+}
+
 export function updateTreatmentChatResponseMode(
   treatmentId: string,
   payload: TreatmentChatResponseModeUpdate,

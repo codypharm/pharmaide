@@ -14,7 +14,7 @@ from app.agents.safety_schemas import (
     RefereeResult,
     SafetyReview,
 )
-from app.db.models import AuditLogEntry, Treatment
+from app.db.models import AuditLogEntry, ConversationMessage, Treatment
 from app.services import task_runner
 
 
@@ -320,6 +320,50 @@ async def test_post_pharmacist_message_returns_404_for_unknown_treatment(
 
     assert response.status_code == 404
     assert response.json() == {"detail": {"error": "treatment_not_found"}}
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_retry_delivery_requeues_failed_message_and_audits(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    treatment_id = await _create_treatment(app_client, "CONV-API-018")
+    created = await app_client.post(
+        f"/treatments/{treatment_id}/pharmacist-messages",
+        json={"message": "Please call the pharmacy today."},
+    )
+    assert created.status_code == 201, created.text
+    message_id = UUID(created.json()["id"])
+    message = await db_session.get(ConversationMessage, message_id)
+    assert message is not None
+    message.status = "failed"
+    message.external_message_id = "whatsapp-failed-1"
+    await db_session.flush()
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/conversation-messages/{message_id}/retry-delivery"
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["id"] == str(message_id)
+    assert payload["status"] == "queued"
+    assert payload["external_message_id"] is None
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.event_type == "conversation_message_delivery_retried"
+        )
+    )
+    assert audit is not None
+    assert audit.payload == {
+        "treatment_id": str(treatment_id),
+        "message_id": str(message_id),
+        "old_status": "failed",
+        "new_status": "queued",
+        "channel": "whatsapp",
+    }
+    assert "pharmacy" not in str(audit.payload).lower()
 
 
 @pytest.mark.usefixtures("postgres_container")

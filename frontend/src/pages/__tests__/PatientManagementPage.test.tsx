@@ -330,18 +330,31 @@ describe("PatientManagementPage", () => {
     });
   });
 
-  it("shows outbound WhatsApp delivery state on chat messages", async () => {
+  it("shows outbound WhatsApp delivery state and retries failed messages", async () => {
+    const user = userEvent.setup();
     vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue(TREATMENTS);
     vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(DETAIL);
     vi.spyOn(triageApi, "listTriageItems").mockResolvedValue(TRIAGE_ITEMS);
-    vi.spyOn(treatmentsApi, "listConversationMessages").mockResolvedValue({
-      items: [
-        ...MESSAGES.items,
-        PHARMACIST_MESSAGE,
-        SENT_ASSISTANT_MESSAGE,
-        FAILED_PHARMACIST_MESSAGE,
-      ],
-    });
+    vi.spyOn(treatmentsApi, "listConversationMessages")
+      .mockResolvedValueOnce({
+        items: [
+          ...MESSAGES.items,
+          PHARMACIST_MESSAGE,
+          SENT_ASSISTANT_MESSAGE,
+          FAILED_PHARMACIST_MESSAGE,
+        ],
+      })
+      .mockResolvedValueOnce({
+        items: [
+          ...MESSAGES.items,
+          PHARMACIST_MESSAGE,
+          SENT_ASSISTANT_MESSAGE,
+          { ...FAILED_PHARMACIST_MESSAGE, status: "queued" },
+        ],
+      });
+    const retrySpy = vi
+      .spyOn(treatmentsApi, "retryConversationMessageDelivery")
+      .mockResolvedValue({ ...FAILED_PHARMACIST_MESSAGE, status: "queued" });
 
     renderPage();
 
@@ -349,6 +362,17 @@ describe("PatientManagementPage", () => {
     expect(screen.getByText("Waiting to send")).toBeTruthy();
     expect(screen.getByText("Sent")).toBeTruthy();
     expect(screen.getByText("Send failed")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /retry send/i }));
+
+    await waitFor(() =>
+      expect(retrySpy).toHaveBeenCalledWith(
+        TREATMENTS.items[0].treatment.id,
+        FAILED_PHARMACIST_MESSAGE.id,
+      ),
+    );
+    expect(toast.success).toHaveBeenCalledWith("Message queued again", {
+      description: "The delivery workflow will attempt to send it again.",
+    });
   });
 
   it("lets the pharmacist resume AI replies from takeover mode", async () => {

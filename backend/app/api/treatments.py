@@ -61,14 +61,16 @@ from app.services.analysis import (
     mark_analysis_failed,
 )
 from app.services.conversation_messages import (
-    TreatmentNotFound as ConversationTreatmentNotFound,
-)
-from app.services.conversation_messages import (
+    InvalidDeliveryRetry,
     list_conversation_messages,
     record_patient_conversation_message,
     record_pharmacist_conversation_message,
+    retry_failed_conversation_message_delivery,
     submit_patient_conversation_turn,
     submit_pharmacist_takeover_holding_turn,
+)
+from app.services.conversation_messages import (
+    TreatmentNotFound as ConversationTreatmentNotFound,
 )
 from app.services.patient_checkins import (
     TreatmentNotFound as CheckInTreatmentNotFound,
@@ -320,6 +322,31 @@ async def post_pharmacist_message(
             )
     except ConversationTreatmentNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
+
+
+@router.post(
+    "/treatments/{treatment_id}/conversation-messages/{message_id}/retry-delivery",
+    response_model=ConversationMessageView,
+)
+async def post_retry_conversation_message_delivery(
+    treatment_id: UUID,
+    message_id: UUID,
+    session_factory: SessionFactoryDep,
+) -> ConversationMessageView:
+    try:
+        async with session_factory() as session, session.begin():
+            return await retry_failed_conversation_message_delivery(
+                session,
+                treatment_id=treatment_id,
+                message_id=message_id,
+            )
+    except ConversationTreatmentNotFound as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "conversation_message_not_found"},
+        ) from exc
+    except InvalidDeliveryRetry as exc:
+        raise HTTPException(status_code=409, detail={"error": "message_not_retryable"}) from exc
 
 
 @router.get(

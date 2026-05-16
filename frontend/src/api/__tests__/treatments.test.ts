@@ -8,6 +8,7 @@ import {
   listConversationMessages,
   listPatientCheckIns,
   listTreatments,
+  retryConversationMessageDelivery,
   sendPharmacistMessage,
   updateTreatmentChatResponseMode,
   triggerAnalysis,
@@ -393,6 +394,34 @@ describe("conversation messages", () => {
     expect(init.method).toBe("POST");
     expect(JSON.parse(String(init.body))).toEqual({ chat_response_mode: "ai_active" });
     expect(result.chat_response_mode).toBe("ai_active");
+  });
+
+  it("retries a failed WhatsApp conversation message", async () => {
+    const spy = mockFetch({
+      status: 200,
+      body: {
+        id: "msg-failed",
+        treatment_id: "t1",
+        direction: "outbound",
+        sender_type: "pharmacist",
+        channel: "whatsapp",
+        status: "queued",
+        body: "Please call the pharmacy today.",
+        safety_hold_reason: null,
+        external_message_id: null,
+        created_at: "2026-05-18T10:02:00Z",
+      },
+    });
+
+    const result = await retryConversationMessageDelivery("t1", "msg-failed");
+
+    const calledUrl = spy.mock.calls[0]?.[0] as string;
+    const init = spy.mock.calls[0]?.[1] as RequestInit;
+    expect(calledUrl).toMatch(
+      /\/treatments\/t1\/conversation-messages\/msg-failed\/retry-delivery$/,
+    );
+    expect(init.method).toBe("POST");
+    expect(result.status).toBe("queued");
   });
 });
 

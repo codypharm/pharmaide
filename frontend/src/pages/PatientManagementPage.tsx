@@ -21,6 +21,7 @@ import {
   getTreatment,
   listConversationMessages,
   listTreatments,
+  retryConversationMessageDelivery,
   sendPharmacistMessage,
   updateTreatmentChatResponseMode,
   type ConversationMessageList,
@@ -132,6 +133,7 @@ export default function PatientManagementPage() {
   const [isSubmittingMessage, setIsSubmittingMessage] = useState(false);
   const [isSendingPharmacistMessage, setIsSendingPharmacistMessage] = useState(false);
   const [isUpdatingChatMode, setIsUpdatingChatMode] = useState(false);
+  const [retryingMessageId, setRetryingMessageId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -335,6 +337,26 @@ export default function PatientManagementPage() {
     }
   }
 
+  async function retryMessageDelivery(messageId: string) {
+    if (!selectedTreatment || retryingMessageId) return;
+
+    setRetryingMessageId(messageId);
+    try {
+      await retryConversationMessageDelivery(selectedTreatment.treatment.id, messageId);
+      await refreshConversation(selectedTreatment.treatment.id);
+      toast.success("Message queued again", {
+        description: "The delivery workflow will attempt to send it again.",
+      });
+    } catch (err: unknown) {
+      const requestId = err instanceof ApiError ? err.requestId : null;
+      toast.error("Could not retry message", {
+        description: `Reference ID: ${requestId ?? "unknown"}`,
+      });
+    } finally {
+      setRetryingMessageId(null);
+    }
+  }
+
   function applyUpdatedTreatment(updated: TreatmentView) {
     setTreatmentState((current) => {
       if (current.kind !== "ok") return current;
@@ -429,11 +451,13 @@ export default function PatientManagementPage() {
                 isSubmittingMessage={isSubmittingMessage}
                 isSendingPharmacistMessage={isSendingPharmacistMessage}
                 isUpdatingChatMode={isUpdatingChatMode}
+                retryingMessageId={retryingMessageId}
                 onChangeIncomingMessage={setIncomingMessage}
                 onChangePharmacistMessage={setPharmacistMessage}
                 onSubmitIncomingMessage={submitIncomingMessage}
                 onSubmitPharmacistMessage={submitPharmacistMessage}
                 onUpdateChatResponseMode={updateChatResponseMode}
+                onRetryMessageDelivery={retryMessageDelivery}
                 onSetActiveProfileTab={setActiveProfileTab}
               />
             </div>
@@ -779,11 +803,13 @@ function InteractionLog({
   isSubmittingMessage,
   isSendingPharmacistMessage,
   isUpdatingChatMode,
+  retryingMessageId,
   onChangeIncomingMessage,
   onChangePharmacistMessage,
   onSubmitIncomingMessage,
   onSubmitPharmacistMessage,
   onUpdateChatResponseMode,
+  onRetryMessageDelivery,
   onSetActiveProfileTab,
 }: {
   activeProfileTab: "patient" | "reasoning";
@@ -795,11 +821,13 @@ function InteractionLog({
   isSubmittingMessage: boolean;
   isSendingPharmacistMessage: boolean;
   isUpdatingChatMode: boolean;
+  retryingMessageId: string | null;
   onChangeIncomingMessage: (value: string) => void;
   onChangePharmacistMessage: (value: string) => void;
   onSubmitIncomingMessage: () => void;
   onSubmitPharmacistMessage: () => void;
   onUpdateChatResponseMode: (mode: TreatmentView["chat_response_mode"]) => void;
+  onRetryMessageDelivery: (messageId: string) => void;
   onSetActiveProfileTab: (value: "patient" | "reasoning") => void;
 }) {
   return (
@@ -848,7 +876,11 @@ function InteractionLog({
 
       <div className="flex-1 overflow-y-auto p-4">
         {activeProfileTab === "patient" ? (
-          <ConversationMessages state={conversationState} />
+          <ConversationMessages
+            state={conversationState}
+            retryingMessageId={retryingMessageId}
+            onRetryMessageDelivery={onRetryMessageDelivery}
+          />
         ) : (
           <ReasoningPlaceholder />
         )}
@@ -970,7 +1002,15 @@ function ChatResponseControl({
   );
 }
 
-function ConversationMessages({ state }: { state: ConversationState }) {
+function ConversationMessages({
+  state,
+  retryingMessageId,
+  onRetryMessageDelivery,
+}: {
+  state: ConversationState;
+  retryingMessageId: string | null;
+  onRetryMessageDelivery: (messageId: string) => void;
+}) {
   if (state.kind === "idle") {
     return <p className="text-sm text-slate-500">Select a treatment to load messages.</p>;
   }
@@ -1006,13 +1046,26 @@ function ConversationMessages({ state }: { state: ConversationState }) {
   return (
     <div className="flex flex-col gap-4">
       {state.items.map((message) => (
-        <ConversationBubble key={message.id} message={message} />
+        <ConversationBubble
+          key={message.id}
+          message={message}
+          isRetrying={retryingMessageId === message.id}
+          onRetryMessageDelivery={onRetryMessageDelivery}
+        />
       ))}
     </div>
   );
 }
 
-function ConversationBubble({ message }: { message: ConversationMessageView }) {
+function ConversationBubble({
+  message,
+  isRetrying,
+  onRetryMessageDelivery,
+}: {
+  message: ConversationMessageView;
+  isRetrying: boolean;
+  onRetryMessageDelivery: (messageId: string) => void;
+}) {
   const isPatient = message.sender_type === "patient";
   const isAssistant = message.sender_type === "assistant";
   const isPharmacist = message.sender_type === "pharmacist";
@@ -1053,6 +1106,16 @@ function ConversationBubble({ message }: { message: ConversationMessageView }) {
             </span>
           )}
           {isOutbound && <DeliveryStatusBadge status={message.status} />}
+          {isOutbound && message.status === "failed" && (
+            <button
+              type="button"
+              onClick={() => onRetryMessageDelivery(message.id)}
+              disabled={isRetrying}
+              className="rounded-full border border-slate-200 bg-white px-2 py-0.5 font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              {isRetrying ? "Retrying" : "Retry send"}
+            </button>
+          )}
         </div>
       </div>
     </div>

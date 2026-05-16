@@ -32,6 +32,10 @@ class TreatmentNotFound(Exception):
     """Raised when a conversation turn references a missing treatment."""
 
 
+class InvalidDeliveryRetry(Exception):
+    """Raised when a message is not eligible to be queued for another send."""
+
+
 async def record_patient_conversation_message(
     session: AsyncSession,
     *,
@@ -95,6 +99,61 @@ async def record_pharmacist_conversation_message(
         status=outbound.status,
     )
     return ConversationMessageView.model_validate(outbound)
+
+
+async def retry_failed_conversation_message_delivery(
+    session: AsyncSession,
+    *,
+    treatment_id: UUID,
+    message_id: UUID,
+) -> ConversationMessageView:
+    """Move a failed outbound WhatsApp message back to the delivery queue."""
+    message = await _get_treatment_message(
+        session,
+        treatment_id=treatment_id,
+        message_id=message_id,
+    )
+    if message is None:
+        raise TreatmentNotFound()
+    if (
+        message.direction != "outbound"
+        or message.channel != "whatsapp"
+        or message.status != "failed"
+    ):
+        raise InvalidDeliveryRetry()
+
+    old_status = message.status
+    message.status = "queued"
+    message.external_message_id = None
+    await session.flush()
+
+    session.add(
+        AuditLogEntry(
+            event_type="conversation_message_delivery_retried",
+            resource_type="conversation_message",
+            resource_id=message.id,
+            # Message body is PHI-adjacent clinical text; retry audit records
+            # only workflow metadata needed for accountability.
+            payload={
+                "treatment_id": str(treatment_id),
+                "message_id": str(message.id),
+                "old_status": old_status,
+                "new_status": message.status,
+                "channel": message.channel,
+            },
+        )
+    )
+    await session.flush()
+
+    log.info(
+        "conversation_message_delivery_retried",
+        treatment_id=str(treatment_id),
+        message_id=str(message.id),
+        old_status=old_status,
+        new_status=message.status,
+        channel=message.channel,
+    )
+    return ConversationMessageView.model_validate(message)
 
 
 async def list_conversation_messages(
@@ -254,6 +313,21 @@ async def submit_pharmacist_takeover_holding_turn(
         assistant_message=ConversationMessageView.model_validate(assistant),
         safety_decision=decision,
     )
+
+
+async def _get_treatment_message(
+    session: AsyncSession,
+    *,
+    treatment_id: UUID,
+    message_id: UUID,
+) -> ConversationMessage | None:
+    result = await session.execute(
+        select(ConversationMessage).where(
+            ConversationMessage.id == message_id,
+            ConversationMessage.treatment_id == treatment_id,
+        )
+    )
+    return result.scalar_one_or_none()
 
 
 def _allow_deterministic_holding_reply(
