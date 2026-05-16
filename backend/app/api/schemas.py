@@ -314,6 +314,22 @@ class TriageItemUpdate(BaseModel):
     status: TriageStatus
 
 
+class AuditLogEntryView(BaseModel):
+    id: UUID
+    actor_id: UUID | None
+    event_type: str
+    resource_type: str
+    resource_id: UUID
+    payload: dict[str, object]
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AuditLogEntryList(BaseModel):
+    items: list[AuditLogEntryView]
+
+
 class TreatmentAnalysisSnapshot(BaseModel):
     id: UUID
     treatment_id: UUID

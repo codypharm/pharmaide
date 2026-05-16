@@ -1,0 +1,95 @@
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import * as auditsApi from "../../api/audits";
+import type { AuditLogEntryList } from "../../api/audits";
+import { ApiError } from "../../api/client";
+import SystemAuditsPage from "../SystemAuditsPage";
+
+const AUDITS: AuditLogEntryList = {
+  items: [
+    {
+      id: "11111111-1111-4111-8111-111111111111",
+      actor_id: null,
+      event_type: "analysis_started",
+      resource_type: "treatment",
+      resource_id: "22222222-2222-4222-8222-222222222222",
+      payload: { medication_count: 2 },
+      created_at: "2026-05-15T10:00:00Z",
+    },
+    {
+      id: "33333333-3333-4333-8333-333333333333",
+      actor_id: "44444444-4444-4444-8444-444444444444",
+      event_type: "triage_item_status_changed",
+      resource_type: "triage_item",
+      resource_id: "55555555-5555-4555-8555-555555555555",
+      payload: { old_status: "open", new_status: "acknowledged" },
+      created_at: "2026-05-15T11:00:00Z",
+    },
+  ],
+};
+
+function renderPage() {
+  return render(
+    <MemoryRouter initialEntries={["/dashboard/audits"]}>
+      <Routes>
+        <Route element={<Outlet context={{ isPrivacyMode: false }} />}>
+          <Route path="/dashboard/audits" element={<SystemAuditsPage />} />
+        </Route>
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe("SystemAuditsPage", () => {
+  it("renders real audit log entries from the audit API", async () => {
+    const spy = vi.spyOn(auditsApi, "listAuditLogEntries").mockResolvedValue(AUDITS);
+
+    renderPage();
+
+    await screen.findByText("Analysis Started");
+    expect(screen.getByText("Triage Item Status Changed")).toBeTruthy();
+    expect(screen.getAllByText("AI Agent").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Human").length).toBeGreaterThan(0);
+    expect(screen.getByText(/medication_count: 2/i)).toBeTruthy();
+    expect(spy).toHaveBeenCalledWith({ limit: 50, offset: 0 });
+  });
+
+  it("filters loaded audits by event or resource text", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(auditsApi, "listAuditLogEntries").mockResolvedValue(AUDITS);
+
+    renderPage();
+
+    await screen.findByText("Analysis Started");
+    await user.type(screen.getByPlaceholderText(/search audits/i), "triage");
+
+    expect(screen.getByText("Triage Item Status Changed")).toBeTruthy();
+    expect(screen.queryByText("Analysis Started")).toBeNull();
+  });
+
+  it("shows an empty state when no audit entries exist yet", async () => {
+    vi.spyOn(auditsApi, "listAuditLogEntries").mockResolvedValue({ items: [] });
+
+    renderPage();
+
+    await screen.findByText(/no audit events recorded yet/i);
+  });
+
+  it("shows a retryable error state when audits cannot be loaded", async () => {
+    vi.spyOn(auditsApi, "listAuditLogEntries").mockRejectedValue(
+      new ApiError(500, "req_audit", { error: "internal_error" }, "Request failed: 500"),
+    );
+
+    renderPage();
+
+    await screen.findByText(/audit trail is temporarily unavailable/i);
+    expect(screen.getByText(/req_audit/i)).toBeTruthy();
+  });
+});
