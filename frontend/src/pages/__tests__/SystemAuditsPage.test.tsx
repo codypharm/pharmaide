@@ -87,6 +87,29 @@ describe("SystemAuditsPage", () => {
     expect(screen.queryByText("Analysis Started")).toBeNull();
   });
 
+  it("requests backend-filtered audits when exact filters are applied", async () => {
+    const user = userEvent.setup();
+    const spy = vi.spyOn(auditsApi, "listAuditLogEntries").mockResolvedValue(AUDITS);
+
+    renderPage();
+
+    await screen.findByText("Analysis Started");
+    await user.type(screen.getByLabelText(/event type/i), "triage_item_status_changed");
+    await user.type(screen.getByLabelText(/resource type/i), "triage_item");
+    await user.type(screen.getByLabelText(/actor id/i), "44444444-4444-4444-8444-444444444444");
+    await user.click(screen.getByRole("button", { name: /apply audit filters/i }));
+
+    await waitFor(() =>
+      expect(spy).toHaveBeenLastCalledWith({
+        limit: 50,
+        offset: 0,
+        event_type: "triage_item_status_changed",
+        resource_type: "triage_item",
+        actor_id: "44444444-4444-4444-8444-444444444444",
+      }),
+    );
+  });
+
   it("shows an empty state when no audit entries exist yet", async () => {
     vi.spyOn(auditsApi, "listAuditLogEntries").mockResolvedValue({ items: [] });
 

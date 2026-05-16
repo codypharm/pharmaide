@@ -20,6 +20,18 @@ const ACTOR_FILTERS = ["All", "Agent", "Human", "System"] as const;
 
 type ActorFilter = (typeof ACTOR_FILTERS)[number];
 
+type AuditExactFilters = {
+  event_type: string;
+  resource_type: string;
+  actor_id: string;
+};
+
+const EMPTY_EXACT_FILTERS: AuditExactFilters = {
+  event_type: "",
+  resource_type: "",
+  actor_id: "",
+};
+
 type FetchState =
   | { kind: "loading" }
   | { kind: "ok"; items: AuditLogEntryView[]; hasMore: boolean }
@@ -28,13 +40,21 @@ type FetchState =
 export default function SystemAuditsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [actorFilter, setActorFilter] = useState<ActorFilter>("All");
+  const [draftExactFilters, setDraftExactFilters] =
+    useState<AuditExactFilters>(EMPTY_EXACT_FILTERS);
+  const [appliedExactFilters, setAppliedExactFilters] =
+    useState<AuditExactFilters>(EMPTY_EXACT_FILTERS);
   const [state, setState] = useState<FetchState>({ kind: "loading" });
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   const refresh = useCallback(async () => {
     setState({ kind: "loading" });
     try {
-      const result = await listAuditLogEntries({ limit: PAGE_SIZE, offset: 0 });
+      const result = await listAuditLogEntries({
+        limit: PAGE_SIZE,
+        offset: 0,
+        ...requestFilters(appliedExactFilters),
+      });
       setState({
         kind: "ok",
         items: result.items,
@@ -43,7 +63,7 @@ export default function SystemAuditsPage() {
     } catch (err) {
       setState({ kind: "error", requestId: auditRequestId(err) });
     }
-  }, []);
+  }, [appliedExactFilters]);
 
   useEffect(() => {
     void refresh();
@@ -78,6 +98,7 @@ export default function SystemAuditsPage() {
       const result = await listAuditLogEntries({
         limit: PAGE_SIZE,
         offset: state.items.length,
+        ...requestFilters(appliedExactFilters),
       });
       setState({
         kind: "ok",
@@ -89,6 +110,15 @@ export default function SystemAuditsPage() {
     } finally {
       setIsLoadingMore(false);
     }
+  }
+
+  function applyExactFilters() {
+    setAppliedExactFilters(normaliseExactFilters(draftExactFilters));
+  }
+
+  function clearExactFilters() {
+    setDraftExactFilters(EMPTY_EXACT_FILTERS);
+    setAppliedExactFilters(EMPTY_EXACT_FILTERS);
   }
 
   function exportVisibleLogs() {
@@ -143,7 +173,7 @@ export default function SystemAuditsPage() {
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
                   placeholder="Search audits by event, resource, or actor..."
-                  className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all"
+                  className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#D9D5FB] focus:border-[#5548E8] transition-all"
                 />
               </div>
               <ActorSwitch value={actorFilter} onChange={setActorFilter} />
@@ -153,6 +183,12 @@ export default function SystemAuditsPage() {
               Metadata-only audit trail
             </div>
           </div>
+          <ExactAuditFilters
+            value={draftExactFilters}
+            onChange={setDraftExactFilters}
+            onApply={applyExactFilters}
+            onClear={clearExactFilters}
+          />
 
           {state.kind === "loading" && <LoadingState />}
           {state.kind === "error" && (
@@ -160,7 +196,7 @@ export default function SystemAuditsPage() {
           )}
           {state.kind === "ok" && (
             <>
-              {state.items.length === 0 ? (
+              {state.items.length === 0 && !hasExactFilters(appliedExactFilters) ? (
                 <EmptyState />
               ) : filteredLogs.length === 0 ? (
                 <NoMatchesState />
@@ -176,7 +212,7 @@ export default function SystemAuditsPage() {
                   type="button"
                   onClick={loadOlderLogs}
                   disabled={!state.hasMore || isLoadingMore}
-                  className="inline-flex items-center gap-2 font-bold text-blue-700 hover:text-blue-800 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:text-slate-400"
+                  className="inline-flex items-center gap-2 font-bold text-[#5548E8] hover:text-[#463AD4] transition-colors cursor-pointer disabled:cursor-not-allowed disabled:text-slate-400"
                 >
                   {isLoadingMore && <Loader2 size={14} className="animate-spin" />}
                   Load older logs
@@ -209,7 +245,7 @@ function ActorSwitch({
           onClick={() => onChange(level)}
           className={`inline-flex min-w-20 items-center justify-center rounded-lg px-3 py-1.5 text-xs font-bold transition-colors cursor-pointer ${
             value === level
-              ? "bg-slate-900 text-white"
+              ? "bg-[#5548E8] text-white"
               : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
           }`}
           aria-pressed={value === level}
@@ -221,6 +257,94 @@ function ActorSwitch({
         </button>
       ))}
     </div>
+  );
+}
+
+function ExactAuditFilters({
+  value,
+  onChange,
+  onApply,
+  onClear,
+}: {
+  value: AuditExactFilters;
+  onChange: (value: AuditExactFilters) => void;
+  onApply: () => void;
+  onClear: () => void;
+}) {
+  return (
+    <form
+      className="grid gap-3 border-b border-slate-100 bg-white p-4 lg:grid-cols-[1fr_1fr_1.4fr_auto]"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onApply();
+      }}
+    >
+      <ExactFilterInput
+        id="audit-event-type"
+        label="Event type"
+        value={value.event_type}
+        placeholder="analysis_started"
+        onChange={(event_type) => onChange({ ...value, event_type })}
+      />
+      <ExactFilterInput
+        id="audit-resource-type"
+        label="Resource type"
+        value={value.resource_type}
+        placeholder="treatment"
+        onChange={(resource_type) => onChange({ ...value, resource_type })}
+      />
+      <ExactFilterInput
+        id="audit-actor-id"
+        label="Actor ID"
+        value={value.actor_id}
+        placeholder="UUID for a specific human actor"
+        onChange={(actor_id) => onChange({ ...value, actor_id })}
+      />
+      <div className="flex items-end gap-2">
+        <button
+          type="submit"
+          className="rounded-lg border border-[#5548E8] bg-[#5548E8] px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-[#463AD4] cursor-pointer"
+        >
+          Apply audit filters
+        </button>
+        <button
+          type="button"
+          onClick={onClear}
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-50 cursor-pointer"
+        >
+          Clear
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function ExactFilterInput({
+  id,
+  label,
+  value,
+  placeholder,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  placeholder: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label htmlFor={id} className="block">
+      <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+        {label}
+      </span>
+      <input
+        id={id}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800 focus:border-[#5548E8] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#D9D5FB]"
+      />
+    </label>
   );
 }
 
@@ -245,7 +369,7 @@ function Header({
         type="button"
         onClick={onExport}
         disabled={exportDisabled}
-        className="px-4 py-2 bg-slate-900 text-white rounded-xl font-semibold hover:bg-slate-800 transition-colors flex items-center gap-2 cursor-pointer disabled:cursor-not-allowed disabled:bg-slate-300"
+        className="px-4 py-2 bg-[#5548E8] text-white rounded-xl font-semibold hover:bg-[#463AD4] transition-colors flex items-center gap-2 cursor-pointer disabled:cursor-not-allowed disabled:bg-slate-300"
       >
         <Download size={16} />
         Export Audit Trail
@@ -306,7 +430,7 @@ function ActorCell({ log }: { log: AuditLogEntryView }) {
   const label = actorLabel(log);
   const iconClass =
     label === "Agent"
-      ? "bg-blue-50 text-blue-700"
+      ? "bg-[#F0EFFF] text-[#463AD4]"
       : label === "Human"
         ? "bg-yellow-50 text-yellow-700"
         : "bg-slate-100 text-slate-600";
@@ -402,6 +526,25 @@ function actorLabel(log: AuditLogEntryView): ActorFilter {
 
 function auditRequestId(err: unknown): string | null {
   return err instanceof ApiError ? err.requestId : null;
+}
+
+function requestFilters(filters: AuditExactFilters): Partial<AuditExactFilters> {
+  const normalised = normaliseExactFilters(filters);
+  return Object.fromEntries(
+    Object.entries(normalised).filter(([, value]) => value.length > 0),
+  ) as Partial<AuditExactFilters>;
+}
+
+function normaliseExactFilters(filters: AuditExactFilters): AuditExactFilters {
+  return {
+    event_type: filters.event_type.trim(),
+    resource_type: filters.resource_type.trim(),
+    actor_id: filters.actor_id.trim(),
+  };
+}
+
+function hasExactFilters(filters: AuditExactFilters): boolean {
+  return Object.values(filters).some((value) => value.trim().length > 0);
 }
 
 function payloadSummary(payload: Record<string, unknown>): string {
