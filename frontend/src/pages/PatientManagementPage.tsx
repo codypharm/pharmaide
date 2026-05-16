@@ -531,6 +531,7 @@ export default function PatientManagementPage() {
                 activeProfileTab={activeProfileTab}
                 conversationState={conversationState}
                 conversationLastUpdatedAt={conversationLastUpdatedAt}
+                activeTriageItems={selectedTreatmentTriageItems}
                 incomingMessage={incomingMessage}
                 pharmacistMessage={pharmacistMessage}
                 chatResponseMode={selectedTreatment.treatment.chat_response_mode}
@@ -966,6 +967,7 @@ function InteractionLog({
   activeProfileTab,
   conversationState,
   conversationLastUpdatedAt,
+  activeTriageItems,
   incomingMessage,
   pharmacistMessage,
   chatResponseMode,
@@ -985,6 +987,7 @@ function InteractionLog({
   activeProfileTab: "patient" | "reasoning";
   conversationState: ConversationState;
   conversationLastUpdatedAt: Date | null;
+  activeTriageItems: TriageItemView[];
   incomingMessage: string;
   pharmacistMessage: string;
   chatResponseMode: TreatmentView["chat_response_mode"];
@@ -1053,7 +1056,10 @@ function InteractionLog({
             onRetryMessageDelivery={onRetryMessageDelivery}
           />
         ) : (
-          <ReasoningPlaceholder />
+          <AgentReasoningPanel
+            activeTriageItems={activeTriageItems}
+            conversationState={conversationState}
+          />
         )}
       </div>
 
@@ -1331,28 +1337,92 @@ function deliveryStatusBadge(
   return null;
 }
 
-function ReasoningPlaceholder() {
+function AgentReasoningPanel({
+  activeTriageItems,
+  conversationState,
+}: {
+  activeTriageItems: TriageItemView[];
+  conversationState: ConversationState;
+}) {
+  const messages = conversationState.kind === "ok" ? conversationState.items : [];
+
+  if (activeTriageItems.length === 0) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
+        No active safety flags for this treatment.
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
-      <div className="p-3 border border-slate-100 rounded-xl bg-slate-50/50 space-y-1.5">
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
         <div className="flex items-center justify-between">
-          <span className="text-[10px] font-mono text-slate-400">Live</span>
-          <span className="px-1.5 py-0.5 bg-slate-200 text-slate-600 text-[8px] font-bold uppercase rounded tracking-wider">
-            Safety
+          <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700">
+            Active Safety Flags
+          </p>
+          <span className="rounded-full border border-amber-200 bg-white px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-700">
+            {activeTriageItems.length}
           </span>
         </div>
-        <p className="text-xs text-slate-700 font-medium">
-          Patient-facing drafts are routed through input guard, clinical referee, and output guard.
+        <p className="mt-2 text-[11px] leading-5 text-amber-900">
+          These items need pharmacist review before the patient-facing response is released.
         </p>
       </div>
-      <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl">
-        <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-2">
-          Triage handoff
-        </p>
-        <p className="text-[11px] text-blue-800 leading-relaxed">
-          Held drafts are visible in the Triage Queue with their conversation context.
-        </p>
-      </div>
+
+      {activeTriageItems.map((item) => (
+        <ReasoningFlagCard key={item.id} item={item} message={findMessage(messages, item)} />
+      ))}
     </div>
   );
+}
+
+function ReasoningFlagCard({
+  item,
+  message,
+}: {
+  item: TriageItemView;
+  message: ConversationMessageView | null;
+}) {
+  return (
+    <article className="rounded-xl border border-slate-200 bg-white p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-bold text-slate-900">{TRIAGE_REASON_LABELS[item.reason]}</p>
+          <p className="mt-1 text-[10px] font-medium text-slate-400">
+            Flagged {formatDateTime(item.created_at)}
+          </p>
+        </div>
+        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-600">
+          {statusLabel(item.status)}
+        </span>
+      </div>
+      <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+          {message ? reasoningMessageLabel(message) : "Message context unavailable"}
+        </p>
+        {message ? (
+          <p className="mt-2 text-xs leading-5 text-slate-700 whitespace-pre-wrap">{message.body}</p>
+        ) : (
+          <p className="mt-2 text-xs leading-5 text-slate-500">
+            Open the Triage Queue for the full review context.
+          </p>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function findMessage(
+  messages: ConversationMessageView[],
+  item: TriageItemView,
+): ConversationMessageView | null {
+  if (!item.conversation_message_id) return null;
+  return messages.find((message) => message.id === item.conversation_message_id) ?? null;
+}
+
+function reasoningMessageLabel(message: ConversationMessageView): string {
+  if (message.status === "held_for_review") return "Held draft";
+  if (message.status === "failed") return "Failed delivery";
+  return statusLabel(message.sender_type);
 }

@@ -299,6 +299,27 @@ describe("PatientManagementPage", () => {
     );
   });
 
+  it("shows real safety flag context in the agent reasoning tab", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue(TREATMENTS);
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(DETAIL);
+    vi.spyOn(treatmentsApi, "listConversationMessages").mockResolvedValue({
+      items: [...MESSAGES.items, HELD_TURN.assistant_message],
+    });
+    vi.spyOn(triageApi, "listTriageItems").mockResolvedValue(TRIAGE_ITEMS);
+
+    renderPage();
+
+    await screen.findByText("I feel dizzy today.");
+    await user.click(screen.getByRole("button", { name: /agent reasoning/i }));
+
+    expect(await screen.findByText("Active Safety Flags")).toBeTruthy();
+    expect(screen.getAllByText("Clinical draft review").length).toBeGreaterThan(1);
+    expect(screen.getByText("Open")).toBeTruthy();
+    expect(screen.getByText("Held draft")).toBeTruthy();
+    expect(screen.getByText("You can stop it now.")).toBeTruthy();
+  });
+
   it("submits an incoming WhatsApp message and refreshes the thread", async () => {
     const user = userEvent.setup();
     vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue(TREATMENTS);
