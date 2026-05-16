@@ -182,6 +182,19 @@ const SENT_ASSISTANT_MESSAGE = {
   created_at: "2026-05-15T10:04:00Z",
 };
 
+const APPROVED_ASSISTANT_MESSAGE = {
+  id: "msg-approved",
+  treatment_id: TREATMENTS.items[0].treatment.id,
+  direction: "outbound" as const,
+  sender_type: "assistant" as const,
+  channel: "whatsapp" as const,
+  status: "approved" as const,
+  body: "Your pharmacist has approved this response.",
+  safety_hold_reason: null,
+  external_message_id: null,
+  created_at: "2026-05-15T10:04:15Z",
+};
+
 const READY_ASSISTANT_MESSAGE = {
   id: "msg-ready",
   treatment_id: TREATMENTS.items[0].treatment.id,
@@ -536,6 +549,7 @@ describe("PatientManagementPage", () => {
           ...MESSAGES.items,
           PHARMACIST_MESSAGE,
           SENT_ASSISTANT_MESSAGE,
+          APPROVED_ASSISTANT_MESSAGE,
           FAILED_PHARMACIST_MESSAGE,
         ],
       })
@@ -544,6 +558,7 @@ describe("PatientManagementPage", () => {
           ...MESSAGES.items,
           PHARMACIST_MESSAGE,
           SENT_ASSISTANT_MESSAGE,
+          APPROVED_ASSISTANT_MESSAGE,
           { ...FAILED_PHARMACIST_MESSAGE, status: "queued" },
         ],
       });
@@ -555,8 +570,10 @@ describe("PatientManagementPage", () => {
 
     await screen.findByText("Please continue the current dose.");
     expect(screen.getByText("Waiting to send")).toBeTruthy();
+    expect(screen.getByText("Approved, not sent")).toBeTruthy();
     expect(screen.getByText("Sent")).toBeTruthy();
     expect(screen.getByText("Send failed")).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /retry send/i })).toHaveLength(1);
     await user.click(screen.getByRole("button", { name: /retry send/i }));
 
     await waitFor(() =>

@@ -102,13 +102,13 @@ describe("TriageQueuePage", () => {
     await user.click(screen.getByRole("button", { name: /approve draft item/i }));
     await waitFor(() => expect(approveSpy).toHaveBeenCalledWith("triage-1"));
     expect(screen.getAllByText("Resolved").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Approved").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Approved, not sent").length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole("button", { name: /queue delivery item/i }));
     await waitFor(() =>
       expect(queueDeliverySpy).toHaveBeenCalledWith("triage-1"),
     );
-    expect(screen.getAllByText("Queued").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Queued for delivery").length).toBeGreaterThan(0);
   });
 
   it("lets the pharmacist cancel a held draft so it is not sent", async () => {

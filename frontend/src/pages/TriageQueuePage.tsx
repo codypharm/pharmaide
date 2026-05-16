@@ -702,7 +702,7 @@ function FlagSummary({
 }
 
 function getDraftStatusLabel(status: ConversationMessageView["status"] | undefined): string {
-  if (status === "approved") return "Approved";
+  if (status === "approved") return "Approved, not sent";
   if (status === "rejected") return "Canceled, not sent";
   if (status === "queued") return "Queued for delivery";
   if (status === "sent") return "Sent";
@@ -812,8 +812,8 @@ function ConversationMessageRow({
             {senderLabel}
           </span>
           {isHeldDraft && message.status === "approved" && (
-            <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
-              Approved
+            <span className="inline-flex items-center rounded-full border border-[#D9D5FB] bg-[#F0EFFF] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#463AD4]">
+              Approved, not sent
             </span>
           )}
           {isHeldDraft && message.status === "rejected" && (
@@ -823,7 +823,7 @@ function ConversationMessageRow({
           )}
           {isHeldDraft && message.status === "queued" && (
             <span className="inline-flex items-center rounded-full border border-[#D9D5FB] bg-[#F0EFFF] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#463AD4]">
-              Queued
+              Queued for delivery
             </span>
           )}
           {isHeldDraft && message.status === "sent" && (
