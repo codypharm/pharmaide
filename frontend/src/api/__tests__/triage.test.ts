@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { approveTriageItem, listTriageItems, updateTriageItemStatus } from "../triage";
+import {
+  approveTriageItem,
+  listTriageItems,
+  queueTriageItemDelivery,
+  updateTriageItemStatus,
+} from "../triage";
 
 function mockFetch(response: { status: number; body: unknown }) {
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
@@ -108,5 +113,44 @@ describe("approveTriageItem", () => {
     expect(init.method).toBe("POST");
     expect(result.triage_item.status).toBe("resolved");
     expect(result.approved_message.status).toBe("approved");
+  });
+});
+
+describe("queueTriageItemDelivery", () => {
+  it("posts to the triage delivery queue endpoint", async () => {
+    const spy = mockFetch({
+      status: 200,
+      body: {
+        triage_item: {
+          id: "triage-1",
+          treatment_id: "treatment-1",
+          conversation_message_id: "message-1",
+          reason: "referee",
+          status: "resolved",
+          created_at: "2026-05-15T10:00:00Z",
+        },
+        queued_message: {
+          id: "message-1",
+          treatment_id: "treatment-1",
+          direction: "outbound",
+          sender_type: "assistant",
+          channel: "whatsapp",
+          status: "queued",
+          body: "Please continue as prescribed.",
+          safety_hold_reason: "referee",
+          external_message_id: null,
+          created_at: "2026-05-15T10:01:00Z",
+        },
+      },
+    });
+
+    const result = await queueTriageItemDelivery("triage-1");
+
+    const calledUrl = spy.mock.calls[0]?.[0] as string;
+    const init = spy.mock.calls[0]?.[1] as RequestInit;
+    expect(calledUrl).toMatch(/\/triage\/items\/triage-1\/queue-delivery$/);
+    expect(init.method).toBe("POST");
+    expect(result.triage_item.status).toBe("resolved");
+    expect(result.queued_message.status).toBe("queued");
   });
 });

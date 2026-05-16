@@ -177,6 +177,62 @@ async def test_post_triage_item_approve_rejects_item_without_held_draft(
     assert response.json() == {"detail": {"error": "triage_draft_not_approvable"}}
 
 
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_triage_item_queue_delivery_marks_approved_draft_queued_and_audits(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    item_id = await _create_open_triage_item(app_client, monkeypatch, "TRIAGE-QUEUE-001")
+    approved = await app_client.post(f"/triage/items/{item_id}/approve")
+    assert approved.status_code == 200, approved.text
+
+    response = await app_client.post(f"/triage/items/{item_id}/queue-delivery")
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["triage_item"]["id"] == str(item_id)
+    assert payload["triage_item"]["status"] == "resolved"
+    assert payload["queued_message"]["status"] == "queued"
+    assert payload["queued_message"]["body"] == "This draft must be reviewed."
+
+    message = await db_session.scalar(
+        select(ConversationMessage).where(
+            ConversationMessage.id == UUID(payload["queued_message"]["id"])
+        )
+    )
+    assert message is not None
+    assert message.status == "queued"
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.event_type == "triage_item_draft_queued_for_delivery"
+        )
+    )
+    assert audit is not None
+    assert audit.payload == {
+        "triage_item_id": str(item_id),
+        "treatment_id": payload["triage_item"]["treatment_id"],
+        "queued_message_id": payload["queued_message"]["id"],
+        "old_message_status": "approved",
+        "new_message_status": "queued",
+        "triage_status": "resolved",
+    }
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_triage_item_queue_delivery_rejects_unapproved_draft(
+    app_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    item_id = await _create_open_triage_item(app_client, monkeypatch, "TRIAGE-QUEUE-002")
+
+    response = await app_client.post(f"/triage/items/{item_id}/queue-delivery")
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": {"error": "triage_draft_not_queueable"}}
+
+
 async def _create_open_triage_item(
     app_client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,

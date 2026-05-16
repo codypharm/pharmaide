@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.schemas import (
     ConversationMessageView,
     TriageApprovalView,
+    TriageDeliveryView,
     TriageItemList,
     TriageItemView,
     TriageReason,
@@ -35,6 +36,10 @@ class InvalidTriageTransition(Exception):
 
 class TriageDraftNotApprovable(Exception):
     """Raised when a triage item does not point to a held assistant draft."""
+
+
+class TriageDraftNotQueueable(Exception):
+    """Raised when a triage item does not point to an approved assistant draft."""
 
 
 async def create_open_triage_item(
@@ -197,6 +202,54 @@ async def approve_triage_item_draft(
     )
 
 
+async def queue_triage_item_delivery(
+    session: AsyncSession,
+    item_id: UUID,
+) -> TriageDeliveryView:
+    """Mark an approved assistant draft ready for the future delivery worker."""
+    item = await session.get(TriageItem, item_id)
+    if item is None:
+        raise TriageItemNotFound()
+
+    message = await _get_queueable_draft(session, item)
+    old_message_status = message.status
+
+    message.status = "queued"
+    await session.flush()
+
+    session.add(
+        AuditLogEntry(
+            event_type="triage_item_draft_queued_for_delivery",
+            resource_type="triage_item",
+            resource_id=item.id,
+            # Actual message delivery is provider-owned. This audit records
+            # only the safe handoff state, never the patient-facing text.
+            payload={
+                "triage_item_id": str(item.id),
+                "treatment_id": str(item.treatment_id),
+                "queued_message_id": str(message.id),
+                "old_message_status": old_message_status,
+                "new_message_status": message.status,
+                "triage_status": item.status,
+            },
+        )
+    )
+    await session.flush()
+
+    log.info(
+        "triage_item_draft_queued_for_delivery",
+        triage_item_id=str(item.id),
+        treatment_id=str(item.treatment_id),
+        queued_message_id=str(message.id),
+        old_message_status=old_message_status,
+        new_message_status=message.status,
+    )
+    return TriageDeliveryView(
+        triage_item=TriageItemView.model_validate(item),
+        queued_message=ConversationMessageView.model_validate(message),
+    )
+
+
 async def _get_approvable_draft(
     session: AsyncSession,
     item: TriageItem,
@@ -215,5 +268,27 @@ async def _get_approvable_draft(
         or message.status != "held_for_review"
     ):
         raise TriageDraftNotApprovable()
+
+    return message
+
+
+async def _get_queueable_draft(
+    session: AsyncSession,
+    item: TriageItem,
+) -> ConversationMessage:
+    if item.conversation_message_id is None:
+        raise TriageDraftNotQueueable()
+
+    message = await session.get(ConversationMessage, item.conversation_message_id)
+    if message is None:
+        raise TriageDraftNotQueueable()
+
+    if (
+        message.treatment_id != item.treatment_id
+        or message.direction != "outbound"
+        or message.sender_type != "assistant"
+        or message.status != "approved"
+    ):
+        raise TriageDraftNotQueueable()
 
     return message

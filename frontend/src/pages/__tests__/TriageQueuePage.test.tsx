@@ -80,6 +80,13 @@ describe("TriageQueuePage", () => {
         status: "approved",
       },
     });
+    const queueDeliverySpy = vi.spyOn(triageApi, "queueTriageItemDelivery").mockResolvedValue({
+      triage_item: { ...OPEN_ITEM, status: "resolved" },
+      queued_message: {
+        ...CONVERSATION_MESSAGES.items[1],
+        status: "queued",
+      },
+    });
 
     renderPage();
 
@@ -96,6 +103,12 @@ describe("TriageQueuePage", () => {
     await waitFor(() => expect(approveSpy).toHaveBeenCalledWith("triage-1"));
     expect(screen.getAllByText("Resolved").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Approved").length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole("button", { name: /queue delivery item/i }));
+    await waitFor(() =>
+      expect(queueDeliverySpy).toHaveBeenCalledWith("triage-1"),
+    );
+    expect(screen.getAllByText("Queued").length).toBeGreaterThan(0);
   });
 
   it("shows a calm empty state when no patients need review", async () => {

@@ -17,6 +17,7 @@ import {
 import {
   approveTriageItem,
   listTriageItems,
+  queueTriageItemDelivery,
   updateTriageItemStatus,
   type TriageItemView,
   type TriageReason,
@@ -170,6 +171,45 @@ export default function TriageQueuePage() {
     }
   }
 
+  async function queueDelivery(itemId: string) {
+    setActionItemId(itemId);
+    setActionError(null);
+    try {
+      const delivery = await queueTriageItemDelivery(itemId);
+      setState((current) => {
+        if (current.kind !== "ok") return current;
+        return {
+          kind: "ok",
+          items: current.items.map((item) =>
+            item.id === delivery.triage_item.id ? delivery.triage_item : item,
+          ),
+        };
+      });
+      setConversationByItem((current) => {
+        const existing = current[itemId];
+        if (!existing || existing.kind !== "ok") return current;
+        return {
+          ...current,
+          [itemId]: {
+            kind: "ok",
+            items: existing.items.map((message) =>
+              message.id === delivery.queued_message.id
+                ? delivery.queued_message
+                : message,
+            ),
+          },
+        };
+      });
+    } catch (err: unknown) {
+      setActionError({
+        itemId,
+        requestId: err instanceof ApiError ? err.requestId : null,
+      });
+    } finally {
+      setActionItemId(null);
+    }
+  }
+
   async function toggleConversation(item: TriageItemView) {
     if (expandedItemId === item.id) {
       setExpandedItemId(null);
@@ -225,6 +265,7 @@ export default function TriageQueuePage() {
             conversationByItem={conversationByItem}
             onApproveItem={approveItem}
             onMoveItem={moveItem}
+            onQueueDelivery={queueDelivery}
             onToggleConversation={toggleConversation}
           />
         )}
@@ -395,6 +436,7 @@ function TriageTable({
   conversationByItem,
   onApproveItem,
   onMoveItem,
+  onQueueDelivery,
   onToggleConversation,
 }: {
   items: TriageItemView[];
@@ -403,6 +445,7 @@ function TriageTable({
   conversationByItem: Record<string, ConversationState>;
   onApproveItem: (itemId: string) => Promise<void>;
   onMoveItem: (itemId: string, status: TriageStatus) => Promise<void>;
+  onQueueDelivery: (itemId: string) => Promise<void>;
   onToggleConversation: (item: TriageItemView) => Promise<void>;
 }) {
   return (
@@ -468,6 +511,7 @@ function TriageTable({
                         state={conversationByItem[item.id] ?? { kind: "loading" }}
                         onApproveItem={onApproveItem}
                         onMoveItem={onMoveItem}
+                        onQueueDelivery={onQueueDelivery}
                       />
                     </td>
                   </tr>
@@ -487,12 +531,14 @@ function ConversationPanel({
   state,
   onApproveItem,
   onMoveItem,
+  onQueueDelivery,
 }: {
   item: TriageItemView;
   isBusy: boolean;
   state: ConversationState;
   onApproveItem: (itemId: string) => Promise<void>;
   onMoveItem: (itemId: string, status: TriageStatus) => Promise<void>;
+  onQueueDelivery: (itemId: string) => Promise<void>;
 }) {
   if (state.kind === "loading") {
     return (
@@ -521,6 +567,7 @@ function ConversationPanel({
 
   const heldDraft = state.items.find((message) => message.id === item.conversation_message_id);
   const canApproveDraft = item.status === "acknowledged" && heldDraft?.status === "held_for_review";
+  const canQueueDelivery = item.status === "resolved" && heldDraft?.status === "approved";
 
   return (
     <div className="space-y-3">
@@ -547,9 +594,11 @@ function ConversationPanel({
         <ReviewAction
           item={item}
           canApproveDraft={canApproveDraft}
+          canQueueDelivery={canQueueDelivery}
           isBusy={isBusy}
           onApproveItem={onApproveItem}
           onMoveItem={onMoveItem}
+          onQueueDelivery={onQueueDelivery}
         />
       </div>
     </div>
@@ -563,9 +612,8 @@ function FlagSummary({
   item: TriageItemView;
   heldDraft: ConversationMessageView | undefined;
 }) {
-  const draftStatus = heldDraft?.status === "approved" ? "Approved" : "Held for review";
-  const actionNeeded =
-    heldDraft?.status === "approved" ? "Ready for delivery workflow" : "Approve draft or resolve manually";
+  const draftStatus = getDraftStatusLabel(heldDraft?.status);
+  const actionNeeded = getDraftActionLabel(heldDraft?.status);
   const holdReason = heldDraft?.safety_hold_reason
     ? REASON_LABELS[heldDraft.safety_hold_reason as TriageReason] ?? heldDraft.safety_hold_reason
     : "Not recorded";
@@ -586,6 +634,22 @@ function FlagSummary({
       </p>
     </section>
   );
+}
+
+function getDraftStatusLabel(status: ConversationMessageView["status"] | undefined): string {
+  if (status === "approved") return "Approved";
+  if (status === "queued") return "Queued for delivery";
+  if (status === "sent") return "Sent";
+  if (status === "failed") return "Delivery failed";
+  return "Held for review";
+}
+
+function getDraftActionLabel(status: ConversationMessageView["status"] | undefined): string {
+  if (status === "approved") return "Queue for delivery";
+  if (status === "queued") return "Waiting for delivery provider";
+  if (status === "sent") return "No action needed";
+  if (status === "failed") return "Review delivery failure";
+  return "Approve draft or resolve manually";
 }
 
 function FlagSummaryFact({ label, value }: { label: string; value: string }) {
@@ -685,7 +749,22 @@ function ConversationMessageRow({
               Approved
             </span>
           )}
-          {isHeldDraft && message.status !== "approved" && (
+          {isHeldDraft && message.status === "queued" && (
+            <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-blue-700">
+              Queued
+            </span>
+          )}
+          {isHeldDraft && message.status === "sent" && (
+            <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+              Sent
+            </span>
+          )}
+          {isHeldDraft && message.status === "failed" && (
+            <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-700">
+              Failed
+            </span>
+          )}
+          {isHeldDraft && !["approved", "queued", "sent", "failed"].includes(message.status) && (
             <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
               Held draft
             </span>
@@ -722,16 +801,35 @@ function StatusBadge({ status }: { status: TriageStatus }) {
 function ReviewAction({
   item,
   canApproveDraft,
+  canQueueDelivery,
   isBusy,
   onApproveItem,
   onMoveItem,
+  onQueueDelivery,
 }: {
   item: TriageItemView;
   canApproveDraft: boolean;
+  canQueueDelivery: boolean;
   isBusy: boolean;
   onApproveItem: (itemId: string) => Promise<void>;
   onMoveItem: (itemId: string, status: TriageStatus) => Promise<void>;
+  onQueueDelivery: (itemId: string) => Promise<void>;
 }) {
+  if (canQueueDelivery) {
+    return (
+      <button
+        type="button"
+        onClick={() => void onQueueDelivery(item.id)}
+        disabled={isBusy}
+        aria-label={`Queue delivery item ${shortId(item.id)}`}
+        className="inline-flex min-w-40 items-center justify-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 disabled:opacity-50 cursor-pointer"
+      >
+        {isBusy && <Loader2 size={16} className="animate-spin" />}
+        Queue delivery
+      </button>
+    );
+  }
+
   if (item.status === "resolved") {
     return (
       <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-500">

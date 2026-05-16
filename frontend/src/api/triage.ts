@@ -28,6 +28,11 @@ export type TriageApprovalView = {
   approved_message: ConversationMessageView;
 };
 
+export type TriageDeliveryView = {
+  triage_item: TriageItemView;
+  queued_message: ConversationMessageView;
+};
+
 export type ListTriageItemsParams = {
   limit?: number;
   offset?: number;
@@ -56,6 +61,13 @@ export function updateTriageItemStatus(
 export function approveTriageItem(itemId: string): Promise<TriageApprovalView> {
   return postJson<Record<string, never>, TriageApprovalView>(
     `/triage/items/${itemId}/approve`,
+    {},
+  );
+}
+
+export function queueTriageItemDelivery(itemId: string): Promise<TriageDeliveryView> {
+  return postJson<Record<string, never>, TriageDeliveryView>(
+    `/triage/items/${itemId}/queue-delivery`,
     {},
   );
 }

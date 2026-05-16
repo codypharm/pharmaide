@@ -172,7 +172,10 @@ export type ConversationMessageStatus =
   | "received"
   | "draft_ready"
   | "held_for_review"
-  | "approved";
+  | "approved"
+  | "queued"
+  | "sent"
+  | "failed";
 
 export type ConversationMessageView = {
   id: string;
