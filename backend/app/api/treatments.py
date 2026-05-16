@@ -16,6 +16,10 @@ from pydantic_ai.providers.openai import OpenAIProvider
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.agents.patient_reply import PatientReplyDraft, build_patient_reply_agent
+from app.agents.patient_reply_classifier import (
+    PatientReplyClassification,
+    build_patient_reply_classifier_agent,
+)
 from app.api.schemas import (
     AdherenceEventCreate,
     AdherenceEventList,
@@ -318,6 +322,7 @@ async def post_conversation_turn(
                 agentdog_url=settings.agentdog_url,
                 safety_provider_api_key=settings.safety_provider_api_key,
                 safety_provider_timeout_seconds=settings.safety_provider_timeout_seconds,
+                reply_classifier_agent=_build_configured_patient_reply_classifier_agent(settings),
             )
     except ConversationTreatmentNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
@@ -332,6 +337,7 @@ async def post_patient_message(
     treatment_id: UUID,
     body: PatientConversationMessageCreate,
     session_factory: SessionFactoryDep,
+    settings: SettingsDep,
 ) -> ConversationMessageView:
     try:
         async with session_factory() as session, session.begin():
@@ -339,6 +345,7 @@ async def post_patient_message(
                 session,
                 treatment_id=treatment_id,
                 message=body.message,
+                reply_classifier_agent=_build_configured_patient_reply_classifier_agent(settings),
             )
     except ConversationTreatmentNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
@@ -434,6 +441,9 @@ async def post_patient_reply_draft(
                     treatment_id=treatment_id,
                     patient_message=body.patient_message,
                     assistant_draft=draft.message,
+                    reply_classifier_agent=_build_configured_patient_reply_classifier_agent(
+                        settings
+                    ),
                 )
 
             draft = await draft_patient_reply_for_treatment(
@@ -459,6 +469,7 @@ async def post_patient_reply_draft(
                 safety_provider_api_key=settings.safety_provider_api_key,
                 safety_provider_timeout_seconds=settings.safety_provider_timeout_seconds,
                 draft_review_reason=_triage_reason_for_patient_reply_draft(draft),
+                reply_classifier_agent=_build_configured_patient_reply_classifier_agent(settings),
             )
     except (ConversationTreatmentNotFound, ReplyDraftTreatmentNotFound) as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
@@ -512,6 +523,17 @@ def _build_configured_patient_reply_agent(
         return None
     provider = OpenAIProvider(api_key=settings.openai_api_key.get_secret_value())
     return build_patient_reply_agent(OpenAIResponsesModel("gpt-5", provider=provider))
+
+
+def _build_configured_patient_reply_classifier_agent(
+    settings: Settings,
+) -> Agent[None, PatientReplyClassification] | None:
+    if settings.openai_api_key is None:
+        return None
+    provider = OpenAIProvider(api_key=settings.openai_api_key.get_secret_value())
+    return build_patient_reply_classifier_agent(
+        OpenAIResponsesModel("gpt-5-nano", provider=provider)
+    )
 
 
 def _triage_reason_for_patient_reply_draft(draft: PatientReplyDraft) -> TriageReason | None:

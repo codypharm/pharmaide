@@ -1,22 +1,25 @@
 """Capture structured monitoring state from patient WhatsApp replies.
 
-This module is intentionally deterministic. The patient-reply LLM may draft
-human-friendly wording, but adherence state should not depend on an unbounded
-free-text generation. If this classifier becomes too limited, replace the
-classification internals with a PydanticAI agent that returns the same
-validated `PatientReplyClassification` contract.
+This module prefers the low-latency PydanticAI classifier when configured,
+then falls back to deterministic matching when the model is unavailable. Both
+paths return the same validated `PatientReplyClassification` contract before
+they mutate adherence or check-in state.
 """
 
 import re
 from datetime import UTC, datetime
-from typing import Literal
 from uuid import UUID
 
 import structlog
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ValidationError
+from pydantic_ai import Agent
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.patient_reply_classifier import (
+    PatientReplyClassification,
+    classify_patient_reply_with_agent,
+)
 from app.api.schemas import AdherenceEventCreate, PatientCheckInCreate, TriageReason
 from app.db.models import AuditLogEntry, ConversationMessage
 from app.services.adherence_events import (
@@ -28,8 +31,6 @@ from app.services.adherence_events import (
 from app.services.patient_checkins import create_patient_check_in
 
 log = structlog.get_logger(__name__)
-
-PatientReplyIntent = Literal["taken", "missed", "side_effect", "not_improving", "general"]
 
 TAKEN_PATTERNS = (
     r"\btaken\b",
@@ -67,13 +68,6 @@ NOT_IMPROVING_PATTERNS = (
 )
 
 
-class PatientReplyClassification(BaseModel):
-    """Validated classifier output before it changes adherence state."""
-
-    intent: PatientReplyIntent
-    confidence: float = Field(ge=0, le=1)
-
-
 class ReminderCaptureContext(BaseModel):
     """Metadata-only link between a patient reply and the latest reminder."""
 
@@ -86,9 +80,13 @@ async def capture_patient_reply_state(
     *,
     treatment_id: UUID,
     inbound_message: ConversationMessage,
+    classifier_agent: Agent[None, PatientReplyClassification] | None = None,
 ) -> PatientReplyClassification:
     """Create adherence state when an inbound reply clearly answers a reminder."""
-    classification = classify_patient_reply(inbound_message.body)
+    classification = await _classify_patient_reply(
+        inbound_message.body,
+        classifier_agent=classifier_agent,
+    )
     if classification.intent in {"side_effect", "not_improving"}:
         await _create_patient_status_check_in(
             session,
@@ -178,6 +176,23 @@ def classify_patient_reply(message: str) -> PatientReplyClassification:
     if _matches_any(normalised, TAKEN_PATTERNS):
         return PatientReplyClassification(intent="taken", confidence=0.9)
     return PatientReplyClassification(intent="general", confidence=0.5)
+
+
+async def _classify_patient_reply(
+    message: str,
+    *,
+    classifier_agent: Agent[None, PatientReplyClassification] | None,
+) -> PatientReplyClassification:
+    if classifier_agent is None:
+        return classify_patient_reply(message)
+    try:
+        return await classify_patient_reply_with_agent(message, agent=classifier_agent)
+    except Exception as exc:
+        log.warning(
+            "patient_reply_classifier_fallback",
+            error_type=exc.__class__.__name__,
+        )
+        return classify_patient_reply(message)
 
 
 def triage_reason_for_patient_reply(

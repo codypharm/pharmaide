@@ -8,6 +8,9 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.patient_reply import PatientReplyDraft
+from app.agents.patient_reply_classifier import (
+    PatientReplyClassification,
+)
 from app.agents.safety_schemas import (
     GuardResult,
     PatientDraftSafetyDecision,
@@ -507,6 +510,56 @@ async def test_post_patient_reply_draft_records_taken_reply_as_adherence_event(
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_post_patient_reply_draft_uses_llm_classifier_for_non_keyword_adherence(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    treatment_id = await _create_treatment(app_client, "CONV-API-022")
+    medication_id = await _first_medication_id(db_session, treatment_id)
+    await _seed_monitoring_reminder(db_session, treatment_id, medication_id)
+    _patch_generated_reply(monkeypatch)
+    _patch_safety_decision(monkeypatch, treatment_id, status="send")
+    _patch_reply_classifier(monkeypatch, intent="taken")
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/patient-reply-drafts",
+        json={"patient_message": "All sorted now"},
+    )
+
+    assert response.status_code == 201, response.text
+    event = await db_session.scalar(select(AdherenceEvent))
+    assert event is not None
+    assert event.status == "taken"
+    assert event.medication_id == medication_id
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_patient_reply_draft_falls_back_when_llm_classifier_fails(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    treatment_id = await _create_treatment(app_client, "CONV-API-023")
+    medication_id = await _first_medication_id(db_session, treatment_id)
+    await _seed_monitoring_reminder(db_session, treatment_id, medication_id)
+    _patch_generated_reply(monkeypatch)
+    _patch_safety_decision(monkeypatch, treatment_id, status="send")
+    _patch_failing_reply_classifier(monkeypatch)
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/patient-reply-drafts",
+        json={"patient_message": "Taken"},
+    )
+
+    assert response.status_code == 201, response.text
+    event = await db_session.scalar(select(AdherenceEvent))
+    assert event is not None
+    assert event.status == "taken"
+    assert event.medication_id == medication_id
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_post_patient_reply_draft_does_not_duplicate_adherence_for_same_reminder(
     app_client: AsyncClient,
     db_session: AsyncSession,
@@ -910,6 +963,36 @@ def _patch_generated_reply(
     monkeypatch.setattr(
         "app.api.treatments.draft_patient_reply_for_treatment",
         fake_draft_patient_reply_for_treatment,
+    )
+
+
+def _patch_reply_classifier(monkeypatch: pytest.MonkeyPatch, *, intent: str) -> None:
+    async def fake_classify_patient_reply_with_agent(*args: object, **kwargs: object) -> object:
+        return PatientReplyClassification(intent=intent, confidence=0.89)
+
+    monkeypatch.setattr(
+        "app.services.patient_reply_capture.classify_patient_reply_with_agent",
+        fake_classify_patient_reply_with_agent,
+    )
+
+    monkeypatch.setattr(
+        "app.api.treatments._build_configured_patient_reply_classifier_agent",
+        lambda settings: object(),
+    )
+
+
+def _patch_failing_reply_classifier(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_classify_patient_reply_with_agent(*args: object, **kwargs: object) -> object:
+        raise TimeoutError("classifier timed out")
+
+    monkeypatch.setattr(
+        "app.services.patient_reply_capture.classify_patient_reply_with_agent",
+        fake_classify_patient_reply_with_agent,
+    )
+
+    monkeypatch.setattr(
+        "app.api.treatments._build_configured_patient_reply_classifier_agent",
+        lambda settings: object(),
     )
 
 

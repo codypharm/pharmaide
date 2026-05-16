@@ -10,9 +10,11 @@ from uuid import UUID
 
 import structlog
 from pydantic import SecretStr
+from pydantic_ai import Agent
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.patient_reply_classifier import PatientReplyClassification
 from app.agents.safety_provider_factory import ConfiguredSafetyProviders, SafetyProviderMode
 from app.agents.safety_schemas import (
     GuardResult,
@@ -50,6 +52,7 @@ async def record_patient_conversation_message(
     *,
     treatment_id: UUID,
     message: str,
+    reply_classifier_agent: Agent[None, PatientReplyClassification] | None = None,
 ) -> ConversationMessageView:
     """Store one inbound patient message without generating a reply."""
     treatment = await session.get(Treatment, treatment_id)
@@ -67,6 +70,7 @@ async def record_patient_conversation_message(
         session,
         treatment_id=treatment_id,
         inbound_message=inbound,
+        classifier_agent=reply_classifier_agent,
     )
     _audit_patient_message(session, treatment_id, inbound)
     await session.flush()
@@ -218,6 +222,7 @@ async def submit_patient_conversation_turn(
     safety_provider_timeout_seconds: float = 10,
     providers: ConfiguredSafetyProviders | None = None,
     draft_review_reason: TriageReason | None = None,
+    reply_classifier_agent: Agent[None, PatientReplyClassification] | None = None,
 ) -> ConversationTurnView:
     """Record one patient turn and gate the assistant draft before delivery."""
     treatment = await session.get(Treatment, treatment_id)
@@ -234,6 +239,7 @@ async def submit_patient_conversation_turn(
         session,
         treatment_id=treatment_id,
         inbound_message=inbound,
+        classifier_agent=reply_classifier_agent,
     )
 
     decision = await review_patient_draft_safety(
@@ -327,6 +333,7 @@ async def submit_pharmacist_takeover_holding_turn(
     treatment_id: UUID,
     patient_message: str,
     assistant_draft: str,
+    reply_classifier_agent: Agent[None, PatientReplyClassification] | None = None,
 ) -> ConversationTurnView:
     """Record a deterministic acknowledgement while pharmacist owns the thread.
 
@@ -354,6 +361,7 @@ async def submit_pharmacist_takeover_holding_turn(
         session,
         treatment_id=treatment_id,
         inbound_message=inbound,
+        classifier_agent=reply_classifier_agent,
     )
 
     decision = _allow_deterministic_holding_reply(treatment_id, draft_body)
