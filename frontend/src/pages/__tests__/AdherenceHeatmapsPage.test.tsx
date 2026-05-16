@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -68,10 +69,10 @@ describe("AdherenceHeatmapsPage", () => {
             medication_id: "med-1",
             status: "taken",
             source: "patient",
-            scheduled_for: "2026-05-16T08:00:00Z",
-            occurred_at: "2026-05-16T08:05:00Z",
+            scheduled_for: isoDaysAgo(1),
+            occurred_at: isoDaysAgo(1),
             note: null,
-            created_at: "2026-05-16T08:05:00Z",
+            created_at: isoDaysAgo(1),
           },
           {
             id: "event-2",
@@ -79,10 +80,10 @@ describe("AdherenceHeatmapsPage", () => {
             medication_id: "med-1",
             status: "missed",
             source: "patient",
-            scheduled_for: "2026-05-17T08:00:00Z",
+            scheduled_for: isoDaysAgo(0),
             occurred_at: null,
             note: "Patient missed morning dose",
-            created_at: "2026-05-17T10:00:00Z",
+            created_at: isoDaysAgo(0),
           },
         ],
       },
@@ -108,6 +109,49 @@ describe("AdherenceHeatmapsPage", () => {
     expect(adherenceSpy).toHaveBeenCalledWith("treatment-2");
   });
 
+  it("filters adherence events when the date range changes", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue({
+      items: [treatmentRow("treatment-1", "Eleanor Vance", "Lisinopril")],
+    });
+    vi.spyOn(treatmentsApi, "listAdherenceEvents").mockResolvedValue({
+      items: [
+        {
+          id: "recent-event",
+          treatment_id: "treatment-1",
+          medication_id: "med-1",
+          status: "taken",
+          source: "patient",
+          scheduled_for: isoDaysAgo(2),
+          occurred_at: isoDaysAgo(2),
+          note: "Recent taken dose",
+          created_at: isoDaysAgo(2),
+        },
+        {
+          id: "older-event",
+          treatment_id: "treatment-1",
+          medication_id: "med-1",
+          status: "missed",
+          source: "patient",
+          scheduled_for: isoDaysAgo(20),
+          occurred_at: null,
+          note: "Older missed dose",
+          created_at: isoDaysAgo(20),
+        },
+      ],
+    });
+
+    renderPage();
+
+    await screen.findByText("Recent taken dose");
+    expect(screen.getByText("Older missed dose")).toBeTruthy();
+
+    await user.selectOptions(screen.getByLabelText(/adherence date range/i), "7");
+
+    expect(screen.getByText("Recent taken dose")).toBeTruthy();
+    expect(screen.queryByText("Older missed dose")).toBeNull();
+  });
+
   it("shows an empty state when there are no treatments", async () => {
     vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue({ items: [] });
 
@@ -131,3 +175,10 @@ describe("AdherenceHeatmapsPage", () => {
     expect(mrn.className).toMatch(/blur-sm/);
   });
 });
+
+function isoDaysAgo(daysAgo: number): string {
+  const date = new Date();
+  date.setHours(8, 0, 0, 0);
+  date.setDate(date.getDate() - daysAgo);
+  return date.toISOString();
+}

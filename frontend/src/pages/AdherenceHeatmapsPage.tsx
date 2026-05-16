@@ -5,6 +5,7 @@ import {
   Loader2,
   Search,
 } from "lucide-react";
+import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 
@@ -32,12 +33,17 @@ type FetchState =
   | { kind: "error"; requestId: string | null };
 
 const PAGE_SIZE = 50;
-const HEATMAP_DAYS = 30;
 const ADHERENCE_STATUSES: AdherenceEventStatus[] = ["taken", "missed", "held", "skipped"];
+const DATE_RANGE_OPTIONS = [
+  { label: "Last 7 days", value: 7 },
+  { label: "Last 30 days", value: 30 },
+  { label: "Last 90 days", value: 90 },
+] as const;
 
 export default function AdherenceHeatmapsPage() {
   const { isPrivacyMode } = useOutletContext<OutletContext>();
   const [searchTerm, setSearchTerm] = useState("");
+  const [dateRangeDays, setDateRangeDays] = useState(30);
   const [state, setState] = useState<FetchState>({ kind: "loading" });
 
   const refresh = useCallback(async () => {
@@ -60,10 +66,19 @@ export default function AdherenceHeatmapsPage() {
     void refresh();
   }, [refresh]);
 
-  const visibleRows = useMemo(() => {
+  const days = useMemo(() => lastNDays(dateRangeDays), [dateRangeDays]);
+
+  const rowsInDateRange = useMemo(() => {
     if (state.kind !== "ok") return [];
+    return state.rows.map((row) => ({
+      ...row,
+      events: eventsInDateRange(row.events, days),
+    }));
+  }, [days, state]);
+
+  const visibleRows = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
-    return state.rows
+    return rowsInDateRange
       .filter((row) => {
         if (!query) return true;
         return [
@@ -77,9 +92,9 @@ export default function AdherenceHeatmapsPage() {
           .includes(query);
       })
       .sort((a, b) => riskScore(b.events) - riskScore(a.events));
-  }, [searchTerm, state]);
+  }, [rowsInDateRange, searchTerm]);
 
-  const totals = state.kind === "ok" ? adherenceTotals(state.rows.flatMap((row) => row.events)) : emptyTotals();
+  const totals = adherenceTotals(rowsInDateRange.flatMap((row) => row.events));
 
   return (
     <div className="h-full overflow-y-auto p-8 bg-[#F5F5F6]">
@@ -93,10 +108,21 @@ export default function AdherenceHeatmapsPage() {
               Real adherence events recorded from patient check-ins and reminder state.
             </p>
           </div>
-          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+          <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
             <Calendar size={14} />
-            Last 30 days
-          </div>
+            <select
+              aria-label="Adherence date range"
+              value={dateRangeDays}
+              onChange={(event) => setDateRangeDays(Number(event.target.value))}
+              className="bg-transparent text-[11px] font-bold uppercase tracking-wider text-slate-600 outline-none cursor-pointer"
+            >
+              {DATE_RANGE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </header>
 
         <SummaryBand totals={totals} />
@@ -123,7 +149,7 @@ export default function AdherenceHeatmapsPage() {
             <NoMatchesState />
           )}
           {state.kind === "ok" && visibleRows.length > 0 && (
-            <AdherenceTable rows={visibleRows} isPrivacyMode={isPrivacyMode} />
+            <AdherenceTable rows={visibleRows} days={days} isPrivacyMode={isPrivacyMode} />
           )}
         </section>
       </div>
@@ -189,17 +215,20 @@ function Legend() {
 
 function AdherenceTable({
   rows,
+  days,
   isPrivacyMode,
 }: {
   rows: TreatmentAdherenceRow[];
+  days: DayWindow[];
   isPrivacyMode: boolean;
 }) {
-  const days = lastNDays(HEATMAP_DAYS);
-
   return (
     <div className="overflow-x-auto p-6">
       <div className="min-w-[980px]">
-        <div className="grid grid-cols-[220px_repeat(30,1fr)_260px] items-center gap-1 pb-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+        <div
+          className="grid items-center gap-1 pb-3 text-[10px] font-bold uppercase tracking-wider text-slate-400"
+          style={adherenceGridTemplate(days.length)}
+        >
           <span>Patient</span>
           {days.map((day) => (
             <span key={day.key} className="text-center">
@@ -241,7 +270,10 @@ function TreatmentAdherenceRowView({
   const patientClass = isPrivacyMode ? "blur-sm select-none" : "";
 
   return (
-    <article className="grid grid-cols-[220px_repeat(30,1fr)_260px] items-center gap-1 py-3">
+    <article
+      className="grid items-center gap-1 py-3"
+      style={adherenceGridTemplate(days.length)}
+    >
       <div className="pr-4">
         <p className={`truncate text-sm font-bold text-slate-900 ${patientClass}`}>
           {row.treatment.patient.name}
@@ -374,6 +406,16 @@ function latestEventByDay(events: AdherenceEventView[]): Map<string, AdherenceEv
   return latest;
 }
 
+function eventsInDateRange(
+  events: AdherenceEventView[],
+  days: DayWindow[],
+): AdherenceEventView[] {
+  const allowedDays = new Set(days.map((day) => day.key));
+  return events.filter((event) =>
+    allowedDays.has(dayKey(event.scheduled_for ?? event.occurred_at ?? event.created_at)),
+  );
+}
+
 function adherenceTotals(events: AdherenceEventView[]): Record<AdherenceEventStatus, number> {
   const totals = emptyTotals();
   for (const event of events) {
@@ -398,14 +440,27 @@ function lastNDays(count: number): DayWindow[] {
     const date = new Date(today);
     date.setDate(today.getDate() - (count - index - 1));
     return {
-      key: dayKey(date.toISOString()),
+      key: localDayKey(date),
       label: String(date.getDate()),
     };
   });
 }
 
+function adherenceGridTemplate(dayCount: number): CSSProperties {
+  return {
+    gridTemplateColumns: `220px repeat(${dayCount}, minmax(16px, 1fr)) 260px`,
+  };
+}
+
 function dayKey(value: string): string {
-  return value.slice(0, 10);
+  return localDayKey(new Date(value));
+}
+
+function localDayKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function eventTimeMs(event: AdherenceEventView): number {
