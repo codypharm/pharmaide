@@ -234,6 +234,10 @@ export type TreatmentChatResponseModeUpdate = {
   chat_response_mode: TreatmentView["chat_response_mode"];
 };
 
+export type TreatmentClinicalObjectiveUpdate = {
+  clinical_objective: string | null;
+};
+
 export function listConversationMessages(
   treatmentId: string,
   params: ListConversationMessagesParams = {},
@@ -283,6 +287,16 @@ export function updateTreatmentChatResponseMode(
 ): Promise<TreatmentView> {
   return postJson<TreatmentChatResponseModeUpdate, TreatmentView>(
     `/treatments/${treatmentId}/chat-response-mode`,
+    payload,
+  );
+}
+
+export function updateTreatmentClinicalObjective(
+  treatmentId: string,
+  payload: TreatmentClinicalObjectiveUpdate,
+): Promise<TreatmentView> {
+  return postJson<TreatmentClinicalObjectiveUpdate, TreatmentView>(
+    `/treatments/${treatmentId}/clinical-objective`,
     payload,
   );
 }

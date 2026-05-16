@@ -200,3 +200,42 @@ async def update_chat_response_mode(
 
     await session.flush()
     return TreatmentView.model_validate(treatment)
+
+
+async def update_clinical_objective(
+    session: AsyncSession,
+    treatment_id: UUID,
+    *,
+    clinical_objective: str | None,
+) -> TreatmentView:
+    """Update pharmacist-maintained monitoring intent without auditing the text."""
+    treatment = await session.get(Treatment, treatment_id)
+    if treatment is None:
+        raise TreatmentNotFound()
+
+    old_objective = treatment.clinical_objective
+    treatment.clinical_objective = clinical_objective
+
+    if old_objective != clinical_objective:
+        session.add(
+            AuditLogEntry(
+                event_type="treatment_clinical_objective_changed",
+                resource_type="treatment",
+                resource_id=treatment.id,
+                # The objective can reveal patient condition. Audit presence
+                # transitions only; the current value remains on treatment.
+                payload={
+                    "old_clinical_objective_present": old_objective is not None,
+                    "new_clinical_objective_present": clinical_objective is not None,
+                },
+            )
+        )
+        log.info(
+            "treatment_clinical_objective_changed",
+            treatment_id=str(treatment.id),
+            old_clinical_objective_present=old_objective is not None,
+            new_clinical_objective_present=clinical_objective is not None,
+        )
+
+    await session.flush()
+    return TreatmentView.model_validate(treatment)

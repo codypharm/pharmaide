@@ -35,6 +35,7 @@ from app.api.schemas import (
     PharmacistConversationMessageCreate,
     TreatmentAnalysisView,
     TreatmentChatResponseModeUpdate,
+    TreatmentClinicalObjectiveUpdate,
     TreatmentDetail,
     TreatmentList,
     TreatmentView,
@@ -94,6 +95,7 @@ from app.services.treatments import (
     list_treatments,
     treatment_exists,
     update_chat_response_mode,
+    update_clinical_objective,
 )
 from app.services.treatments import (
     TreatmentNotFound as TreatmentCommandNotFound,
@@ -180,6 +182,26 @@ async def post_treatment_chat_response_mode(
                 session,
                 treatment_id,
                 chat_response_mode=body.chat_response_mode,
+            )
+    except TreatmentCommandNotFound as exc:
+        raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
+
+
+@router.post(
+    "/treatments/{treatment_id}/clinical-objective",
+    response_model=TreatmentView,
+)
+async def post_treatment_clinical_objective(
+    treatment_id: UUID,
+    body: TreatmentClinicalObjectiveUpdate,
+    session_factory: SessionFactoryDep,
+) -> TreatmentView:
+    try:
+        async with session_factory() as session, session.begin():
+            return await update_clinical_objective(
+                session,
+                treatment_id,
+                clinical_objective=body.clinical_objective,
             )
     except TreatmentCommandNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc

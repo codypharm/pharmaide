@@ -640,6 +640,40 @@ async def test_post_chat_response_mode_resumes_ai_replies_and_audits_change(
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_post_treatment_clinical_objective_updates_objective_and_audits_metadata(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    treatment_id = await _create_treatment(app_client, "CONV-API-017")
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/clinical-objective",
+        json={"clinical_objective": "Monitor nausea and recovery"},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["id"] == str(treatment_id)
+    assert payload["clinical_objective"] == "Monitor nausea and recovery"
+
+    treatment = await db_session.get(Treatment, treatment_id)
+    assert treatment is not None
+    assert treatment.clinical_objective == "Monitor nausea and recovery"
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry)
+        .where(AuditLogEntry.event_type == "treatment_clinical_objective_changed")
+        .order_by(AuditLogEntry.created_at.desc())
+    )
+    assert audit is not None
+    assert audit.payload == {
+        "old_clinical_objective_present": True,
+        "new_clinical_objective_present": True,
+    }
+    assert "nausea" not in str(audit.payload).lower()
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_post_patient_reply_draft_returns_404_for_unknown_treatment(
     app_client: AsyncClient,
 ) -> None:

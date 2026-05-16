@@ -375,6 +375,19 @@ class TreatmentChatResponseModeUpdate(BaseModel):
     chat_response_mode: ChatResponseMode
 
 
+class TreatmentClinicalObjectiveUpdate(BaseModel):
+    clinical_objective: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("clinical_objective")
+    @classmethod
+    def normalise_clinical_objective(cls, value: str | None) -> str | None:
+        """Treat blank dashboard input as no treatment-level objective."""
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
+
+
 class MedicationView(BaseModel):
     id: UUID
     name: str

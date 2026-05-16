@@ -10,6 +10,7 @@ import {
   listTreatments,
   retryConversationMessageDelivery,
   sendPharmacistMessage,
+  updateTreatmentClinicalObjective,
   updateTreatmentChatResponseMode,
   triggerAnalysis,
 } from "../treatments";
@@ -394,6 +395,35 @@ describe("conversation messages", () => {
     expect(init.method).toBe("POST");
     expect(JSON.parse(String(init.body))).toEqual({ chat_response_mode: "ai_active" });
     expect(result.chat_response_mode).toBe("ai_active");
+  });
+
+  it("updates treatment clinical objective", async () => {
+    const spy = mockFetch({
+      status: 200,
+      body: {
+        id: "t1",
+        patient_id: "p1",
+        status: "active",
+        chat_response_mode: "ai_active",
+        automation_mode: "active",
+        clinical_objective: "Monitor nausea",
+        treatment_start_at: null,
+        created_at: "2026-05-18T10:02:00Z",
+      },
+    });
+
+    const result = await updateTreatmentClinicalObjective("t1", {
+      clinical_objective: "Monitor nausea",
+    });
+
+    const calledUrl = spy.mock.calls[0]?.[0] as string;
+    const init = spy.mock.calls[0]?.[1] as RequestInit;
+    expect(calledUrl).toMatch(/\/treatments\/t1\/clinical-objective$/);
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(String(init.body))).toEqual({
+      clinical_objective: "Monitor nausea",
+    });
+    expect(result.clinical_objective).toBe("Monitor nausea");
   });
 
   it("retries a failed WhatsApp conversation message", async () => {

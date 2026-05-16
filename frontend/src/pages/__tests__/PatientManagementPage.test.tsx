@@ -347,6 +347,37 @@ describe("PatientManagementPage", () => {
     );
   });
 
+  it("lets the pharmacist update the treatment objective", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue(TREATMENTS);
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(DETAIL);
+    vi.spyOn(treatmentsApi, "listConversationMessages").mockResolvedValue(MESSAGES);
+    vi.spyOn(triageApi, "listTriageItems").mockResolvedValue(TRIAGE_ITEMS);
+    const updateSpy = vi
+      .spyOn(treatmentsApi, "updateTreatmentClinicalObjective")
+      .mockResolvedValue({
+        ...TREATMENTS.items[0].treatment,
+        clinical_objective: "Monitor nausea and recovery",
+      });
+
+    renderPage();
+
+    const objective = await screen.findByLabelText(/treatment objective/i);
+    await user.clear(objective);
+    await user.type(objective, "Monitor nausea and recovery");
+    await user.click(screen.getByRole("button", { name: /save objective/i }));
+
+    await waitFor(() =>
+      expect(updateSpy).toHaveBeenCalledWith(TREATMENTS.items[0].treatment.id, {
+        clinical_objective: "Monitor nausea and recovery",
+      }),
+    );
+    expect(await screen.findByDisplayValue("Monitor nausea and recovery")).toBeTruthy();
+    expect(toast.success).toHaveBeenCalledWith("Treatment objective updated", {
+      description: "Monitoring context now reflects the saved objective.",
+    });
+  });
+
   it("shows real safety flag context in the safety review tab", async () => {
     const user = userEvent.setup();
     vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue(TREATMENTS);

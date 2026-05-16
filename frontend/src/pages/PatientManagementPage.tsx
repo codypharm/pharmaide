@@ -10,7 +10,6 @@ import {
   Search,
   Send,
   User,
-  Zap,
 } from "lucide-react";
 import { Link, useOutletContext } from "react-router-dom";
 import { toast } from "sonner";
@@ -24,6 +23,7 @@ import {
   listTreatments,
   retryConversationMessageDelivery,
   sendPharmacistMessage,
+  updateTreatmentClinicalObjective,
   updateTreatmentChatResponseMode,
   type ConversationMessageList,
   type ConversationMessageStatus,
@@ -168,6 +168,7 @@ export default function PatientManagementPage() {
   const [isSubmittingMessage, setIsSubmittingMessage] = useState(false);
   const [isSendingPharmacistMessage, setIsSendingPharmacistMessage] = useState(false);
   const [isUpdatingChatMode, setIsUpdatingChatMode] = useState(false);
+  const [isUpdatingObjective, setIsUpdatingObjective] = useState(false);
   const [retryingMessageId, setRetryingMessageId] = useState<string | null>(null);
   const [conversationLastUpdatedAt, setConversationLastUpdatedAt] = useState<Date | null>(null);
 
@@ -426,6 +427,29 @@ export default function PatientManagementPage() {
     }
   }
 
+  async function updateClinicalObjective(value: string) {
+    if (!selectedTreatment || isUpdatingObjective) return;
+
+    const clinicalObjective = value.trim() || null;
+    setIsUpdatingObjective(true);
+    try {
+      const updated = await updateTreatmentClinicalObjective(selectedTreatment.treatment.id, {
+        clinical_objective: clinicalObjective,
+      });
+      applyUpdatedTreatment(updated);
+      toast.success("Treatment objective updated", {
+        description: "Monitoring context now reflects the saved objective.",
+      });
+    } catch (err: unknown) {
+      const requestId = err instanceof ApiError ? err.requestId : null;
+      toast.error("Could not update treatment objective", {
+        description: `Reference ID: ${requestId ?? "unknown"}`,
+      });
+    } finally {
+      setIsUpdatingObjective(false);
+    }
+  }
+
   async function retryMessageDelivery(messageId: string) {
     if (!selectedTreatment || retryingMessageId) return;
 
@@ -535,6 +559,8 @@ export default function PatientManagementPage() {
                 activeTriageItems={selectedTreatmentTriageItems}
                 treatmentDetailState={treatmentDetailState}
                 patientUpdatesState={patientUpdatesState}
+                isUpdatingObjective={isUpdatingObjective}
+                onUpdateClinicalObjective={updateClinicalObjective}
               />
               <InteractionLog
                 activeProfileTab={activeProfileTab}
@@ -771,50 +797,97 @@ function ClinicalWorkspace({
   activeTriageItems,
   treatmentDetailState,
   patientUpdatesState,
+  isUpdatingObjective,
+  onUpdateClinicalObjective,
 }: {
   item: TreatmentListItem;
   activeTriageItems: TriageItemView[];
   treatmentDetailState: TreatmentDetailState;
   patientUpdatesState: PatientUpdatesState;
+  isUpdatingObjective: boolean;
+  onUpdateClinicalObjective: (value: string) => void;
 }) {
   return (
-    <div className="flex-1 overflow-y-auto p-8 flex flex-col gap-6">
+    <div className="flex-1 min-h-0 overflow-hidden p-8 flex flex-col gap-4">
       {activeTriageItems.length > 0 && (
         <NeedsReviewAlert items={activeTriageItems} />
       )}
-      <section className="bg-white border border-slate-200 rounded-2xl p-6">
+      <section className="shrink-0 bg-white border border-slate-200 rounded-2xl p-6">
         <div className="flex items-center gap-2 mb-5">
           <Activity size={18} className="text-slate-400" />
           <h3 className="font-bold text-slate-900">Clinical Monitoring</h3>
         </div>
-        <div className="grid gap-4">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           <ClinicalFact label="Treatment status" value={statusLabel(item.treatment.status)} />
           <ClinicalFact
             label="Medication coverage"
             value={`${item.medication_count} medication${item.medication_count === 1 ? "" : "s"}`}
           />
-          <ClinicalFact
-            label="Current objective"
-            value={item.treatment.clinical_objective ?? "No objective recorded"}
-          />
         </div>
+        <ObjectiveEditor
+          value={item.treatment.clinical_objective}
+          isSaving={isUpdatingObjective}
+          onSave={onUpdateClinicalObjective}
+        />
       </section>
 
       <MedicationsPanel state={treatmentDetailState} />
 
       <PatientUpdatesPanel state={patientUpdatesState} />
-
-      <section className="bg-white border border-slate-200 rounded-2xl p-6">
-        <div className="flex items-center gap-2 mb-5">
-          <Zap size={18} className="text-slate-400" />
-          <h3 className="font-bold text-slate-900">Agent Direction</h3>
-        </div>
-        <p className="text-sm leading-6 text-slate-600">
-          Incoming WhatsApp messages are processed through the patient-reply draft endpoint.
-          Drafts that fail safety review are held and appear in the Triage Queue.
-        </p>
-      </section>
     </div>
+  );
+}
+
+function ObjectiveEditor({
+  value,
+  isSaving,
+  onSave,
+}: {
+  value: string | null;
+  isSaving: boolean;
+  onSave: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(value ?? "");
+
+  useEffect(() => {
+    setDraft(value ?? "");
+  }, [value]);
+
+  const isDirty = draft.trim() !== (value ?? "").trim();
+
+  return (
+    <form
+      className="mt-4 rounded-xl border border-slate-100 bg-slate-50 p-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (isDirty && !isSaving) onSave(draft);
+      }}
+    >
+      <label
+        htmlFor="treatment-objective"
+        className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
+      >
+        Treatment Objective
+      </label>
+      <div className="mt-2 flex items-start gap-2">
+        <textarea
+          id="treatment-objective"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder="Add monitoring objective..."
+          rows={3}
+          className="min-w-0 flex-1 resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-100"
+        />
+        <button
+          type="submit"
+          disabled={!isDirty || isSaving}
+          className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+        >
+          {isSaving && <Loader2 size={13} className="animate-spin" />}
+          Save Objective
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -911,7 +984,7 @@ function NeedsReviewAlert({ items }: { items: TriageItemView[] }) {
 function MedicationsPanel({ state }: { state: TreatmentDetailState }) {
   if (state.kind === "idle" || state.kind === "loading") {
     return (
-      <section className="bg-white border border-slate-200 rounded-2xl p-6">
+      <section className="min-h-0 flex-1 bg-white border border-slate-200 rounded-2xl p-6">
         <h3 className="font-bold text-slate-900">Medications</h3>
         <div className="mt-4 flex items-center gap-2 text-sm text-slate-500">
           <Loader2 size={16} className="animate-spin" />
@@ -923,7 +996,7 @@ function MedicationsPanel({ state }: { state: TreatmentDetailState }) {
 
   if (state.kind === "error") {
     return (
-      <section className="bg-white border border-amber-200 rounded-2xl p-6">
+      <section className="min-h-0 flex-1 bg-white border border-amber-200 rounded-2xl p-6">
         <h3 className="font-bold text-slate-900">Medications</h3>
         <p className="mt-4 text-sm text-slate-600">
           Could not load medications. Reference ID: <code>{state.requestId ?? "unknown"}</code>
@@ -934,7 +1007,7 @@ function MedicationsPanel({ state }: { state: TreatmentDetailState }) {
 
   if (state.data.medications.length === 0) {
     return (
-      <section className="bg-white border border-slate-200 rounded-2xl p-6">
+      <section className="min-h-0 flex-1 bg-white border border-slate-200 rounded-2xl p-6">
         <h3 className="font-bold text-slate-900">Medications</h3>
         <p className="mt-4 text-sm text-slate-500">No medications recorded for this treatment.</p>
       </section>
@@ -942,9 +1015,9 @@ function MedicationsPanel({ state }: { state: TreatmentDetailState }) {
   }
 
   return (
-    <section className="bg-white border border-slate-200 rounded-2xl p-6">
-      <h3 className="font-bold text-slate-900">Medications</h3>
-      <div className="mt-4 overflow-x-auto">
+    <section className="min-h-0 flex-1 bg-white border border-slate-200 rounded-2xl p-6 flex flex-col">
+      <h3 className="shrink-0 font-bold text-slate-900">Medications</h3>
+      <div className="mt-4 min-h-0 flex-1 overflow-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-500">
