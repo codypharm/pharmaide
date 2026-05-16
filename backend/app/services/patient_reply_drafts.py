@@ -37,7 +37,7 @@ async def draft_patient_reply_for_treatment(
     if treatment is None:
         raise TreatmentNotFound()
     if treatment.chat_response_mode == "pharmacist_takeover":
-        draft = _pharmacist_takeover_holding_draft()
+        draft = build_pharmacist_takeover_holding_draft()
         log.info(
             "patient_reply_holding_draft_generated",
             treatment_id=str(treatment_id),
@@ -83,7 +83,7 @@ async def draft_patient_reply_for_treatment(
     return draft
 
 
-def _pharmacist_takeover_holding_draft() -> PatientReplyDraft:
+def build_pharmacist_takeover_holding_draft() -> PatientReplyDraft:
     """Return a validated holding response while the pharmacist owns the thread."""
     return PatientReplyDraft(
         message=(

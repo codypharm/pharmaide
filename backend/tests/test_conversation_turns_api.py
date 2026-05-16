@@ -472,6 +472,44 @@ async def test_post_patient_reply_draft_uses_holding_response_during_pharmacist_
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_post_patient_reply_draft_fast_paths_holding_response_during_takeover(
+    app_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    treatment_id = await _create_treatment(app_client, "CONV-API-017")
+    _patch_safety_decision(monkeypatch, treatment_id, status="hold_for_pharmacist")
+    held = await app_client.post(
+        f"/treatments/{treatment_id}/conversation-turns",
+        json={
+            "patient_message": "Can I take an extra dose?",
+            "assistant_draft": "This draft must be reviewed.",
+            "prescription_context": "Amoxicillin 500 mg three times daily.",
+        },
+    )
+    assert held.status_code == 201, held.text
+
+    async def fail_if_safety_review_runs(*args: object, **kwargs: object) -> object:
+        raise AssertionError("takeover holding replies must not call external safety review")
+
+    monkeypatch.setattr(
+        "app.services.conversation_messages.review_patient_draft_safety",
+        fail_if_safety_review_runs,
+    )
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/patient-reply-drafts",
+        json={"patient_message": "Any update?"},
+    )
+
+    assert response.status_code == 201, response.text
+    payload = response.json()
+    assert payload["inbound_message"]["body"] == "Any update?"
+    assert payload["assistant_message"]["status"] == "draft_ready"
+    assert "pharmacist is reviewing" in payload["assistant_message"]["body"]
+    assert payload["safety_decision"]["status"] == "send"
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_post_chat_response_mode_resumes_ai_replies_and_audits_change(
     app_client: AsyncClient,
     db_session: AsyncSession,

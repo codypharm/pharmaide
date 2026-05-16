@@ -68,6 +68,7 @@ from app.services.conversation_messages import (
     record_patient_conversation_message,
     record_pharmacist_conversation_message,
     submit_patient_conversation_turn,
+    submit_pharmacist_takeover_holding_turn,
 )
 from app.services.patient_checkins import (
     TreatmentNotFound as CheckInTreatmentNotFound,
@@ -80,6 +81,7 @@ from app.services.patient_reply_drafts import (
     TreatmentNotFound as ReplyDraftTreatmentNotFound,
 )
 from app.services.patient_reply_drafts import (
+    build_pharmacist_takeover_holding_draft,
     draft_patient_reply_for_treatment,
 )
 from app.services.treatments import (
@@ -354,6 +356,18 @@ async def post_patient_reply_draft(
 ) -> ConversationTurnView:
     try:
         async with session_factory() as session, session.begin():
+            detail = await get_treatment(session, treatment_id)
+            if detail is None:
+                raise ReplyDraftTreatmentNotFound()
+            if detail.treatment.chat_response_mode == "pharmacist_takeover":
+                draft = build_pharmacist_takeover_holding_draft()
+                return await submit_pharmacist_takeover_holding_turn(
+                    session,
+                    treatment_id=treatment_id,
+                    patient_message=body.patient_message,
+                    assistant_draft=draft.message,
+                )
+
             draft = await draft_patient_reply_for_treatment(
                 session,
                 treatment_id,

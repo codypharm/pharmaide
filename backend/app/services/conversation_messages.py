@@ -14,6 +14,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.safety_provider_factory import ConfiguredSafetyProviders, SafetyProviderMode
+from app.agents.safety_schemas import (
+    GuardResult,
+    PatientDraftSafetyDecision,
+    RefereeResult,
+    SafetyReview,
+)
 from app.api.schemas import ConversationMessageList, ConversationMessageView, ConversationTurnView
 from app.db.models import AuditLogEntry, ConversationMessage, Treatment
 from app.services.patient_safety import review_patient_draft_safety
@@ -199,6 +205,90 @@ async def submit_patient_conversation_turn(
         inbound_message=ConversationMessageView.model_validate(inbound),
         assistant_message=ConversationMessageView.model_validate(assistant),
         safety_decision=decision,
+    )
+
+
+async def submit_pharmacist_takeover_holding_turn(
+    session: AsyncSession,
+    *,
+    treatment_id: UUID,
+    patient_message: str,
+    assistant_draft: str,
+) -> ConversationTurnView:
+    """Record a deterministic acknowledgement while pharmacist owns the thread.
+
+    The holding text is fixed application copy, not an LLM clinical answer. It
+    stays fast so patients are not left waiting while manual review is active.
+    """
+    treatment = await session.get(Treatment, treatment_id)
+    if treatment is None:
+        raise TreatmentNotFound()
+
+    inbound_body = _required_text(patient_message, "patient_message")
+    draft_body = _required_text(assistant_draft, "assistant_draft")
+    inbound = _build_patient_inbound_message(treatment_id=treatment_id, body=inbound_body)
+    assistant = ConversationMessage(
+        treatment_id=treatment_id,
+        direction="outbound",
+        sender_type="assistant",
+        channel="whatsapp",
+        status="draft_ready",
+        body=draft_body,
+    )
+    session.add_all([inbound, assistant])
+    await session.flush()
+
+    decision = _allow_deterministic_holding_reply(treatment_id, draft_body)
+    _audit_conversation_turn(session, treatment_id, inbound, assistant, decision.status)
+    await session.flush()
+
+    log.info(
+        "pharmacist_takeover_holding_turn_recorded",
+        treatment_id=str(treatment_id),
+        inbound_message_id=str(inbound.id),
+        assistant_message_id=str(assistant.id),
+        chat_response_mode=treatment.chat_response_mode,
+    )
+    return ConversationTurnView(
+        inbound_message=ConversationMessageView.model_validate(inbound),
+        assistant_message=ConversationMessageView.model_validate(assistant),
+        safety_decision=decision,
+    )
+
+
+def _allow_deterministic_holding_reply(
+    treatment_id: UUID,
+    message_to_send: str,
+) -> PatientDraftSafetyDecision:
+    rationale = "Deterministic holding reply while pharmacist owns the patient thread."
+    review = SafetyReview(
+        treatment_id=treatment_id,
+        input_guard=GuardResult(
+            stage="input",
+            action="allow",
+            categories=[],
+            rationale=rationale,
+            confidence=1.0,
+        ),
+        referee=RefereeResult(
+            action="allow",
+            violations=[],
+            rationale=rationale,
+            confidence=1.0,
+        ),
+        output_guard=GuardResult(
+            stage="output",
+            action="allow",
+            categories=[],
+            rationale=rationale,
+            confidence=1.0,
+        ),
+    )
+    return PatientDraftSafetyDecision(
+        status="send",
+        review=review,
+        message_to_send=message_to_send,
+        hold_reason=None,
     )
 
 

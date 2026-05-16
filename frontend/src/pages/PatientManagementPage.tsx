@@ -1011,14 +1011,19 @@ function ConversationBubble({ message }: { message: ConversationMessageView }) {
   const isPatient = message.sender_type === "patient";
   const isAssistant = message.sender_type === "assistant";
   const isPharmacist = message.sender_type === "pharmacist";
+  const isOutbound = message.direction === "outbound";
+  const messageSide = isOutbound ? "right" : "left";
   const bubbleClass = isPatient
-    ? "bg-blue-600 text-white rounded-tr-none"
+    ? "bg-white text-slate-800 border border-slate-200 rounded-tl-none"
     : isPharmacist
-      ? "bg-emerald-50 text-emerald-950 border border-emerald-100 rounded-tl-none"
-    : "bg-slate-100 text-slate-700 rounded-tl-none";
+      ? "bg-emerald-50 text-emerald-950 border border-emerald-100 rounded-tr-none"
+    : "bg-slate-900 text-white rounded-tr-none";
 
   return (
-    <div className={`flex gap-3 ${isPatient ? "flex-row-reverse" : ""}`}>
+    <div
+      data-message-side={messageSide}
+      className={`flex gap-3 ${isOutbound ? "flex-row-reverse" : ""}`}
+    >
       <div
         className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
           isPatient
@@ -1034,7 +1039,7 @@ function ConversationBubble({ message }: { message: ConversationMessageView }) {
         <div className={`rounded-2xl p-3 ${bubbleClass}`}>
           <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.body}</p>
         </div>
-        <div className={`mt-1 flex items-center gap-2 text-[10px] text-slate-400 ${isPatient ? "justify-end" : ""}`}>
+        <div className={`mt-1 flex items-center gap-2 text-[10px] text-slate-400 ${isOutbound ? "justify-end" : ""}`}>
           <span>{formatDateTime(message.created_at)}</span>
           {isAssistant && message.status === "held_for_review" && (
             <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 font-bold uppercase tracking-wider text-amber-700">
@@ -1042,10 +1047,10 @@ function ConversationBubble({ message }: { message: ConversationMessageView }) {
               Held
             </span>
           )}
-          {isPharmacist && message.status === "queued" && (
+          {isOutbound && message.status === "queued" && (
             <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-bold uppercase tracking-wider text-emerald-700">
               <CheckCircle2 size={10} />
-              Queued
+              Queued for WhatsApp
             </span>
           )}
         </div>

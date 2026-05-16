@@ -224,7 +224,11 @@ describe("PatientManagementPage", () => {
       "href",
       "/dashboard/triage",
     );
-    expect(await screen.findByText("I feel dizzy today.")).toBeTruthy();
+    const patientMessage = await screen.findByText("I feel dizzy today.");
+    expect(patientMessage.closest("[data-message-side]")).toHaveAttribute(
+      "data-message-side",
+      "left",
+    );
   });
 
   it("submits an incoming WhatsApp message and refreshes the thread", async () => {
@@ -289,7 +293,12 @@ describe("PatientManagementPage", () => {
         message: "Please continue the current dose.",
       }),
     );
-    await screen.findByText("Please continue the current dose.");
+    const pharmacistBubble = await screen.findByText("Please continue the current dose.");
+    expect(pharmacistBubble.closest("[data-message-side]")).toHaveAttribute(
+      "data-message-side",
+      "right",
+    );
+    expect(screen.getByText("Queued for WhatsApp")).toBeTruthy();
     expect(toast.success).toHaveBeenCalledWith("Pharmacist message queued", {
       description: "It will be sent through the WhatsApp delivery workflow.",
     });
