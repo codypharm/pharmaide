@@ -102,7 +102,7 @@ function Header() {
   return (
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center shadow-sm">
+        <div className="w-10 h-10 bg-[#F0EFFF] text-[#5548E8] rounded-xl flex items-center justify-center shadow-sm">
           <ClipboardList size={20} />
         </div>
         <div>
@@ -135,7 +135,7 @@ function EmptyCard() {
     <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px]">
         <div className="p-8 flex items-start gap-4">
-          <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center shrink-0">
+          <div className="w-12 h-12 rounded-xl bg-[#F0EFFF] text-[#5548E8] flex items-center justify-center shrink-0">
             <FilePlus2 size={24} />
           </div>
           <div>
@@ -173,7 +173,7 @@ function EmptyCard() {
 function EmptyStatePoint({ text }: { text: string }) {
   return (
     <div className="flex items-start gap-2">
-      <CheckCircle2 size={16} className="text-blue-700 mt-0.5 shrink-0" />
+      <CheckCircle2 size={16} className="text-[#5548E8] mt-0.5 shrink-0" />
       <span>{text}</span>
     </div>
   );
@@ -219,7 +219,7 @@ function IngestionsTable({
             {items.map((row, i) => (
               <tr
                 key={row.treatment.id}
-                className={`border-b border-slate-100 last:border-b-0 ${i % 2 === 1 ? "bg-slate-50/50" : ""} hover:bg-blue-50/50`}
+                className={`border-b border-slate-100 last:border-b-0 ${i % 2 === 1 ? "bg-slate-50/50" : ""} hover:bg-[#F0EFFF]/60`}
               >
                 <td className="px-6 py-3 text-slate-700 tabular-nums">
                   {formatCreatedAt(row.treatment.created_at)}
@@ -263,7 +263,7 @@ function StatusPill({ status }: { status: string }) {
     status === "pending"
       ? "bg-amber-50 text-amber-800 border-amber-200"
       : status === "active"
-        ? "bg-blue-50 text-blue-800 border-blue-200"
+        ? "bg-[#F0EFFF] text-[#463AD4] border-[#D9D5FB]"
         : status === "completed"
           ? "bg-emerald-50 text-emerald-800 border-emerald-200"
           : "bg-slate-50 text-slate-700 border-slate-200";

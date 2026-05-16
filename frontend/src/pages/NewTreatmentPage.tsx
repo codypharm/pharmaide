@@ -39,7 +39,7 @@ type FieldErrors = Partial<Record<"name" | "dob" | "mrn" | "phone" | "allergies"
 type ExtractionFieldKey = string;
 type ExtractionErrorState = { message: string; requestId: string | null };
 
-const extractedFieldClass = "border-blue-400 bg-blue-50/30";
+const extractedFieldClass = "border-[#5548E8] bg-[#F0EFFF]";
 const lowConfidenceFieldClass = "border-amber-500 bg-amber-50/40";
 const LOW_CONFIDENCE_THRESHOLD = 0.7;
 const LOW_CONFIDENCE_TITLE = "AI confidence low - verify";
@@ -308,7 +308,7 @@ export default function NewTreatmentPage() {
       <div className="flex flex-col gap-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center shadow-sm">
+            <div className="w-10 h-10 bg-[#F0EFFF] text-[#5548E8] rounded-xl flex items-center justify-center shadow-sm">
               <FileText size={20} />
             </div>
             <div>
@@ -388,7 +388,7 @@ export default function NewTreatmentPage() {
                   data-extraction-origin={extractedFields.has("patient.name") ? "vision" : undefined}
                   data-extraction-confidence={lowConfidenceAttribute(lowConfidenceFields, "patient.name")}
                   title={lowConfidenceTitle(lowConfidenceFields, "patient.name")}
-                  className={`px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none ${fieldErrors.name ? "border-red-400" : extractionFieldClass(extractedFields, lowConfidenceFields, "patient.name", "border-slate-200")}`}
+                  className={`px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-[#D9D5FB] outline-none ${fieldErrors.name ? "border-red-400" : extractionFieldClass(extractedFields, lowConfidenceFields, "patient.name", "border-slate-200")}`}
                 />
                 {fieldErrors.name && <span className="text-[11px] text-red-600">{fieldErrors.name}</span>}
               </div>
@@ -405,7 +405,7 @@ export default function NewTreatmentPage() {
                   data-extraction-origin={extractedFields.has("patient.dob") ? "vision" : undefined}
                   data-extraction-confidence={lowConfidenceAttribute(lowConfidenceFields, "patient.dob")}
                   title={lowConfidenceTitle(lowConfidenceFields, "patient.dob")}
-                  className={`px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none ${fieldErrors.dob ? "border-red-400" : extractionFieldClass(extractedFields, lowConfidenceFields, "patient.dob", "border-slate-200")}`}
+                  className={`px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-[#D9D5FB] outline-none ${fieldErrors.dob ? "border-red-400" : extractionFieldClass(extractedFields, lowConfidenceFields, "patient.dob", "border-slate-200")}`}
                 />
                 {fieldErrors.dob && <span className="text-[11px] text-red-600">{fieldErrors.dob}</span>}
               </div>
@@ -415,7 +415,7 @@ export default function NewTreatmentPage() {
                   <button
                     type="button"
                     onClick={() => setPatientMrn(generateMrn())}
-                    className="flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-700 uppercase tracking-wider cursor-pointer"
+                    className="flex items-center gap-1 text-[10px] font-bold text-[#5548E8] hover:text-[#463AD4] uppercase tracking-wider cursor-pointer"
                     title="Mint a new MRN if your institution doesn't issue one"
                   >
                     <Sparkles size={12} />
@@ -433,7 +433,7 @@ export default function NewTreatmentPage() {
                   data-extraction-origin={extractedFields.has("patient.mrn") ? "vision" : undefined}
                   data-extraction-confidence={lowConfidenceAttribute(lowConfidenceFields, "patient.mrn")}
                   title={lowConfidenceTitle(lowConfidenceFields, "patient.mrn")}
-                  className={`px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none ${fieldErrors.mrn ? "border-red-400" : extractionFieldClass(extractedFields, lowConfidenceFields, "patient.mrn", "border-slate-200")}`}
+                  className={`px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-[#D9D5FB] outline-none ${fieldErrors.mrn ? "border-red-400" : extractionFieldClass(extractedFields, lowConfidenceFields, "patient.mrn", "border-slate-200")}`}
                 />
                 {fieldErrors.mrn && <span className="text-[11px] text-red-600">{fieldErrors.mrn}</span>}
               </div>
@@ -451,7 +451,7 @@ export default function NewTreatmentPage() {
                   data-extraction-origin={extractedFields.has("patient.phone") ? "vision" : undefined}
                   data-extraction-confidence={lowConfidenceAttribute(lowConfidenceFields, "patient.phone")}
                   title={lowConfidenceTitle(lowConfidenceFields, "patient.phone")}
-                  className={`px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none ${fieldErrors.phone ? "border-red-400" : extractionFieldClass(extractedFields, lowConfidenceFields, "patient.phone", "border-slate-200")}`}
+                  className={`px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-[#D9D5FB] outline-none ${fieldErrors.phone ? "border-red-400" : extractionFieldClass(extractedFields, lowConfidenceFields, "patient.phone", "border-slate-200")}`}
                 />
                 {fieldErrors.phone && <span className="text-[11px] text-red-600">{fieldErrors.phone}</span>}
               </div>
@@ -464,7 +464,7 @@ export default function NewTreatmentPage() {
                     onChange={(e) => setAllergyDraft(e.target.value)}
                     onKeyDown={handleAllergyKeyDown}
                     placeholder="e.g. Penicillin"
-                    className={`min-w-0 flex-1 px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-blue-100 outline-none ${fieldErrors.allergies ? "border-red-400" : "border-slate-200"}`}
+                    className={`min-w-0 flex-1 px-4 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-[#D9D5FB] outline-none ${fieldErrors.allergies ? "border-red-400" : "border-slate-200"}`}
                   />
                   <button
                     type="button"
@@ -515,16 +515,16 @@ export default function NewTreatmentPage() {
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Source Document Ingestion</span>
                   <div className="flex items-center gap-3 text-slate-400">
-                    <button className="hover:text-blue-600 transition-colors cursor-pointer"><Search size={16} /></button>
-                    <button className="hover:text-blue-600 transition-colors cursor-pointer"><ZoomIn size={16} /></button>
-                    <button className="hover:text-blue-600 transition-colors cursor-pointer"><ZoomOut size={16} /></button>
+                    <button className="hover:text-[#5548E8] transition-colors cursor-pointer"><Search size={16} /></button>
+                    <button className="hover:text-[#5548E8] transition-colors cursor-pointer"><ZoomIn size={16} /></button>
+                    <button className="hover:text-[#5548E8] transition-colors cursor-pointer"><ZoomOut size={16} /></button>
                   </div>
                 </div>
                 
                 <div className="flex gap-4">
                   <button
                     onClick={() => setMethod("vision")}
-                    className={`flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer ${method === "vision" ? "text-blue-600 border-b-2 border-blue-600 rounded-none" : "text-slate-400 hover:text-slate-600"}`}
+                    className={`flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer ${method === "vision" ? "text-[#5548E8] border-b-2 border-[#5548E8] rounded-none" : "text-slate-400 hover:text-slate-600"}`}
                   >
                     <Upload size={14} />
                     Vision
@@ -541,7 +541,7 @@ export default function NewTreatmentPage() {
                   </button>
                   <button
                     onClick={() => setMethod("structured")}
-                    className={`flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer ${method === "structured" ? "text-blue-600 border-b-2 border-blue-600 rounded-none" : "text-slate-400 hover:text-slate-600"}`}
+                    className={`flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer ${method === "structured" ? "text-[#5548E8] border-b-2 border-[#5548E8] rounded-none" : "text-slate-400 hover:text-slate-600"}`}
                   >
                     <ClipboardList size={14} />
                     Form
@@ -560,14 +560,14 @@ export default function NewTreatmentPage() {
                     <div
                       aria-label="Drop prescription file"
                       className={`flex-1 border-2 border-dashed rounded-[32px] flex flex-col items-center justify-center p-12 transition-all group cursor-pointer ${
-                        dragActive ? 'border-blue-500 bg-blue-50/50' : 'border-slate-200 bg-white hover:border-blue-400 hover:bg-slate-50/50'
+                        dragActive ? 'border-[#5548E8] bg-[#F0EFFF]' : 'border-slate-200 bg-white hover:border-[#5548E8] hover:bg-slate-50/50'
                       }`}
                       onDragEnter={() => setDragActive(true)}
                       onDragLeave={() => setDragActive(false)}
                       onDrop={handleVisionDrop}
                       onDragOver={(e) => e.preventDefault()}
                     >
-                      <div className="w-20 h-20 bg-slate-50 text-slate-400 rounded-3xl flex items-center justify-center mb-6 group-hover:bg-blue-100 group-hover:text-blue-600 transition-all shadow-inner">
+                      <div className="w-20 h-20 bg-slate-50 text-slate-400 rounded-3xl flex items-center justify-center mb-6 group-hover:bg-[#F0EFFF] group-hover:text-[#5548E8] transition-all shadow-inner">
                         <Upload size={32} />
                       </div>
                       <div className="text-center space-y-2">
@@ -594,7 +594,7 @@ export default function NewTreatmentPage() {
                       <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col gap-4">
                         <div className="flex items-center justify-between gap-4">
                           <div className="min-w-0 flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center shrink-0">
+                            <div className="w-10 h-10 rounded-xl bg-[#F0EFFF] text-[#5548E8] border border-[#D9D5FB] flex items-center justify-center shrink-0">
                               <FileText size={18} />
                             </div>
                             <div className="min-w-0">
@@ -606,7 +606,7 @@ export default function NewTreatmentPage() {
                               </p>
                             </div>
                           </div>
-                          <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider bg-blue-50 border border-blue-100 rounded-full px-2.5 py-1">
+                          <span className="text-[10px] font-bold text-[#463AD4] uppercase tracking-wider bg-[#F0EFFF] border border-[#D9D5FB] rounded-full px-2.5 py-1">
                             Ready
                           </span>
                         </div>
@@ -660,9 +660,9 @@ export default function NewTreatmentPage() {
                       </div>
                     )}
 
-                    <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 flex items-start gap-3">
-                      <AlertCircle size={16} className="text-blue-600 shrink-0 mt-0.5" />
-                      <p className="text-[11px] text-blue-700 font-semibold leading-relaxed">
+                    <div className="bg-[#F0EFFF] border border-[#D9D5FB] rounded-2xl p-4 flex items-start gap-3">
+                      <AlertCircle size={16} className="text-[#5548E8] shrink-0 mt-0.5" />
+                      <p className="text-[11px] text-[#463AD4] font-semibold leading-relaxed">
                         For maximum extraction accuracy, ensure the document is well-lit and all clinical sign-offs (DEA, Signature) are clearly visible.
                       </p>
                     </div>
@@ -677,9 +677,9 @@ export default function NewTreatmentPage() {
                     </div>
                     <textarea 
                       placeholder="Paste prescription text, clinical notes, or regimen details here..."
-                      className="flex-1 w-full p-8 bg-white border border-slate-200 rounded-3xl text-slate-700 focus:outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-500 transition-all resize-none shadow-inner font-mono text-base leading-relaxed"
+                      className="flex-1 w-full p-8 bg-white border border-slate-200 rounded-3xl text-slate-700 focus:outline-none focus:ring-4 focus:ring-[#D9D5FB] focus:border-[#5548E8] transition-all resize-none shadow-inner font-mono text-base leading-relaxed"
                     />
-                    <button className="py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition-all cursor-pointer text-[11px] uppercase tracking-wider">
+                    <button className="py-3 bg-[#5548E8] text-white rounded-lg font-bold hover:bg-[#463AD4] transition-all cursor-pointer text-[11px] uppercase tracking-wider">
                       Extract Clinical Entities
                     </button>
                   </div>
@@ -691,7 +691,7 @@ export default function NewTreatmentPage() {
                       <h3 className="font-bold text-slate-900">Manual Regimen Entry</h3>
                       <button 
                         onClick={addMedication}
-                        className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-blue-600 hover:text-white transition-all shadow-sm cursor-pointer"
+                        className="px-3 py-1.5 bg-[#F0EFFF] text-[#5548E8] rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-[#5548E8] hover:text-white transition-all shadow-sm cursor-pointer"
                       >
                         <Plus size={14} />
                         Add Medication
@@ -717,7 +717,7 @@ export default function NewTreatmentPage() {
                                 data-extraction-origin={extractedFields.has(medicationFieldKey(med.id, "name")) ? "vision" : undefined}
                                 data-extraction-confidence={lowConfidenceAttribute(lowConfidenceFields, medicationFieldKey(med.id, "name"))}
                                 title={lowConfidenceTitle(lowConfidenceFields, medicationFieldKey(med.id, "name"))}
-                                className={`w-full px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all ${extractionFieldClass(extractedFields, lowConfidenceFields, medicationFieldKey(med.id, "name"), "bg-slate-50 border-slate-200")}`}
+                                className={`w-full px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#D9D5FB] focus:border-[#5548E8] transition-all ${extractionFieldClass(extractedFields, lowConfidenceFields, medicationFieldKey(med.id, "name"), "bg-slate-50 border-slate-200")}`}
                                 value={med.name}
                                 onChange={(e) => updateMedication(med.id, { name: e.target.value })}
                               />
@@ -729,7 +729,7 @@ export default function NewTreatmentPage() {
                                 data-extraction-origin={extractedFields.has(medicationFieldKey(med.id, "dosage")) ? "vision" : undefined}
                                 data-extraction-confidence={lowConfidenceAttribute(lowConfidenceFields, medicationFieldKey(med.id, "dosage"))}
                                 title={lowConfidenceTitle(lowConfidenceFields, medicationFieldKey(med.id, "dosage"))}
-                                className={`w-full px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all ${extractionFieldClass(extractedFields, lowConfidenceFields, medicationFieldKey(med.id, "dosage"), "bg-slate-50 border-slate-200")}`}
+                                className={`w-full px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#D9D5FB] focus:border-[#5548E8] transition-all ${extractionFieldClass(extractedFields, lowConfidenceFields, medicationFieldKey(med.id, "dosage"), "bg-slate-50 border-slate-200")}`}
                                 value={med.dosage}
                                 onChange={(e) => updateMedication(med.id, { dosage: e.target.value })}
                               />
@@ -745,7 +745,7 @@ export default function NewTreatmentPage() {
                                 data-extraction-origin={extractedFields.has(medicationFieldKey(med.id, "frequency")) ? "vision" : undefined}
                                 data-extraction-confidence={lowConfidenceAttribute(lowConfidenceFields, medicationFieldKey(med.id, "frequency"))}
                                 title={lowConfidenceTitle(lowConfidenceFields, medicationFieldKey(med.id, "frequency"))}
-                                className={`w-full px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all ${extractionFieldClass(extractedFields, lowConfidenceFields, medicationFieldKey(med.id, "frequency"), "bg-slate-50 border-slate-200")}`}
+                                className={`w-full px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#D9D5FB] focus:border-[#5548E8] transition-all ${extractionFieldClass(extractedFields, lowConfidenceFields, medicationFieldKey(med.id, "frequency"), "bg-slate-50 border-slate-200")}`}
                                 value={med.frequency}
                                 onChange={(e) => updateMedication(med.id, { frequency: e.target.value })}
                               />
@@ -757,7 +757,7 @@ export default function NewTreatmentPage() {
                                 data-extraction-origin={extractedFields.has(medicationFieldKey(med.id, "duration")) ? "vision" : undefined}
                                 data-extraction-confidence={lowConfidenceAttribute(lowConfidenceFields, medicationFieldKey(med.id, "duration"))}
                                 title={lowConfidenceTitle(lowConfidenceFields, medicationFieldKey(med.id, "duration"))}
-                                className={`w-full px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all ${extractionFieldClass(extractedFields, lowConfidenceFields, medicationFieldKey(med.id, "duration"), "bg-slate-50 border-slate-200")}`}
+                                className={`w-full px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#D9D5FB] focus:border-[#5548E8] transition-all ${extractionFieldClass(extractedFields, lowConfidenceFields, medicationFieldKey(med.id, "duration"), "bg-slate-50 border-slate-200")}`}
                                 value={med.duration}
                                 onChange={(e) => updateMedication(med.id, { duration: e.target.value })}
                               />
@@ -774,7 +774,7 @@ export default function NewTreatmentPage() {
                     <button
                       type="button"
                       onClick={addMedication}
-                      className="w-full py-3 border-2 border-dashed border-slate-200 hover:border-blue-400 hover:bg-blue-50/40 text-slate-500 hover:text-blue-700 rounded-2xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer"
+                      className="w-full py-3 border-2 border-dashed border-slate-200 hover:border-[#5548E8] hover:bg-[#F0EFFF] text-slate-500 hover:text-[#463AD4] rounded-2xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer"
                     >
                       <Plus size={14} />
                       Add another medication
@@ -825,9 +825,9 @@ export default function NewTreatmentPage() {
                 )}
 
                 {medications.map((med, i) => (
-                  <div key={med.id} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3 relative group transition-all hover:bg-white hover:border-blue-200">
+                  <div key={med.id} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3 relative group transition-all hover:bg-white hover:border-[#D9D5FB]">
                     <div className="flex justify-between items-center border-b border-slate-100 pb-2 mb-2">
-                      <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Medication #{i+1}</span>
+                      <span className="text-[10px] font-bold text-[#5548E8] uppercase tracking-wider">Medication #{i+1}</span>
                     </div>
                     <div className="flex flex-col gap-1">
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Name & Strength</p>
@@ -838,7 +838,7 @@ export default function NewTreatmentPage() {
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Regimen</p>
                         <p className="text-xs text-slate-600 font-medium">{med.frequency} • {med.duration || "N/A"}</p>
                       </div>
-                      <button className="text-slate-300 hover:text-blue-600 transition-colors cursor-pointer">
+                      <button className="text-slate-300 hover:text-[#5548E8] transition-colors cursor-pointer">
                         <Edit3 size={14} />
                       </button>
                     </div>
@@ -861,7 +861,7 @@ export default function NewTreatmentPage() {
                     type="datetime-local"
                     value={treatmentStartAt}
                     onChange={(e) => setTreatmentStartAt(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all"
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#D9D5FB] focus:border-[#5548E8] transition-all"
                   />
                   <p className="text-[11px] text-slate-500 px-1">
                     Used to anchor planned reminders and follow-up timing once monitoring starts.
@@ -884,7 +884,7 @@ export default function NewTreatmentPage() {
                     data-extraction-origin={extractedFields.has("treatment.clinical_objective") ? "vision" : undefined}
                     data-extraction-confidence={lowConfidenceAttribute(lowConfidenceFields, "treatment.clinical_objective")}
                     title={lowConfidenceTitle(lowConfidenceFields, "treatment.clinical_objective")}
-                    className={`w-full pl-4 pr-10 py-3 border rounded-xl text-sm min-h-[80px] focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all resize-none ${extractionFieldClass(extractedFields, lowConfidenceFields, "treatment.clinical_objective", "bg-slate-50 border-slate-200")}`}
+                    className={`w-full pl-4 pr-10 py-3 border rounded-xl text-sm min-h-[80px] focus:outline-none focus:ring-2 focus:ring-[#D9D5FB] focus:border-[#5548E8] transition-all resize-none ${extractionFieldClass(extractedFields, lowConfidenceFields, "treatment.clinical_objective", "bg-slate-50 border-slate-200")}`}
                   />
                   <p className="text-[11px] text-slate-500 px-1">
                     Used to focus the agent's check-in questions throughout the treatment cycle.
@@ -1279,7 +1279,7 @@ function ConfirmTreatmentModal({
                 {medications.map((m, i) => (
                   <div key={m.id} className="bg-slate-50 border border-slate-100 rounded-xl p-4 text-sm">
                     <div className="flex items-baseline justify-between mb-1">
-                      <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">#{i + 1}</span>
+                      <span className="text-[10px] font-bold text-[#5548E8] uppercase tracking-wider">#{i + 1}</span>
                       <span className="font-bold text-slate-900">{m.name} {m.dosage}</span>
                     </div>
                     <div className="text-xs text-slate-600 text-right">

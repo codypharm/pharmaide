@@ -62,7 +62,7 @@ function Header() {
   return (
     <div className="flex items-center justify-between gap-4">
       <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F0EFFF] text-[#5548E8]">
           <Database size={20} />
         </div>
         <div>

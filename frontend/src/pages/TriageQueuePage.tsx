@@ -346,7 +346,7 @@ function Header({
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-red-50 text-red-700 rounded-xl flex items-center justify-center">
+        <div className="w-10 h-10 bg-[#F0EFFF] text-[#5548E8] rounded-xl flex items-center justify-center">
           <ShieldAlert size={20} />
         </div>
         <div>

@@ -275,7 +275,7 @@ function PatientUpdatesCard({
                 id="patient-update-type"
                 value={reportType}
                 onChange={(event) => setReportType(event.target.value as PatientCheckInReportType)}
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-[#5548E8] focus:outline-none focus:ring-2 focus:ring-[#D9D5FB]"
               >
                 {REPORT_TYPE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -296,7 +296,7 @@ function PatientUpdatesCard({
                 value={message}
                 onChange={(event) => setMessage(event.target.value)}
                 placeholder="e.g. Patient reports dizziness after the morning dose."
-                className="mt-1 min-h-28 w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                className="mt-1 min-h-28 w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-[#5548E8] focus:outline-none focus:ring-2 focus:ring-[#D9D5FB]"
               />
             </div>
             <div>
@@ -311,7 +311,7 @@ function PatientUpdatesCard({
                 type="datetime-local"
                 value={observedAt}
                 onChange={(event) => setObservedAt(event.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-[#5548E8] focus:outline-none focus:ring-2 focus:ring-[#D9D5FB]"
               />
             </div>
             {saveError && <p className="text-sm text-red-700">{saveError}</p>}
@@ -379,7 +379,7 @@ function Header() {
   return (
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center shadow-sm">
+        <div className="w-10 h-10 bg-[#F0EFFF] text-[#5548E8] rounded-xl flex items-center justify-center shadow-sm">
           <ClipboardList size={20} />
         </div>
         <div>
@@ -767,7 +767,7 @@ function SourcesList({ citations }: { citations: KBCitation[] }) {
                 <div>
                   <Link
                     to={`/dashboard/knowledge/${citation.document_id}`}
-                    className="text-sm font-bold text-slate-900 hover:text-blue-700"
+                    className="text-sm font-bold text-slate-900 hover:text-[#5548E8]"
                   >
                     {citation.document_title}
                   </Link>

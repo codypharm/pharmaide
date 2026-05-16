@@ -100,13 +100,18 @@ export default function AdherenceHeatmapsPage() {
     <div className="h-full overflow-y-auto p-8 bg-[#F5F5F6]">
       <div className="flex flex-col gap-6 w-full">
         <header className="flex items-center justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight text-slate-900 mb-1">
-              Adherence
-            </h2>
-            <p className="text-sm text-slate-500 font-medium">
-              Real adherence events recorded from patient check-ins and reminder state.
-            </p>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-[#F0EFFF] text-[#5548E8] rounded-xl flex items-center justify-center">
+              <Calendar size={20} />
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold tracking-tight text-slate-900 mb-1">
+                Adherence
+              </h2>
+              <p className="text-sm text-slate-500 font-medium">
+                Real adherence events recorded from patient check-ins and reminder state.
+              </p>
+            </div>
           </div>
           <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
             <Calendar size={14} />
