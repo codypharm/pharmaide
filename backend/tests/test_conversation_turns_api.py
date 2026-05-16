@@ -475,6 +475,12 @@ async def test_post_patient_reply_draft_holds_when_safety_blocks(
     assert payload["assistant_message"]["safety_hold_reason"] == "input_guard"
     assert payload["safety_decision"]["status"] == "hold_for_pharmacist"
 
+    triage = await app_client.get("/triage/items")
+    assert triage.status_code == 200, triage.text
+    item = triage.json()["items"][0]
+    assert item["conversation_message_id"] == payload["assistant_message"]["id"]
+    assert item["status"] == "open"
+
 
 @pytest.mark.usefixtures("postgres_container")
 async def test_post_patient_reply_draft_uses_holding_response_during_pharmacist_takeover(

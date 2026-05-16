@@ -182,6 +182,19 @@ const SENT_ASSISTANT_MESSAGE = {
   created_at: "2026-05-15T10:04:00Z",
 };
 
+const READY_ASSISTANT_MESSAGE = {
+  id: "msg-ready",
+  treatment_id: TREATMENTS.items[0].treatment.id,
+  direction: "outbound" as const,
+  sender_type: "assistant" as const,
+  channel: "whatsapp" as const,
+  status: "draft_ready" as const,
+  body: "Your pharmacist is reviewing this and will update you.",
+  safety_hold_reason: null,
+  external_message_id: null,
+  created_at: "2026-05-15T10:04:30Z",
+};
+
 const FAILED_PHARMACIST_MESSAGE = {
   id: "msg-failed",
   treatment_id: TREATMENTS.items[0].treatment.id,
@@ -342,7 +355,9 @@ describe("PatientManagementPage", () => {
     const user = userEvent.setup();
     vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue(TREATMENTS);
     vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(DETAIL);
-    vi.spyOn(triageApi, "listTriageItems").mockResolvedValue(TRIAGE_ITEMS);
+    vi.spyOn(triageApi, "listTriageItems")
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValueOnce(TRIAGE_ITEMS);
     vi.spyOn(treatmentsApi, "listConversationMessages")
       .mockResolvedValueOnce(MESSAGES)
       .mockResolvedValueOnce({
@@ -370,6 +385,23 @@ describe("PatientManagementPage", () => {
     expect(toast.success).toHaveBeenCalledWith("Draft held for pharmacist review", {
       description: "The item is now available in the triage queue.",
     });
+    expect(screen.getByText("Held, not sent")).toBeTruthy();
+    expect(screen.getByText("1 flag")).toBeTruthy();
+  });
+
+  it("marks ready assistant drafts as not sent in the internal chat log", async () => {
+    vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue(TREATMENTS);
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(DETAIL);
+    vi.spyOn(treatmentsApi, "listConversationMessages").mockResolvedValue({
+      items: [...MESSAGES.items, READY_ASSISTANT_MESSAGE],
+    });
+    vi.spyOn(triageApi, "listTriageItems").mockResolvedValue({ items: [] });
+
+    renderPage();
+
+    await screen.findByText("Your pharmacist is reviewing this and will update you.");
+    expect(screen.getByText("Ready, not sent")).toBeTruthy();
+    expect(screen.queryByText("1 flag")).toBeNull();
   });
 
   it("queues a pharmacist WhatsApp message from the chat panel", async () => {

@@ -1340,6 +1340,12 @@ function deliveryStatusBadge(
       className: "border-slate-200 bg-slate-50 text-slate-600",
     };
   }
+  if (status === "draft_ready") {
+    return {
+      label: "Ready, not sent",
+      className: "border-slate-200 bg-slate-50 text-slate-600",
+    };
+  }
   if (status === "sent") {
     return {
       label: "Sent",
