@@ -19,6 +19,7 @@ import { ApiError } from "../api/client";
 import {
   draftPatientReply,
   getTreatment,
+  listPatientCheckIns,
   listConversationMessages,
   listTreatments,
   retryConversationMessageDelivery,
@@ -27,6 +28,9 @@ import {
   type ConversationMessageList,
   type ConversationMessageStatus,
   type ConversationMessageView,
+  type PatientCheckInList,
+  type PatientCheckInReportType,
+  type PatientCheckInView,
   type TreatmentDetail,
   type TreatmentListItem,
   type TreatmentView,
@@ -58,6 +62,12 @@ type TreatmentDetailState =
   | { kind: "ok"; data: TreatmentDetail }
   | { kind: "error"; requestId: string | null };
 
+type PatientUpdatesState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "ok"; items: PatientCheckInView[] }
+  | { kind: "error"; requestId: string | null };
+
 type PatientTreatmentGroup = {
   patientId: string;
   items: TreatmentListItem[];
@@ -72,6 +82,14 @@ const TRIAGE_REASON_LABELS: Record<TriageReason, string> = {
   output_guard: "Response safety review",
   adverse_event: "Possible adverse event",
   non_responsive: "Patient follow-up needed",
+};
+
+const PATIENT_UPDATE_LABELS: Record<PatientCheckInReportType, string> = {
+  not_improving: "Not Improving",
+  side_effect: "Side Effect",
+  feeling_better: "Feeling Better",
+  general_update: "General Update",
+  missed_dose: "Missed Dose",
 };
 
 function formatDateTime(iso: string): string {
@@ -133,6 +151,9 @@ export default function PatientManagementPage() {
   const [treatmentDetailState, setTreatmentDetailState] = useState<TreatmentDetailState>({
     kind: "idle",
   });
+  const [patientUpdatesState, setPatientUpdatesState] = useState<PatientUpdatesState>({
+    kind: "idle",
+  });
   const [triageItems, setTriageItems] = useState<TriageItemView[]>([]);
   const [selectedTreatmentId, setSelectedTreatmentId] = useState<string | null>(null);
   const [activeProfileTab, setActiveProfileTab] = useState<"patient" | "reasoning">("patient");
@@ -185,6 +206,7 @@ export default function PatientManagementPage() {
     if (!selectedTreatmentId) {
       setConversationState({ kind: "idle" });
       setTreatmentDetailState({ kind: "idle" });
+      setPatientUpdatesState({ kind: "idle" });
       setConversationLastUpdatedAt(null);
       return;
     }
@@ -192,6 +214,7 @@ export default function PatientManagementPage() {
     let cancelled = false;
     setConversationState({ kind: "loading" });
     setTreatmentDetailState({ kind: "loading" });
+    setPatientUpdatesState({ kind: "loading" });
 
     getTreatment(selectedTreatmentId)
       .then((res) => {
@@ -220,6 +243,19 @@ export default function PatientManagementPage() {
         });
       });
 
+    listPatientCheckIns(selectedTreatmentId)
+      .then((res) => {
+        if (cancelled) return;
+        setPatientUpdatesState({ kind: "ok", items: res.items });
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setPatientUpdatesState({
+          kind: "error",
+          requestId: err instanceof ApiError ? err.requestId : null,
+        });
+      });
+
     return () => {
       cancelled = true;
     };
@@ -231,14 +267,16 @@ export default function PatientManagementPage() {
     let cancelled = false;
     const refresh = async () => {
       try {
-        const [conversation, triage] = await Promise.all([
+        const [conversation, triage, patientUpdates] = await Promise.all([
           listConversationMessages(selectedTreatmentId, { limit: 100, offset: 0 }),
           listTriageItems({ limit: PAGE_SIZE, offset: 0 }),
+          listPatientCheckIns(selectedTreatmentId),
         ]);
         if (cancelled) return;
         setConversationState({ kind: "ok", items: conversation.items });
         setConversationLastUpdatedAt(new Date());
         setTriageItems(triage.items);
+        setPatientUpdatesState({ kind: "ok", items: patientUpdates.items });
       } catch {
         // Keep the current view visible during transient polling failures.
       }
@@ -287,6 +325,12 @@ export default function PatientManagementPage() {
     return res;
   }
 
+  async function refreshPatientUpdates(treatmentId: string): Promise<PatientCheckInList> {
+    const res = await listPatientCheckIns(treatmentId);
+    setPatientUpdatesState({ kind: "ok", items: res.items });
+    return res;
+  }
+
   async function submitIncomingMessage() {
     if (!selectedTreatment || isSubmittingMessage) return;
 
@@ -303,6 +347,7 @@ export default function PatientManagementPage() {
       });
       setIncomingMessage("");
       await refreshConversation(selectedTreatment.treatment.id);
+      await refreshPatientUpdates(selectedTreatment.treatment.id);
       await refreshTriageItems();
 
       if (turn.assistant_message.status === "held_for_review") {
@@ -479,6 +524,7 @@ export default function PatientManagementPage() {
                 item={selectedTreatment}
                 activeTriageItems={selectedTreatmentTriageItems}
                 treatmentDetailState={treatmentDetailState}
+                patientUpdatesState={patientUpdatesState}
               />
               <InteractionLog
                 activeProfileTab={activeProfileTab}
@@ -680,10 +726,12 @@ function ClinicalWorkspace({
   item,
   activeTriageItems,
   treatmentDetailState,
+  patientUpdatesState,
 }: {
   item: TreatmentListItem;
   activeTriageItems: TriageItemView[];
   treatmentDetailState: TreatmentDetailState;
+  patientUpdatesState: PatientUpdatesState;
 }) {
   return (
     <div className="flex-1 overflow-y-auto p-8 flex flex-col gap-6">
@@ -710,6 +758,8 @@ function ClinicalWorkspace({
 
       <MedicationsPanel state={treatmentDetailState} />
 
+      <PatientUpdatesPanel state={patientUpdatesState} />
+
       <section className="bg-white border border-slate-200 rounded-2xl p-6">
         <div className="flex items-center gap-2 mb-5">
           <Zap size={18} className="text-slate-400" />
@@ -721,6 +771,64 @@ function ClinicalWorkspace({
         </p>
       </section>
     </div>
+  );
+}
+
+function PatientUpdatesPanel({ state }: { state: PatientUpdatesState }) {
+  if (state.kind === "idle" || state.kind === "loading") {
+    return (
+      <section className="bg-white border border-slate-200 rounded-2xl p-6">
+        <h3 className="font-bold text-slate-900">Patient Updates</h3>
+        <div className="mt-4 flex items-center gap-2 text-sm text-slate-500">
+          <Loader2 size={16} className="animate-spin" />
+          Loading patient updates...
+        </div>
+      </section>
+    );
+  }
+
+  if (state.kind === "error") {
+    return (
+      <section className="bg-white border border-amber-200 rounded-2xl p-6">
+        <h3 className="font-bold text-slate-900">Patient Updates</h3>
+        <p className="mt-4 text-sm text-slate-600">
+          Could not load patient updates. Reference ID: <code>{state.requestId ?? "unknown"}</code>
+        </p>
+      </section>
+    );
+  }
+
+  if (state.items.length === 0) {
+    return (
+      <section className="bg-white border border-slate-200 rounded-2xl p-6">
+        <h3 className="font-bold text-slate-900">Patient Updates</h3>
+        <p className="mt-4 text-sm text-slate-500">No patient updates recorded.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="bg-white border border-slate-200 rounded-2xl p-6">
+      <h3 className="font-bold text-slate-900">Patient Updates</h3>
+      <div className="mt-4 divide-y divide-slate-100">
+        {state.items.map((update) => (
+          <article key={update.id} className="py-3 first:pt-0 last:pb-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-700">
+                {PATIENT_UPDATE_LABELS[update.report_type]}
+              </span>
+              <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                {statusLabel(update.source)}
+              </span>
+              <span className="text-[11px] font-medium text-slate-400">
+                {formatDateTime(update.observed_at ?? update.created_at)}
+              </span>
+            </div>
+            <p className="mt-2 text-sm leading-6 text-slate-700">{update.message}</p>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 

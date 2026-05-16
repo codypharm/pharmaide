@@ -2,13 +2,14 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import { toast } from "sonner";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as treatmentsApi from "../../api/treatments";
 import * as triageApi from "../../api/triage";
 import type {
   ConversationMessageList,
   ConversationTurnView,
+  PatientCheckInList,
   TreatmentDetail,
   TreatmentList,
 } from "../../api/treatments";
@@ -207,6 +208,33 @@ const TRIAGE_ITEMS: TriageItemList = {
   ],
 };
 
+const PATIENT_UPDATES: PatientCheckInList = {
+  items: [
+    {
+      id: "check-in-1",
+      treatment_id: TREATMENTS.items[0].treatment.id,
+      report_type: "not_improving",
+      source: "patient",
+      message: "Pain has not improved since yesterday.",
+      observed_at: "2026-05-15T08:30:00Z",
+      created_at: "2026-05-15T10:10:00Z",
+    },
+    {
+      id: "check-in-2",
+      treatment_id: TREATMENTS.items[0].treatment.id,
+      report_type: "side_effect",
+      source: "pharmacist",
+      message: "Patient reported mild dizziness during callback.",
+      observed_at: null,
+      created_at: "2026-05-15T10:20:00Z",
+    },
+  ],
+};
+
+const EMPTY_PATIENT_UPDATES: PatientCheckInList = {
+  items: [],
+};
+
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={["/dashboard/surveillance"]}>
@@ -219,6 +247,10 @@ function renderPage() {
   );
 }
 
+beforeEach(() => {
+  vi.spyOn(treatmentsApi, "listPatientCheckIns").mockResolvedValue(EMPTY_PATIENT_UPDATES);
+});
+
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
@@ -230,6 +262,7 @@ describe("PatientManagementPage", () => {
     vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue(TREATMENTS);
     vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(DETAIL);
     vi.spyOn(treatmentsApi, "listConversationMessages").mockResolvedValue(MESSAGES);
+    vi.spyOn(treatmentsApi, "listPatientCheckIns").mockResolvedValue(PATIENT_UPDATES);
     vi.spyOn(triageApi, "listTriageItems").mockResolvedValue(TRIAGE_ITEMS);
 
     renderPage();
@@ -246,6 +279,13 @@ describe("PatientManagementPage", () => {
     expect(screen.getByText("10mg")).toBeTruthy();
     expect(screen.getByText("Amlodipine")).toBeTruthy();
     expect(await screen.findByText("Needs pharmacist review")).toBeTruthy();
+    expect(await screen.findByText("Patient Updates")).toBeTruthy();
+    expect(screen.getByText("Pain has not improved since yesterday.")).toBeTruthy();
+    expect(screen.getByText("Not Improving")).toBeTruthy();
+    expect(screen.getByText("Patient")).toBeTruthy();
+    expect(screen.getByText("Patient reported mild dizziness during callback.")).toBeTruthy();
+    expect(screen.getByText("Side Effect")).toBeTruthy();
+    expect(screen.getByText("Pharmacist")).toBeTruthy();
     expect(screen.getByText("Clinical draft review")).toBeTruthy();
     expect(screen.getByRole("link", { name: /open triage queue/i })).toHaveAttribute(
       "href",
