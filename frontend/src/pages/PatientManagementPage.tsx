@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertCircle,
@@ -1206,6 +1206,17 @@ function ConversationMessages({
   retryingMessageId: string | null;
   onRetryMessageDelivery: (messageId: string) => void;
 }) {
+  const latestMessageRef = useRef<HTMLDivElement | null>(null);
+  const messageCount = state.kind === "ok" ? state.items.length : 0;
+
+  useEffect(() => {
+    if (messageCount === 0) return;
+    latestMessageRef.current?.scrollIntoView({
+      block: "end",
+      behavior: "auto",
+    });
+  }, [messageCount]);
+
   if (state.kind === "idle") {
     return <p className="text-sm text-slate-500">Select a treatment to load messages.</p>;
   }
@@ -1248,6 +1259,7 @@ function ConversationMessages({
           onRetryMessageDelivery={onRetryMessageDelivery}
         />
       ))}
+      <div ref={latestMessageRef} aria-hidden="true" />
     </div>
   );
 }

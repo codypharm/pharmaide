@@ -271,6 +271,28 @@ afterEach(() => {
 });
 
 describe("PatientManagementPage", () => {
+  it("scrolls patient-facing chat to the latest message after loading", async () => {
+    const scrollIntoView = vi.fn();
+    window.HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue(TREATMENTS);
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(DETAIL);
+    vi.spyOn(treatmentsApi, "listConversationMessages").mockResolvedValue({
+      items: [...MESSAGES.items, SENT_ASSISTANT_MESSAGE],
+    });
+    vi.spyOn(triageApi, "listTriageItems").mockResolvedValue({ items: [] });
+
+    renderPage();
+
+    await screen.findByText("Please take the next dose with water.");
+
+    await waitFor(() =>
+      expect(scrollIntoView).toHaveBeenCalledWith({
+        block: "end",
+        behavior: "auto",
+      }),
+    );
+  });
+
   it("loads treatments and conversation messages from the API", async () => {
     vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue(TREATMENTS);
     vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(DETAIL);
