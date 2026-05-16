@@ -327,6 +327,8 @@ describe("PatientManagementPage", () => {
     expect(await screen.findByRole("columnheader", { name: "Dosage" })).toBeTruthy();
     expect(screen.getByText("10mg")).toBeTruthy();
     expect(screen.getByText("Amlodipine")).toBeTruthy();
+    expect(screen.getByText("Amlodipine").closest("td")).toHaveAttribute("title", "Amlodipine");
+    expect(screen.getByText("Amlodipine").closest("td")?.className).toContain("break-words");
     expect(await screen.findByText("Needs pharmacist review")).toBeTruthy();
     expect(await screen.findByText("Patient Updates")).toBeTruthy();
     expect(screen.getByText("Pain has not improved since yesterday.")).toBeTruthy();

@@ -1024,11 +1024,11 @@ function MedicationsPanel({ state }: { state: TreatmentDetailState }) {
     <section className="min-h-0 flex-1 bg-white border border-slate-200 rounded-2xl p-6 flex flex-col">
       <h3 className="shrink-0 font-bold text-slate-900">Medications</h3>
       <div className="mt-4 min-h-0 flex-1 overflow-auto">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[760px] table-fixed text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-500">
               <th className="w-12 py-2 pr-4 text-left">#</th>
-              <th className="py-2 pr-4 text-left">Name</th>
+              <th className="w-[22%] py-2 pr-4 text-left">Name</th>
               <th className="py-2 pr-4 text-left">Dosage</th>
               <th className="py-2 pr-4 text-left">Frequency</th>
               <th className="py-2 pr-4 text-left">Duration</th>
@@ -1041,7 +1041,12 @@ function MedicationsPanel({ state }: { state: TreatmentDetailState }) {
                 <td className="py-2 pr-4 tabular-nums text-slate-500">
                   {medication.ordinal + 1}
                 </td>
-                <td className="py-2 pr-4 font-semibold text-slate-900">{medication.name}</td>
+                <td
+                  className="py-2 pr-4 font-semibold leading-5 text-slate-900 whitespace-normal break-words"
+                  title={medication.name}
+                >
+                  {medication.name}
+                </td>
                 <td className="py-2 pr-4 tabular-nums text-slate-700">{medication.dosage}</td>
                 <td className="py-2 pr-4 text-slate-700">{medication.frequency}</td>
                 <td className="py-2 pr-4 tabular-nums text-slate-700">{medication.duration}</td>
