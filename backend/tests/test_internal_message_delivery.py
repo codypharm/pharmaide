@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import AuditLogEntry, ConversationMessage
-from app.services import task_runner
+from app.services import message_delivery, task_runner
 
 
 @pytest.fixture(autouse=True)
@@ -74,6 +74,67 @@ async def test_run_message_delivery_returns_zero_when_no_messages_are_queued(
         "sent_count": 0,
         "failed_count": 0,
     }
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_run_message_delivery_marks_message_failed_when_provider_fails(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    treatment_id = await _create_treatment(app_client, "DELIVERY-002")
+    queued = await app_client.post(
+        f"/treatments/{treatment_id}/pharmacist-messages",
+        json={"message": "Please call the pharmacy before changing dose."},
+    )
+    assert queued.status_code == 201, queued.text
+    message_id = UUID(queued.json()["id"])
+
+    result = await message_delivery.run_message_delivery_once(
+        db_session,
+        provider=FailingDeliveryProvider("provider_timeout"),
+    )
+
+    assert result.processed_count == 1
+    assert result.sent_count == 0
+    assert result.failed_count == 1
+
+    message = await db_session.get(ConversationMessage, message_id)
+    assert message is not None
+    assert message.status == "failed"
+    assert message.external_message_id is None
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.event_type == "conversation_message_delivery_failed"
+        )
+    )
+    assert audit is not None
+    assert audit.payload == {
+        "treatment_id": str(treatment_id),
+        "message_id": str(message_id),
+        "channel": "whatsapp",
+        "old_status": "queued",
+        "new_status": "failed",
+        "provider": "internal-placeholder",
+        "error_code": "provider_timeout",
+    }
+    assert "dose" not in str(audit.payload).lower()
+
+
+class FailingDeliveryProvider:
+    def __init__(self, error_code: str) -> None:
+        self.error_code = error_code
+
+    async def deliver(
+        self,
+        message: ConversationMessage,
+    ) -> message_delivery.DeliveryAttemptResult:
+        return message_delivery.DeliveryAttemptResult(
+            ok=False,
+            provider=message_delivery.PLACEHOLDER_PROVIDER,
+            external_message_id=None,
+            error_code=self.error_code,
+        )
 
 
 async def _create_treatment(app_client: AsyncClient, mrn: str) -> UUID:
