@@ -879,29 +879,34 @@ function InteractionLog({
             </button>
           </div>
         </div>
-        <label
-          htmlFor="incoming-whatsapp-message"
-          className="mb-2 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
-        >
-          Incoming WhatsApp Message
-        </label>
-        <div className="flex gap-2">
-          <input
-            id="incoming-whatsapp-message"
-            value={incomingMessage}
-            onChange={(event) => onChangeIncomingMessage(event.target.value)}
-            placeholder="e.g. I feel dizzy after taking it."
-            className="flex-1 pl-4 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-100 transition-all"
-          />
-          <button
-            type="button"
-            onClick={onSubmitIncomingMessage}
-            disabled={isSubmittingMessage}
-            aria-label="Process incoming message"
-            className="w-9 h-9 bg-slate-900 text-white rounded-lg flex items-center justify-center hover:bg-slate-800 transition-all cursor-pointer disabled:opacity-50"
+        <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3">
+          <label
+            htmlFor="test-patient-whatsapp-message"
+            className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
           >
-            {isSubmittingMessage ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-          </button>
+            Test Patient WhatsApp Message
+          </label>
+          <p className="mb-2 text-[11px] font-medium leading-5 text-slate-500">
+            Temporary simulator until WhatsApp webhooks are connected.
+          </p>
+          <div className="flex gap-2">
+            <input
+              id="test-patient-whatsapp-message"
+              value={incomingMessage}
+              onChange={(event) => onChangeIncomingMessage(event.target.value)}
+              placeholder="Simulate patient reply..."
+              className="flex-1 pl-4 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-100 transition-all"
+            />
+            <button
+              type="button"
+              onClick={onSubmitIncomingMessage}
+              disabled={isSubmittingMessage}
+              aria-label="Process test patient message"
+              className="w-9 h-9 bg-slate-700 text-white rounded-lg flex items-center justify-center hover:bg-slate-800 transition-all cursor-pointer disabled:opacity-50"
+            >
+              {isSubmittingMessage ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+            </button>
+          </div>
         </div>
       </div>
     </aside>

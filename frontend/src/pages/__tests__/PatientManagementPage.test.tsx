@@ -245,10 +245,10 @@ describe("PatientManagementPage", () => {
 
     await screen.findByText("I feel dizzy today.");
     await user.type(
-      screen.getByLabelText(/incoming whatsapp message/i),
+      screen.getByLabelText(/test patient whatsapp message/i),
       "Can I stop the medicine?",
     );
-    await user.click(screen.getByRole("button", { name: /process incoming message/i }));
+    await user.click(screen.getByRole("button", { name: /process test patient message/i }));
 
     await waitFor(() =>
       expect(draftSpy).toHaveBeenCalledWith(TREATMENTS.items[0].treatment.id, {
