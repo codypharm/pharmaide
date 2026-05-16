@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings, get_settings
 from app.db.engine import get_session
 from app.db.models import AuditLogEntry
-from app.services import dailymed_cache, task_runner
+from app.services import dailymed_cache, message_delivery, task_runner
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
@@ -27,6 +27,12 @@ class CleanupCheckpointsResponse(BaseModel):
 class CleanupDailyMedCacheResponse(BaseModel):
     deleted_count: int
     retention_days: int
+
+
+class MessageDeliveryRunResponse(BaseModel):
+    processed_count: int
+    sent_count: int
+    failed_count: int
 
 
 @router.post(
@@ -66,4 +72,17 @@ async def cleanup_dailymed_cache(session: SessionDep) -> CleanupDailyMedCacheRes
     return CleanupDailyMedCacheResponse(
         deleted_count=deleted_count,
         retention_days=dailymed_cache.DAILYMED_FAILED_CACHE_RETENTION_DAYS,
+    )
+
+
+@router.post(
+    "/message-delivery/run-once",
+    response_model=MessageDeliveryRunResponse,
+)
+async def run_message_delivery_once(session: SessionDep) -> MessageDeliveryRunResponse:
+    result = await message_delivery.run_message_delivery_once(session)
+    return MessageDeliveryRunResponse(
+        processed_count=result.processed_count,
+        sent_count=result.sent_count,
+        failed_count=result.failed_count,
     )
