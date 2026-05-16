@@ -498,6 +498,7 @@ export default function PatientManagementPage() {
                   key={group.patientId}
                   group={group}
                   selectedTreatmentId={selectedTreatmentId}
+                  triageItems={triageItems}
                   isPrivacyMode={isPrivacyMode}
                   onSelectTreatment={setSelectedTreatmentId}
                 />
@@ -561,11 +562,13 @@ export default function PatientManagementPage() {
 function PatientTreatmentGroup({
   group,
   selectedTreatmentId,
+  triageItems,
   isPrivacyMode,
   onSelectTreatment,
 }: {
   group: PatientTreatmentGroup;
   selectedTreatmentId: string | null;
+  triageItems: TriageItemView[];
   isPrivacyMode: boolean;
   onSelectTreatment: (treatmentId: string) => void;
 }) {
@@ -596,12 +599,21 @@ function PatientTreatmentGroup({
             key={item.treatment.id}
             item={item}
             isSelected={selectedTreatmentId === item.treatment.id}
+            activeFlagCount={activeFlagCountForTreatment(triageItems, item.treatment.id)}
             onSelect={() => onSelectTreatment(item.treatment.id)}
           />
         ))}
       </div>
     </section>
   );
+}
+
+function activeFlagCountForTreatment(items: TriageItemView[], treatmentId: string): number {
+  return items.filter(
+    (item) =>
+      item.treatment_id === treatmentId &&
+      (item.status === "open" || item.status === "acknowledged"),
+  ).length;
 }
 
 function DirectoryLoading() {
@@ -644,10 +656,12 @@ function DirectoryEmpty() {
 function TreatmentRow({
   item,
   isSelected,
+  activeFlagCount,
   onSelect,
 }: {
   item: TreatmentListItem;
   isSelected: boolean;
+  activeFlagCount: number;
   onSelect: () => void;
 }) {
   const medicationLabel =
@@ -673,9 +687,16 @@ function TreatmentRow({
             {objectiveLabel}
           </span>
         </div>
-        <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-tighter bg-slate-50 text-slate-600 border border-slate-200">
-          {statusLabel(item.treatment.status)}
-        </span>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-tighter bg-slate-50 text-slate-600 border border-slate-200">
+            {statusLabel(item.treatment.status)}
+          </span>
+          {activeFlagCount > 0 && (
+            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-700">
+              {activeFlagCount} flag{activeFlagCount === 1 ? "" : "s"}
+            </span>
+          )}
+        </div>
       </div>
       <div className="mt-3 flex items-center justify-between text-[10px] font-medium text-slate-400">
         <span className="font-mono uppercase tracking-widest">{item.treatment.id.slice(0, 8)}</span>

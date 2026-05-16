@@ -272,6 +272,7 @@ describe("PatientManagementPage", () => {
     expect(screen.getByText("2 treatments")).toBeTruthy();
     expect(screen.getByText(/First listed medication: Lisinopril/)).toBeTruthy();
     expect(screen.getByText("Lisinopril + 1 more")).toBeTruthy();
+    expect(screen.getByText("1 flag")).toBeTruthy();
     expect(screen.getAllByText("Monitor dizziness").length).toBeGreaterThan(0);
     expect(screen.getByText("Metformin")).toBeTruthy();
     expect(screen.getByText("Monitor glucose")).toBeTruthy();
