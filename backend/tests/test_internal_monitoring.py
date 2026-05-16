@@ -9,7 +9,13 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.analysis_schemas import AnalysisResult, ReminderSlot, Schedule
-from app.db.models import AuditLogEntry, ConversationMessage, Medication, TreatmentAnalysis
+from app.db.models import (
+    AuditLogEntry,
+    ConversationMessage,
+    Medication,
+    Treatment,
+    TreatmentAnalysis,
+)
 from app.services import task_runner
 
 
@@ -105,6 +111,60 @@ async def test_run_treatment_monitoring_rejects_pending_treatment(
     assert response.json() == {"detail": {"error": "treatment_not_active"}}
 
 
+@pytest.mark.usefixtures("postgres_container")
+async def test_run_due_monitoring_processes_active_automated_treatments_once(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    active_id = await _active_treatment_with_analysis(
+        app_client,
+        db_session,
+        mrn="MONITOR-004",
+    )
+    paused_id = await _active_treatment_with_analysis(
+        app_client,
+        db_session,
+        mrn="MONITOR-005",
+    )
+    pending_id = await _treatment_with_analysis(
+        app_client,
+        db_session,
+        mrn="MONITOR-006",
+    )
+    paused = await db_session.get(Treatment, paused_id)
+    assert paused is not None
+    paused.automation_mode = "paused"
+    await db_session.flush()
+
+    first = await app_client.post("/internal/monitoring/run-due")
+    second = await app_client.post("/internal/monitoring/run-due")
+
+    assert first.status_code == 200, first.text
+    assert first.json() == {
+        "processed_count": 1,
+        "queued_count": 1,
+        "skipped_count": 0,
+    }
+    assert second.status_code == 200, second.text
+    assert second.json() == {
+        "processed_count": 1,
+        "queued_count": 0,
+        "skipped_count": 1,
+    }
+
+    messages = (await db_session.execute(select(ConversationMessage))).scalars().all()
+    assert len(messages) == 1
+    assert messages[0].treatment_id == active_id
+    assert messages[0].treatment_id not in {paused_id, pending_id}
+
+    audit_count = await db_session.scalar(
+        select(func.count())
+        .select_from(AuditLogEntry)
+        .where(AuditLogEntry.event_type == "monitoring_due_run_completed")
+    )
+    assert audit_count == 2
+
+
 async def _create_treatment(app_client: AsyncClient, mrn: str) -> UUID:
     response = await app_client.post(
         "/treatments",
@@ -153,6 +213,25 @@ async def _active_treatment_with_analysis(
     await db_session.flush()
     start = await app_client.post(f"/treatments/{treatment_id}/start-cycle")
     assert start.status_code == 200, start.text
+    return treatment_id
+
+
+async def _treatment_with_analysis(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    *,
+    mrn: str,
+) -> UUID:
+    treatment_id = await _create_treatment(app_client, mrn)
+    medication_id = await _first_medication_id(db_session, treatment_id)
+    db_session.add(
+        TreatmentAnalysis(
+            treatment_id=treatment_id,
+            status="completed",
+            result=_analysis_result(medication_id),
+        )
+    )
+    await db_session.flush()
     return treatment_id
 
 

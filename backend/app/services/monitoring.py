@@ -25,6 +25,7 @@ from app.db.models import (
 )
 
 log = structlog.get_logger(__name__)
+SYSTEM_RESOURCE_ID = UUID("00000000-0000-0000-0000-000000000000")
 
 
 class TreatmentNotFound(Exception):
@@ -39,6 +40,55 @@ class TreatmentNotActive(Exception):
 class MonitoringRunResult:
     queued_count: int
     skipped_count: int
+
+
+@dataclass(frozen=True)
+class DueMonitoringRunResult:
+    processed_count: int
+    queued_count: int
+    skipped_count: int
+
+
+async def run_due_monitoring(
+    session: AsyncSession,
+    *,
+    now: datetime | None = None,
+    limit: int = 100,
+) -> DueMonitoringRunResult:
+    """Run due monitoring across active treatments ready for automation."""
+    treatment_ids = await _load_active_automated_treatment_ids(session, limit=limit)
+    queued_count = 0
+    skipped_count = 0
+
+    for treatment_id in treatment_ids:
+        result = await run_due_monitoring_for_treatment(
+            session,
+            treatment_id=treatment_id,
+            now=now,
+        )
+        queued_count += result.queued_count
+        skipped_count += result.skipped_count
+
+    _audit_due_monitoring_run(
+        session,
+        processed_count=len(treatment_ids),
+        queued_count=queued_count,
+        skipped_count=skipped_count,
+        limit=limit,
+    )
+    await session.flush()
+    log.info(
+        "due_monitoring_run_completed",
+        processed_count=len(treatment_ids),
+        queued_count=queued_count,
+        skipped_count=skipped_count,
+        limit=limit,
+    )
+    return DueMonitoringRunResult(
+        processed_count=len(treatment_ids),
+        queued_count=queued_count,
+        skipped_count=skipped_count,
+    )
 
 
 async def run_due_monitoring_for_treatment(
@@ -99,6 +149,23 @@ async def run_due_monitoring_for_treatment(
         skipped_count=skipped_count,
     )
     return MonitoringRunResult(queued_count=queued_count, skipped_count=skipped_count)
+
+
+async def _load_active_automated_treatment_ids(
+    session: AsyncSession,
+    *,
+    limit: int,
+) -> list[UUID]:
+    result = await session.execute(
+        select(Treatment.id)
+        .where(
+            Treatment.status == "active",
+            Treatment.automation_mode == "active",
+        )
+        .order_by(Treatment.treatment_start_at.asc().nullslast(), Treatment.created_at.asc())
+        .limit(limit)
+    )
+    return list(result.scalars())
 
 
 async def _load_active_treatment(session: AsyncSession, treatment_id: UUID) -> Treatment:
@@ -214,6 +281,31 @@ async def _reminder_already_queued(
         .limit(1)
     )
     return result.scalar_one_or_none() is not None
+
+
+def _audit_due_monitoring_run(
+    session: AsyncSession,
+    *,
+    processed_count: int,
+    queued_count: int,
+    skipped_count: int,
+    limit: int,
+) -> None:
+    session.add(
+        AuditLogEntry(
+            event_type="monitoring_due_run_completed",
+            resource_type="system",
+            resource_id=SYSTEM_RESOURCE_ID,
+            # Keep aggregate worker audits free of treatment, medication, and
+            # message text. Per-message audit rows hold the workflow marker.
+            payload={
+                "processed_count": processed_count,
+                "queued_count": queued_count,
+                "skipped_count": skipped_count,
+                "limit": limit,
+            },
+        )
+    )
 
 
 def _reminder_key(reminder: ReminderSlot) -> str:

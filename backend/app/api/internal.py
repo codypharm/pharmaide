@@ -40,6 +40,12 @@ class TreatmentMonitoringRunResponse(BaseModel):
     skipped_count: int
 
 
+class DueMonitoringRunResponse(BaseModel):
+    processed_count: int
+    queued_count: int
+    skipped_count: int
+
+
 @router.post(
     "/cleanup/checkpoints",
     response_model=CleanupCheckpointsResponse,
@@ -90,6 +96,19 @@ async def run_message_delivery_once(session: SessionDep) -> MessageDeliveryRunRe
         processed_count=result.processed_count,
         sent_count=result.sent_count,
         failed_count=result.failed_count,
+    )
+
+
+@router.post(
+    "/monitoring/run-due",
+    response_model=DueMonitoringRunResponse,
+)
+async def run_due_monitoring(session: SessionDep) -> DueMonitoringRunResponse:
+    result = await monitoring.run_due_monitoring(session)
+    return DueMonitoringRunResponse(
+        processed_count=result.processed_count,
+        queued_count=result.queued_count,
+        skipped_count=result.skipped_count,
     )
 
 
