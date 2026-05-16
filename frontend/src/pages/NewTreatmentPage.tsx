@@ -49,6 +49,7 @@ export default function NewTreatmentPage() {
   // Vision starts as a local draft source; extraction wiring lands in the
   // next slice so pharmacists can review this upload surface independently.
   const [method, setMethod] = useState<IngestionMethod>("structured");
+  const [ingestionSource, setIngestionSource] = useState<IngestionMethod>("structured");
   const [medications, setMedications] = useState<Medication[]>([
     { id: crypto.randomUUID(), name: "", dosage: "", frequency: "", duration: "" }
   ]);
@@ -63,6 +64,7 @@ export default function NewTreatmentPage() {
   const [clinicalObjective, setClinicalObjective] = useState("");
   const [treatmentStartAt, setTreatmentStartAt] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [manualText, setManualText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [dragActive, setDragActive] = useState(false);
@@ -80,6 +82,7 @@ export default function NewTreatmentPage() {
 
   const resetDraft = () => {
     setMethod("structured");
+    setIngestionSource("structured");
     setMedications([
       { id: crypto.randomUUID(), name: "", dosage: "", frequency: "", duration: "" },
     ]);
@@ -92,6 +95,7 @@ export default function NewTreatmentPage() {
     setClinicalObjective("");
     setTreatmentStartAt("");
     setFieldErrors({});
+    setManualText("");
     setShowConfirm(false);
     setDragActive(false);
     setVisionFile(null);
@@ -192,6 +196,7 @@ export default function NewTreatmentPage() {
     try {
       const prescription = await extractPrescription(visionFile);
       applyExtractedPrescription(prescription);
+      setIngestionSource("vision");
       setMethod("structured");
       toast.success("Prescription extracted", {
         description: "Review the prefilled fields before submitting.",
@@ -224,6 +229,27 @@ export default function NewTreatmentPage() {
     setExtractionWarnings(prescription.warnings);
   };
 
+  const handleManualExtraction = () => {
+    const medicationDrafts = parseManualMedicationText(manualText);
+    if (medicationDrafts.length === 0) {
+      toast.warning("No medication lines found", {
+        description: "Paste one medication per line, then try again.",
+      });
+      return;
+    }
+
+    setMedications(medicationDrafts);
+    setIngestionSource("manual");
+    setExtractionError(null);
+    setExtractionWarnings([]);
+    setExtractedFields(new Set());
+    setLowConfidenceFields(new Set());
+    setMethod("structured");
+    toast.success("Manual text parsed", {
+      description: "Review the medications before submitting.",
+    });
+  };
+
   const handleSubmit = async () => {
     setShowConfirm(false);
     setFieldErrors({});
@@ -251,7 +277,7 @@ export default function NewTreatmentPage() {
           // clinical_objective is the single source the agent reads.
           objective: null,
         })),
-        ingestion_method: "structured",
+        ingestion_method: ingestionSource,
       });
 
       toast.success("Treatment created", {
@@ -530,14 +556,11 @@ export default function NewTreatmentPage() {
                     Vision
                   </button>
                   <button
-                    disabled
-                    title="Coming in V1.1"
-                    aria-disabled="true"
-                    className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded-lg text-slate-300 cursor-not-allowed"
+                    onClick={() => setMethod("manual")}
+                    className={`flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer ${method === "manual" ? "text-[#5548E8] border-b-2 border-[#5548E8] rounded-none" : "text-slate-400 hover:text-slate-600"}`}
                   >
                     <Type size={14} />
                     Manual
-                    <Lock size={12} />
                   </button>
                   <button
                     onClick={() => setMethod("structured")}
@@ -675,11 +698,21 @@ export default function NewTreatmentPage() {
                       <h3 className="font-bold text-slate-900 text-lg">Paste Clinical Text</h3>
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">OCR Alternative</span>
                     </div>
-                    <textarea 
+                    <label htmlFor="manual-prescription-text" className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                      Pasted Prescription Text
+                    </label>
+                    <textarea
+                      id="manual-prescription-text"
                       placeholder="Paste prescription text, clinical notes, or regimen details here..."
+                      value={manualText}
+                      onChange={(event) => setManualText(event.target.value)}
                       className="flex-1 w-full p-8 bg-white border border-slate-200 rounded-3xl text-slate-700 focus:outline-none focus:ring-4 focus:ring-[#D9D5FB] focus:border-[#5548E8] transition-all resize-none shadow-inner font-mono text-base leading-relaxed"
                     />
-                    <button className="py-3 bg-[#5548E8] text-white rounded-lg font-bold hover:bg-[#463AD4] transition-all cursor-pointer text-[11px] uppercase tracking-wider">
+                    <button
+                      type="button"
+                      onClick={handleManualExtraction}
+                      className="py-3 bg-[#5548E8] text-white rounded-lg font-bold hover:bg-[#463AD4] transition-all cursor-pointer text-[11px] uppercase tracking-wider"
+                    >
                       Extract Clinical Entities
                     </button>
                   </div>
@@ -995,6 +1028,73 @@ function toMedicationDrafts(prescription: ExtractedPrescription): Medication[] {
   return extracted.length > 0
     ? extracted
     : [{ id: crypto.randomUUID(), name: "", dosage: "", frequency: "", duration: "" }];
+}
+
+// Manual paste is intentionally conservative: it only drafts obvious
+// medication rows, then pushes the pharmacist back into the reviewed form.
+function parseManualMedicationText(value: string): Medication[] {
+  return value
+    .split(/\n|;/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map(parseManualMedicationLine)
+    .filter((medication): medication is Medication => medication !== null);
+}
+
+function parseManualMedicationLine(line: string): Medication | null {
+  const normalized = line.replace(/^\s*(?:[-*]|\d+[.)])\s*/, "").trim();
+  const dosage = firstMatch(normalized, /\b\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml|iu|units?|tabs?|tablets?|caps?|capsules?)\b/i);
+  const frequency = firstFrequencyMatch(normalized);
+  const duration = firstMatch(normalized, /\b(?:for|x)\s+(\d+\s*(?:days?|weeks?|months?))\b/i);
+  const name = cleanedMedicationName(normalized, [dosage, frequency, duration]);
+
+  if (!name) {
+    return null;
+  }
+
+  return {
+    id: crypto.randomUUID(),
+    name,
+    dosage: dosage ?? "",
+    frequency: frequency ?? "",
+    duration: duration ?? "",
+  };
+}
+
+function firstFrequencyMatch(value: string): string | null {
+  const patterns = [
+    /\b(?:once|twice|three times|four times)\s+daily\b/i,
+    /\bevery\s+\d+\s+hours?\b/i,
+    /\b(?:qd|od|bid|tid|qid|qhs|q4h|q6h|q8h|q12h|prn)\b/i,
+    /\bas needed\b/i,
+  ];
+  for (const pattern of patterns) {
+    const match = firstMatch(value, pattern);
+    if (match) return match;
+  }
+  return null;
+}
+
+function firstMatch(value: string, pattern: RegExp): string | null {
+  const match = value.match(pattern);
+  if (!match) {
+    return null;
+  }
+  return (match[1] ?? match[0]).trim();
+}
+
+function cleanedMedicationName(value: string, parts: Array<string | null>): string {
+  let name = value;
+  for (const part of parts) {
+    if (part) {
+      name = name.replace(part, " ");
+    }
+  }
+  return name
+    .replace(/\b(?:for|x|po|by mouth|take|tablet|capsule|daily)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .replace(/[,.:/-]+$/g, "")
+    .trim();
 }
 
 function extractedFieldKeys(

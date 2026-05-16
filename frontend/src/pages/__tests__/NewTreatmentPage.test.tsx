@@ -328,6 +328,50 @@ describe("NewTreatmentPage", () => {
     expect(screen.getByText(/manual regimen entry/i)).toBeInTheDocument();
   });
 
+  it("parses pasted manual treatment text into the reviewed form", async () => {
+    const user = userEvent.setup();
+    const create = vi.spyOn(treatmentsApi, "createTreatment").mockResolvedValue({
+      treatment_id: "treatment-1",
+      patient_id: "patient-1",
+      analysis_id: "analysis-1",
+    });
+
+    renderPage();
+    await user.click(screen.getByRole("button", { name: /^manual$/i }));
+    await user.type(
+      screen.getByLabelText(/pasted prescription text/i),
+      "Amoxicillin 500mg twice daily for 7 days\nMetronidazole 400mg three times daily for 5 days",
+    );
+    await user.click(screen.getByRole("button", { name: /extract clinical entities/i }));
+
+    expect(screen.getByText(/manual regimen entry/i)).toBeInTheDocument();
+    expect(screen.getAllByPlaceholderText(/e.g. amoxicillin/i)[0]).toHaveValue("Amoxicillin");
+    expect(screen.getAllByPlaceholderText(/e.g. 500mg/i)[0]).toHaveValue("500mg");
+    expect(screen.getAllByPlaceholderText(/twice daily/i)[0]).toHaveValue("twice daily");
+    expect(screen.getAllByPlaceholderText(/e.g. 10 days/i)[0]).toHaveValue("7 days");
+    expect(screen.getByDisplayValue("Metronidazole")).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/full name/i), "Eleanor Vance");
+    await user.type(screen.getByLabelText(/date of birth/i), "1955-10-12");
+    await user.type(screen.getByLabelText(/mrn number/i), "PHA-AB12CD34");
+    await user.type(screen.getByLabelText(/phone number/i), "+18005551212");
+    await user.type(screen.getByLabelText(/treatment objective/i), "Monitor improvement");
+    await user.click(screen.getByRole("button", { name: /review & approve/i }));
+    await user.click(screen.getByRole("button", { name: /confirm & create/i }));
+
+    await waitFor(() => {
+      expect(create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ingestion_method: "manual",
+          medications: [
+            expect.objectContaining({ name: "Amoxicillin", dosage: "500mg" }),
+            expect.objectContaining({ name: "Metronidazole", dosage: "400mg" }),
+          ],
+        }),
+      );
+    });
+  });
+
   it("clears the current draft without navigating away", async () => {
     const user = userEvent.setup();
     renderPageWithBackStack();
