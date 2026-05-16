@@ -47,6 +47,11 @@ const REASON_LABELS: Record<TriageReason, string> = {
   referee: "Clinical draft review",
   output_guard: "Response safety review",
   adverse_event: "Possible adverse event",
+  emergency: "Urgent patient concern",
+  side_effect: "Possible side effect",
+  dose_change_request: "Dose-change request",
+  diagnosis_request: "Diagnosis question",
+  unclear_message: "Needs clarification",
   non_responsive: "Patient follow-up needed",
 };
 

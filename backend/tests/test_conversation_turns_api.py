@@ -483,6 +483,39 @@ async def test_post_patient_reply_draft_holds_when_safety_blocks(
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_post_patient_reply_draft_opens_triage_when_draft_requires_review(
+    app_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    treatment_id = await _create_treatment(app_client, "CONV-API-018")
+    _patch_generated_reply(
+        monkeypatch,
+        requires_pharmacist_review=True,
+        escalation_reason="dose_change_request",
+    )
+    _patch_safety_decision(monkeypatch, treatment_id, status="send")
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/patient-reply-drafts",
+        json={"patient_message": "Can I stop this medicine?"},
+    )
+
+    assert response.status_code == 201, response.text
+    payload = response.json()
+    assert payload["assistant_message"]["status"] == "held_for_review"
+    assert payload["assistant_message"]["safety_hold_reason"] == "draft_requires_review"
+    assert payload["safety_decision"]["status"] == "hold_for_pharmacist"
+    assert payload["safety_decision"]["hold_reason"] == "draft_requires_review"
+
+    triage = await app_client.get("/triage/items")
+    assert triage.status_code == 200, triage.text
+    item = triage.json()["items"][0]
+    assert item["conversation_message_id"] == payload["assistant_message"]["id"]
+    assert item["reason"] == "dose_change_request"
+    assert item["status"] == "open"
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_post_patient_reply_draft_uses_holding_response_during_pharmacist_takeover(
     app_client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -665,12 +698,17 @@ def _patch_safety_decision(
     )
 
 
-def _patch_generated_reply(monkeypatch: pytest.MonkeyPatch) -> None:
+def _patch_generated_reply(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    requires_pharmacist_review: bool = False,
+    escalation_reason: str = "none",
+) -> None:
     async def fake_draft_patient_reply_for_treatment(*args: object, **kwargs: object) -> object:
         return PatientReplyDraft(
             message="Please follow the timing your pharmacist approved.",
-            requires_pharmacist_review=False,
-            escalation_reason="none",
+            requires_pharmacist_review=requires_pharmacist_review,
+            escalation_reason=escalation_reason,
             confidence=0.86,
         )
 

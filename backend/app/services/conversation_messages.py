@@ -20,7 +20,12 @@ from app.agents.safety_schemas import (
     RefereeResult,
     SafetyReview,
 )
-from app.api.schemas import ConversationMessageList, ConversationMessageView, ConversationTurnView
+from app.api.schemas import (
+    ConversationMessageList,
+    ConversationMessageView,
+    ConversationTurnView,
+    TriageReason,
+)
 from app.db.models import AuditLogEntry, ConversationMessage, Treatment
 from app.services.patient_safety import review_patient_draft_safety
 from app.services.triage import create_open_triage_item
@@ -203,6 +208,7 @@ async def submit_patient_conversation_turn(
     safety_provider_api_key: SecretStr | None = None,
     safety_provider_timeout_seconds: float = 10,
     providers: ConfiguredSafetyProviders | None = None,
+    draft_review_reason: TriageReason | None = None,
 ) -> ConversationTurnView:
     """Record one patient turn and gate the assistant draft before delivery."""
     treatment = await session.get(Treatment, treatment_id)
@@ -230,6 +236,8 @@ async def submit_patient_conversation_turn(
         safety_provider_timeout_seconds=safety_provider_timeout_seconds,
         providers=providers,
     )
+    decision = _apply_draft_review_hold(decision, draft_review_reason=draft_review_reason)
+    triage_reason = _triage_reason_for_held_draft(decision, draft_review_reason)
     assistant = ConversationMessage(
         treatment_id=treatment_id,
         direction="outbound",
@@ -241,12 +249,12 @@ async def submit_patient_conversation_turn(
     )
     session.add(assistant)
     await session.flush()
-    if assistant.status == "held_for_review" and decision.hold_reason is not None:
+    if assistant.status == "held_for_review" and triage_reason is not None:
         await create_open_triage_item(
             session,
             treatment_id=treatment_id,
             conversation_message_id=assistant.id,
-            reason=decision.hold_reason,
+            reason=triage_reason,
         )
 
     _audit_conversation_turn(session, treatment_id, inbound, assistant, decision.status)
@@ -264,6 +272,33 @@ async def submit_patient_conversation_turn(
         inbound_message=ConversationMessageView.model_validate(inbound),
         assistant_message=ConversationMessageView.model_validate(assistant),
         safety_decision=decision,
+    )
+
+
+def _triage_reason_for_held_draft(
+    decision: PatientDraftSafetyDecision,
+    draft_review_reason: TriageReason | None,
+) -> TriageReason | None:
+    if decision.hold_reason == "draft_requires_review":
+        return draft_review_reason
+    return decision.hold_reason
+
+
+def _apply_draft_review_hold(
+    decision: PatientDraftSafetyDecision,
+    *,
+    draft_review_reason: TriageReason | None,
+) -> PatientDraftSafetyDecision:
+    if draft_review_reason is None or decision.status == "hold_for_pharmacist":
+        return decision
+
+    # The draft agent is allowed to be more conservative than the safety
+    # sandwich. A safe-sounding reply can still need pharmacist judgement.
+    return PatientDraftSafetyDecision(
+        status="hold_for_pharmacist",
+        review=decision.review,
+        message_to_send=None,
+        hold_reason="draft_requires_review",
     )
 
 

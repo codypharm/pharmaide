@@ -38,6 +38,7 @@ from app.api.schemas import (
     TreatmentDetail,
     TreatmentList,
     TreatmentView,
+    TriageReason,
 )
 from app.config import Settings, get_settings
 from app.db.engine import get_session, get_session_factory
@@ -417,6 +418,7 @@ async def post_patient_reply_draft(
                 agentdog_url=settings.agentdog_url,
                 safety_provider_api_key=settings.safety_provider_api_key,
                 safety_provider_timeout_seconds=settings.safety_provider_timeout_seconds,
+                draft_review_reason=_triage_reason_for_patient_reply_draft(draft),
             )
     except (ConversationTreatmentNotFound, ReplyDraftTreatmentNotFound) as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
@@ -470,6 +472,15 @@ def _build_configured_patient_reply_agent(
         return None
     provider = OpenAIProvider(api_key=settings.openai_api_key.get_secret_value())
     return build_patient_reply_agent(OpenAIResponsesModel("gpt-5", provider=provider))
+
+
+def _triage_reason_for_patient_reply_draft(draft: PatientReplyDraft) -> TriageReason | None:
+    """Use the draft agent's validated escalation reason for pharmacist routing."""
+    if not draft.requires_pharmacist_review:
+        return None
+    if draft.escalation_reason == "none":
+        return "referee"
+    return draft.escalation_reason
 
 
 async def _patient_reply_safety_context(

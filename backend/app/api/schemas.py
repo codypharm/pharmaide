@@ -46,6 +46,11 @@ TriageReason = Literal[
     "referee",
     "output_guard",
     "adverse_event",
+    "emergency",
+    "side_effect",
+    "dose_change_request",
+    "diagnosis_request",
+    "unclear_message",
     "non_responsive",
 ]
 TriageStatus = Literal["open", "acknowledged", "resolved"]

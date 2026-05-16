@@ -198,7 +198,11 @@ export type ConversationMessageList = {
 };
 
 export type PatientDraftSafetyStatus = "send" | "hold_for_pharmacist";
-export type PatientDraftHoldReason = "input_guard" | "referee" | "output_guard";
+export type PatientDraftHoldReason =
+  | "input_guard"
+  | "referee"
+  | "output_guard"
+  | "draft_requires_review";
 
 export type PatientDraftSafetyDecision = {
   status: PatientDraftSafetyStatus;
