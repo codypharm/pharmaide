@@ -7,6 +7,7 @@ import {
   Clock,
   Loader2,
   MessageSquare,
+  Save,
   Search,
   Send,
   User,
@@ -812,23 +813,27 @@ function ClinicalWorkspace({
       {activeTriageItems.length > 0 && (
         <NeedsReviewAlert items={activeTriageItems} />
       )}
-      <section className="shrink-0 bg-white border border-slate-200 rounded-2xl p-6">
-        <div className="flex items-center gap-2 mb-5">
-          <Activity size={18} className="text-slate-400" />
-          <h3 className="font-bold text-slate-900">Clinical Monitoring</h3>
-        </div>
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <ClinicalFact label="Treatment status" value={statusLabel(item.treatment.status)} />
-          <ClinicalFact
-            label="Medication coverage"
-            value={`${item.medication_count} medication${item.medication_count === 1 ? "" : "s"}`}
+      <section className="shrink-0 bg-white border border-slate-200 rounded-2xl p-5">
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-2">
+              <Activity size={18} className="text-slate-400" />
+              <h3 className="font-bold text-slate-900">Clinical Monitoring</h3>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <ClinicalHeaderFact label="Status" value={statusLabel(item.treatment.status)} />
+              <ClinicalHeaderFact
+                label="Coverage"
+                value={`${item.medication_count} medication${item.medication_count === 1 ? "" : "s"}`}
+              />
+            </div>
+          </div>
+          <ObjectiveEditor
+            value={item.treatment.clinical_objective}
+            isSaving={isUpdatingObjective}
+            onSave={onUpdateClinicalObjective}
           />
         </div>
-        <ObjectiveEditor
-          value={item.treatment.clinical_objective}
-          isSaving={isUpdatingObjective}
-          onSave={onUpdateClinicalObjective}
-        />
       </section>
 
       <MedicationsPanel state={treatmentDetailState} />
@@ -857,7 +862,7 @@ function ObjectiveEditor({
 
   return (
     <form
-      className="mt-4 rounded-xl border border-slate-100 bg-slate-50 p-4"
+      className="mt-3"
       onSubmit={(event) => {
         event.preventDefault();
         if (isDirty && !isSaving) onSave(draft);
@@ -869,22 +874,23 @@ function ObjectiveEditor({
       >
         Treatment Objective
       </label>
-      <div className="mt-2 flex items-start gap-2">
+      <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-start">
         <textarea
           id="treatment-objective"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           placeholder="Add monitoring objective..."
           rows={3}
-          className="min-w-0 flex-1 resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-100"
+          className="min-w-0 flex-1 resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-800 focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
         />
         <button
           type="submit"
+          aria-label="Save objective"
           disabled={!isDirty || isSaving}
-          className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-900 bg-slate-900 px-3.5 py-2 text-xs font-bold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-white disabled:text-slate-400 sm:self-start"
         >
-          {isSaving && <Loader2 size={13} className="animate-spin" />}
-          Save Objective
+          {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+          Save
         </button>
       </div>
     </form>
@@ -1049,11 +1055,11 @@ function MedicationsPanel({ state }: { state: TreatmentDetailState }) {
   );
 }
 
-function ClinicalFact({ label, value }: { label: string; value: string }) {
+function ClinicalHeaderFact({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-slate-800">{value}</p>
+    <div className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</span>
+      <span className="text-sm font-semibold text-slate-900">{value}</span>
     </div>
   );
 }
