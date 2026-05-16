@@ -168,6 +168,32 @@ const PHARMACIST_MESSAGE = {
   created_at: "2026-05-15T10:03:00Z",
 };
 
+const SENT_ASSISTANT_MESSAGE = {
+  id: "msg-sent",
+  treatment_id: TREATMENTS.items[0].treatment.id,
+  direction: "outbound" as const,
+  sender_type: "assistant" as const,
+  channel: "whatsapp" as const,
+  status: "sent" as const,
+  body: "Please take the next dose with water.",
+  safety_hold_reason: null,
+  external_message_id: "whatsapp-msg-1",
+  created_at: "2026-05-15T10:04:00Z",
+};
+
+const FAILED_PHARMACIST_MESSAGE = {
+  id: "msg-failed",
+  treatment_id: TREATMENTS.items[0].treatment.id,
+  direction: "outbound" as const,
+  sender_type: "pharmacist" as const,
+  channel: "whatsapp" as const,
+  status: "failed" as const,
+  body: "Please call the pharmacy today.",
+  safety_hold_reason: null,
+  external_message_id: null,
+  created_at: "2026-05-15T10:05:00Z",
+};
+
 const TRIAGE_ITEMS: TriageItemList = {
   items: [
     {
@@ -302,6 +328,27 @@ describe("PatientManagementPage", () => {
     expect(toast.success).toHaveBeenCalledWith("Pharmacist message queued", {
       description: "It will be sent through the WhatsApp delivery workflow.",
     });
+  });
+
+  it("shows outbound WhatsApp delivery state on chat messages", async () => {
+    vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue(TREATMENTS);
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(DETAIL);
+    vi.spyOn(triageApi, "listTriageItems").mockResolvedValue(TRIAGE_ITEMS);
+    vi.spyOn(treatmentsApi, "listConversationMessages").mockResolvedValue({
+      items: [
+        ...MESSAGES.items,
+        PHARMACIST_MESSAGE,
+        SENT_ASSISTANT_MESSAGE,
+        FAILED_PHARMACIST_MESSAGE,
+      ],
+    });
+
+    renderPage();
+
+    await screen.findByText("Please continue the current dose.");
+    expect(screen.getByText("Waiting to send")).toBeTruthy();
+    expect(screen.getByText("Sent")).toBeTruthy();
+    expect(screen.getByText("Send failed")).toBeTruthy();
   });
 
   it("lets the pharmacist resume AI replies from takeover mode", async () => {
