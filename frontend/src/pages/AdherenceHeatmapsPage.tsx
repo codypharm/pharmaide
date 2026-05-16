@@ -141,7 +141,7 @@ export default function AdherenceHeatmapsPage() {
                 placeholder="Search patient, MRN, medication, or treatment..."
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all"
+                className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#D9D5FB] focus:border-[#5548E8] transition-all"
               />
             </div>
             <Legend />
@@ -165,7 +165,7 @@ export default function AdherenceHeatmapsPage() {
 function SummaryBand({ totals }: { totals: Record<AdherenceEventStatus, number> }) {
   return (
     <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-      <SummaryCard label="Taken" value={totals.taken} tone="blue" />
+      <SummaryCard label="Taken" value={totals.taken} tone="primary" />
       <SummaryCard label="Missed" value={totals.missed} tone="red" />
       <SummaryCard label="Held" value={totals.held} tone="amber" />
       <SummaryCard label="Skipped" value={totals.skipped} tone="slate" />
@@ -180,10 +180,10 @@ function SummaryCard({
 }: {
   label: string;
   value: number;
-  tone: "blue" | "red" | "amber" | "slate";
+  tone: "primary" | "red" | "amber" | "slate";
 }) {
   const color = {
-    blue: "text-blue-700",
+    primary: "text-[#5548E8]",
     red: "text-red-700",
     amber: "text-amber-700",
     slate: "text-slate-700",
@@ -483,7 +483,7 @@ function statusLabel(status: string): string {
 function statusColor(status: string): string {
   switch (status) {
     case "taken":
-      return "bg-blue-600";
+      return "bg-[#5548E8]";
     case "missed":
       return "bg-red-600";
     case "held":
