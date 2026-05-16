@@ -111,7 +111,7 @@ describe("TriageQueuePage", () => {
     expect(screen.getAllByText("Queued").length).toBeGreaterThan(0);
   });
 
-  it("lets the pharmacist reject a held draft so it is not sent", async () => {
+  it("lets the pharmacist cancel a held draft so it is not sent", async () => {
     const user = userEvent.setup();
     vi.spyOn(triageApi, "listTriageItems").mockResolvedValue({
       items: [OPEN_ITEM],
@@ -134,11 +134,11 @@ describe("TriageQueuePage", () => {
     await screen.findByText("Clinical draft review");
     await user.click(screen.getByRole("button", { name: /review item/i }));
     await user.click(screen.getByRole("button", { name: /start review item/i }));
-    await user.click(screen.getByRole("button", { name: /reject draft item/i }));
+    await user.click(screen.getByRole("button", { name: /cancel draft item/i }));
 
     await waitFor(() => expect(rejectSpy).toHaveBeenCalledWith("triage-1"));
     expect(screen.getAllByText("Resolved").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Rejected, not sent").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Canceled, not sent").length).toBeGreaterThan(0);
   });
 
   it("shows a calm empty state when no patients need review", async () => {

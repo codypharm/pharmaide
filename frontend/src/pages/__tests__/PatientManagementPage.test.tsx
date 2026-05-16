@@ -195,6 +195,19 @@ const READY_ASSISTANT_MESSAGE = {
   created_at: "2026-05-15T10:04:30Z",
 };
 
+const CANCELED_ASSISTANT_MESSAGE = {
+  id: "msg-canceled",
+  treatment_id: TREATMENTS.items[0].treatment.id,
+  direction: "outbound" as const,
+  sender_type: "assistant" as const,
+  channel: "whatsapp" as const,
+  status: "rejected" as const,
+  body: "You can stop it now.",
+  safety_hold_reason: "referee",
+  external_message_id: null,
+  created_at: "2026-05-15T10:04:45Z",
+};
+
 const FAILED_PHARMACIST_MESSAGE = {
   id: "msg-failed",
   treatment_id: TREATMENTS.items[0].treatment.id,
@@ -424,6 +437,20 @@ describe("PatientManagementPage", () => {
     await screen.findByText("Your pharmacist is reviewing this and will update you.");
     expect(screen.getByText("Ready, not sent")).toBeTruthy();
     expect(screen.queryByText("1 flag")).toBeNull();
+  });
+
+  it("marks canceled assistant drafts as not sent in the internal chat log", async () => {
+    vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue(TREATMENTS);
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(DETAIL);
+    vi.spyOn(treatmentsApi, "listConversationMessages").mockResolvedValue({
+      items: [...MESSAGES.items, CANCELED_ASSISTANT_MESSAGE],
+    });
+    vi.spyOn(triageApi, "listTriageItems").mockResolvedValue({ items: [] });
+
+    renderPage();
+
+    await screen.findByText("You can stop it now.");
+    expect(screen.getByText("Canceled, not sent")).toBeTruthy();
   });
 
   it("queues a pharmacist WhatsApp message from the chat panel", async () => {

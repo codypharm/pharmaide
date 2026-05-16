@@ -703,7 +703,7 @@ function FlagSummary({
 
 function getDraftStatusLabel(status: ConversationMessageView["status"] | undefined): string {
   if (status === "approved") return "Approved";
-  if (status === "rejected") return "Rejected, not sent";
+  if (status === "rejected") return "Canceled, not sent";
   if (status === "queued") return "Queued for delivery";
   if (status === "sent") return "Sent";
   if (status === "failed") return "Delivery failed";
@@ -818,7 +818,7 @@ function ConversationMessageRow({
           )}
           {isHeldDraft && message.status === "rejected" && (
             <span className="inline-flex items-center rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-700">
-              Rejected, not sent
+              Canceled, not sent
             </span>
           )}
           {isHeldDraft && message.status === "queued" && (
@@ -935,11 +935,11 @@ function ReviewAction({
           type="button"
           onClick={() => void onRejectItem(item.id)}
           disabled={isBusy}
-          aria-label={`Reject draft item ${shortId(item.id)}`}
+          aria-label={`Cancel draft item ${shortId(item.id)}`}
           className="inline-flex min-w-32 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 font-bold text-slate-800 hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
         >
           {isBusy && <Loader2 size={16} className="animate-spin" />}
-          Reject draft
+          Cancel draft
         </button>
         <button
           type="button"
