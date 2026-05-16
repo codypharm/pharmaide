@@ -14,9 +14,10 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-import { ApiError, NotFoundError } from "../api/client";
+import { ApiError, ConflictError, NotFoundError } from "../api/client";
 import {
   createPatientCheckIn,
+  getAnalysis,
   getTreatment,
   listAdherenceEvents,
   listPatientCheckIns,
@@ -32,6 +33,7 @@ import {
   type PatientCheckInReportType,
   type PatientCheckInView,
   type ReminderSlot,
+  type TreatmentAnalysisRow,
   type TreatmentAnalysisSnapshot,
   type TreatmentDetail,
 } from "../api/treatments";
@@ -45,6 +47,11 @@ type FetchState =
   | { kind: "loading" }
   | { kind: "ok"; data: TreatmentDetail }
   | { kind: "not-found" }
+  | { kind: "error"; requestId: string | null };
+
+type ActivationAnalysisState =
+  | { kind: "loading" }
+  | { kind: "ok"; ready: boolean }
   | { kind: "error"; requestId: string | null };
 
 function formatCreatedAt(iso: string): string {
@@ -65,6 +72,9 @@ export default function TreatmentDetailPage() {
   const [startCycleState, setStartCycleState] = useState<
     { kind: "idle" | "starting" } | { kind: "error"; requestId: string | null }
   >({ kind: "idle" });
+  const [activationAnalysis, setActivationAnalysis] = useState<ActivationAnalysisState>({
+    kind: "loading",
+  });
 
   useEffect(() => {
     if (!id) return;
@@ -89,6 +99,30 @@ export default function TreatmentDetailPage() {
     };
   }, [id]);
 
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    setActivationAnalysis({ kind: "loading" });
+    getAnalysis(id)
+      .then((analysis) => {
+        if (cancelled) return;
+        setActivationAnalysis({
+          kind: "ok",
+          ready: analysisReadyForCycle(analysis),
+        });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setActivationAnalysis({
+          kind: "error",
+          requestId: err instanceof ApiError ? err.requestId : null,
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
   const handleStartCycle = async () => {
     if (state.kind !== "ok") return;
     setStartCycleState({ kind: "starting" });
@@ -100,6 +134,11 @@ export default function TreatmentDetailPage() {
       });
       setStartCycleState({ kind: "idle" });
     } catch (err) {
+      if (err instanceof ConflictError && err.errorCode === "analysis_not_completed") {
+        setActivationAnalysis({ kind: "ok", ready: false });
+        setStartCycleState({ kind: "idle" });
+        return;
+      }
       setStartCycleState({
         kind: "error",
         requestId: err instanceof ApiError ? err.requestId : null,
@@ -123,6 +162,7 @@ export default function TreatmentDetailPage() {
                 <TreatmentCard
                   data={state.data}
                   startCycleState={startCycleState}
+                  activationAnalysis={activationAnalysis}
                   onStartCycle={handleStartCycle}
                 />
                 <MedicationsCard data={state.data} />
@@ -1235,15 +1275,19 @@ function PatientCard({
 function TreatmentCard({
   data,
   startCycleState,
+  activationAnalysis,
   onStartCycle,
 }: {
   data: TreatmentDetail;
   startCycleState: { kind: "idle" | "starting" } | { kind: "error"; requestId: string | null };
+  activationAnalysis: ActivationAnalysisState;
   onStartCycle: () => void;
 }) {
   const t = data.treatment;
   const isActive = t.status === "active";
   const isStarting = startCycleState.kind === "starting";
+  const analysisReady = activationAnalysis.kind === "ok" && activationAnalysis.ready;
+  const canStart = !isActive && !isStarting && analysisReady;
   return (
     <Section title="Treatment" icon={<ClipboardList size={16} />}>
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
@@ -1260,7 +1304,7 @@ function TreatmentCard({
           <button
             type="button"
             onClick={onStartCycle}
-            disabled={isActive || isStarting}
+            disabled={!canStart}
             className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition-colors ${
               isActive
                 ? "cursor-not-allowed border border-emerald-200 bg-emerald-50 text-emerald-700"
@@ -1284,6 +1328,22 @@ function TreatmentCard({
               </>
             )}
           </button>
+          {!isActive && activationAnalysis.kind === "loading" && (
+            <p className="max-w-64 text-xs font-semibold text-slate-500">
+              Checking analysis status before cycle start.
+            </p>
+          )}
+          {!isActive && activationAnalysis.kind === "ok" && !activationAnalysis.ready && (
+            <p className="max-w-64 text-xs font-semibold text-amber-700">
+              Complete analysis before starting cycle.
+            </p>
+          )}
+          {!isActive && activationAnalysis.kind === "error" && (
+            <p className="max-w-64 text-xs font-semibold text-red-700">
+              Could not verify analysis status. Reference ID:{" "}
+              {activationAnalysis.requestId ?? "unknown"}
+            </p>
+          )}
           {startCycleState.kind === "error" && (
             <p className="max-w-64 text-xs font-semibold text-red-700">
               Could not start cycle. Reference ID: {startCycleState.requestId ?? "unknown"}
@@ -1301,6 +1361,11 @@ function TreatmentCard({
       )}
     </Section>
   );
+}
+
+function analysisReadyForCycle(analysis: TreatmentAnalysisRow | null): boolean {
+  const completed = analysis?.status === "completed" ? analysis : analysis?.last_completed;
+  return completed?.status === "completed" && completed.result !== null;
 }
 
 function MedicationsCard({ data }: { data: TreatmentDetail }) {

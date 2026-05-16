@@ -186,6 +186,7 @@ function renderAt(treatmentId: string, { isPrivacyMode = false }: { isPrivacyMod
 beforeEach(() => {
   vi.spyOn(treatmentsApi, "listPatientCheckIns").mockResolvedValue({ items: [] });
   vi.spyOn(treatmentsApi, "listAdherenceEvents").mockResolvedValue({ items: [] });
+  vi.spyOn(treatmentsApi, "getAnalysis").mockResolvedValue(null);
 });
 
 afterEach(() => {
@@ -227,6 +228,7 @@ describe("TreatmentDetailPage", () => {
 
   it("lets the pharmacist start the treatment cycle", async () => {
     vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(SAMPLE);
+    vi.spyOn(treatmentsApi, "getAnalysis").mockResolvedValue(COMPLETED_ANALYSIS);
     const startCycle = vi.spyOn(treatmentsApi, "startTreatmentCycle").mockResolvedValue({
       ...SAMPLE.treatment,
       status: "active",
@@ -240,6 +242,17 @@ describe("TreatmentDetailPage", () => {
 
     expect(startCycle).toHaveBeenCalledWith(SAMPLE.treatment.id);
     expect(await screen.findByRole("button", { name: /cycle active/i })).toBeDisabled();
+  });
+
+  it("disables cycle start until analysis is completed", async () => {
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(SAMPLE);
+    vi.spyOn(treatmentsApi, "getAnalysis").mockResolvedValue(RUNNING_ANALYSIS);
+
+    renderAt(SAMPLE.treatment.id);
+
+    await screen.findByText("Eleanor Vance");
+    expect(await screen.findByRole("button", { name: /start cycle/i })).toBeDisabled();
+    expect(screen.getByText(/complete analysis before starting cycle/i)).toBeTruthy();
   });
 
   it("shows a 'not found' empty state when the treatment is missing", async () => {

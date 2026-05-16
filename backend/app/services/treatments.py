@@ -25,7 +25,7 @@ from app.api.schemas import (
     TreatmentListItem,
     TreatmentView,
 )
-from app.db.models import AuditLogEntry, Medication, Patient, Treatment
+from app.db.models import AuditLogEntry, Medication, Patient, Treatment, TreatmentAnalysis
 
 log = structlog.get_logger(__name__)
 
@@ -46,6 +46,10 @@ class MRNConflict(Exception):
 
 class TreatmentNotFound(Exception):
     """Raised when a treatment-specific command references an unknown treatment."""
+
+
+class AnalysisNotCompleted(Exception):
+    """Raised when monitoring is requested before clinical analysis is ready."""
 
 
 async def create_treatment(
@@ -210,6 +214,10 @@ async def start_treatment_cycle(session: AsyncSession, treatment_id: UUID) -> Tr
 
     old_status = treatment.status
     if old_status != "active":
+        analysis = await _latest_completed_analysis(session, treatment_id)
+        if analysis is None:
+            raise AnalysisNotCompleted()
+
         treatment.status = "active"
         session.add(
             AuditLogEntry(
@@ -221,6 +229,7 @@ async def start_treatment_cycle(session: AsyncSession, treatment_id: UUID) -> Tr
                 payload={
                     "old_status": old_status,
                     "new_status": "active",
+                    "analysis_id": str(analysis.id),
                     "onboarding_delivery": "not_configured",
                 },
             )
@@ -230,11 +239,26 @@ async def start_treatment_cycle(session: AsyncSession, treatment_id: UUID) -> Tr
             treatment_id=str(treatment.id),
             old_status=old_status,
             new_status="active",
+            analysis_id=str(analysis.id),
             onboarding_delivery="not_configured",
         )
 
     await session.flush()
     return TreatmentView.model_validate(treatment)
+
+
+async def _latest_completed_analysis(
+    session: AsyncSession, treatment_id: UUID
+) -> TreatmentAnalysis | None:
+    result = await session.execute(
+        select(TreatmentAnalysis)
+        .where(
+            TreatmentAnalysis.treatment_id == treatment_id,
+            TreatmentAnalysis.status == "completed",
+        )
+        .order_by(TreatmentAnalysis.created_at.desc())
+    )
+    return next((analysis for analysis in result.scalars() if analysis.result is not None), None)
 
 
 async def update_clinical_objective(

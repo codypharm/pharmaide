@@ -89,6 +89,7 @@ from app.services.patient_reply_drafts import (
     draft_patient_reply_for_treatment,
 )
 from app.services.treatments import (
+    AnalysisNotCompleted,
     MRNConflict,
     create_treatment,
     get_treatment,
@@ -194,13 +195,14 @@ async def post_treatment_chat_response_mode(
 )
 async def post_treatment_start_cycle(
     treatment_id: UUID,
-    session_factory: SessionFactoryDep,
+    session: SessionDep,
 ) -> TreatmentView:
     try:
-        async with session_factory() as session, session.begin():
-            return await start_treatment_cycle(session, treatment_id)
+        return await start_treatment_cycle(session, treatment_id)
     except TreatmentCommandNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
+    except AnalysisNotCompleted as exc:
+        raise HTTPException(status_code=409, detail={"error": "analysis_not_completed"}) from exc
 
 
 @router.post(

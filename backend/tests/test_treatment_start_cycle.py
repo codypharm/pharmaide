@@ -7,7 +7,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import AuditLogEntry, Treatment
+from app.db.models import AuditLogEntry, Treatment, TreatmentAnalysis
 from app.services import task_runner
 
 
@@ -24,6 +24,14 @@ async def test_post_start_cycle_marks_pending_treatment_active_and_audits(
     create = await app_client.post("/treatments", json=_treatment_body("START-CYCLE-001"))
     assert create.status_code == 201, create.text
     treatment_id = UUID(create.json()["treatment_id"])
+    db_session.add(
+        TreatmentAnalysis(
+            treatment_id=treatment_id,
+            status="completed",
+            result={"clinical_summary": "Reviewed and ready for monitoring."},
+        )
+    )
+    await db_session.flush()
 
     response = await app_client.post(f"/treatments/{treatment_id}/start-cycle")
 
@@ -44,11 +52,46 @@ async def test_post_start_cycle_marks_pending_treatment_active_and_audits(
     )
     assert audit is not None
     assert audit.resource_type == "treatment"
+    assert UUID(audit.payload["analysis_id"])
     assert audit.payload == {
         "old_status": "pending",
         "new_status": "active",
+        "analysis_id": audit.payload["analysis_id"],
         "onboarding_delivery": "not_configured",
     }
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_start_cycle_rejects_treatment_without_completed_analysis(
+    app_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    create = await app_client.post("/treatments", json=_treatment_body("START-CYCLE-002"))
+    assert create.status_code == 201, create.text
+    treatment_id = UUID(create.json()["treatment_id"])
+
+    response = await app_client.post(f"/treatments/{treatment_id}/start-cycle")
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": {"error": "analysis_not_completed"}}
+    detail = await app_client.get(f"/treatments/{treatment_id}")
+    assert detail.status_code == 200
+    assert detail.json()["treatment"]["status"] == "pending"
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_start_cycle_rejects_completed_analysis_without_result(
+    app_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    create = await app_client.post("/treatments", json=_treatment_body("START-CYCLE-003"))
+    assert create.status_code == 201, create.text
+    treatment_id = UUID(create.json()["treatment_id"])
+    db_session.add(TreatmentAnalysis(treatment_id=treatment_id, status="completed", result=None))
+    await db_session.flush()
+
+    response = await app_client.post(f"/treatments/{treatment_id}/start-cycle")
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": {"error": "analysis_not_completed"}}
 
 
 @pytest.mark.usefixtures("postgres_container")
