@@ -175,6 +175,7 @@ export type ConversationMessageStatus =
   | "draft_ready"
   | "held_for_review"
   | "approved"
+  | "rejected"
   | "queued"
   | "sent"
   | "failed";

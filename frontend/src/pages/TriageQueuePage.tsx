@@ -18,6 +18,7 @@ import {
   approveTriageItem,
   listTriageItems,
   queueTriageItemDelivery,
+  rejectTriageItem,
   updateTriageItemStatus,
   type TriageItemView,
   type TriageReason,
@@ -210,6 +211,45 @@ export default function TriageQueuePage() {
     }
   }
 
+  async function rejectItem(itemId: string) {
+    setActionItemId(itemId);
+    setActionError(null);
+    try {
+      const rejection = await rejectTriageItem(itemId);
+      setState((current) => {
+        if (current.kind !== "ok") return current;
+        return {
+          kind: "ok",
+          items: current.items.map((item) =>
+            item.id === rejection.triage_item.id ? rejection.triage_item : item,
+          ),
+        };
+      });
+      setConversationByItem((current) => {
+        const existing = current[itemId];
+        if (!existing || existing.kind !== "ok") return current;
+        return {
+          ...current,
+          [itemId]: {
+            kind: "ok",
+            items: existing.items.map((message) =>
+              message.id === rejection.rejected_message.id
+                ? rejection.rejected_message
+                : message,
+            ),
+          },
+        };
+      });
+    } catch (err: unknown) {
+      setActionError({
+        itemId,
+        requestId: err instanceof ApiError ? err.requestId : null,
+      });
+    } finally {
+      setActionItemId(null);
+    }
+  }
+
   async function toggleConversation(item: TriageItemView) {
     if (expandedItemId === item.id) {
       setExpandedItemId(null);
@@ -266,6 +306,7 @@ export default function TriageQueuePage() {
             onApproveItem={approveItem}
             onMoveItem={moveItem}
             onQueueDelivery={queueDelivery}
+            onRejectItem={rejectItem}
             onToggleConversation={toggleConversation}
           />
         )}
@@ -437,6 +478,7 @@ function TriageTable({
   onApproveItem,
   onMoveItem,
   onQueueDelivery,
+  onRejectItem,
   onToggleConversation,
 }: {
   items: TriageItemView[];
@@ -446,6 +488,7 @@ function TriageTable({
   onApproveItem: (itemId: string) => Promise<void>;
   onMoveItem: (itemId: string, status: TriageStatus) => Promise<void>;
   onQueueDelivery: (itemId: string) => Promise<void>;
+  onRejectItem: (itemId: string) => Promise<void>;
   onToggleConversation: (item: TriageItemView) => Promise<void>;
 }) {
   return (
@@ -512,6 +555,7 @@ function TriageTable({
                         onApproveItem={onApproveItem}
                         onMoveItem={onMoveItem}
                         onQueueDelivery={onQueueDelivery}
+                        onRejectItem={onRejectItem}
                       />
                     </td>
                   </tr>
@@ -532,6 +576,7 @@ function ConversationPanel({
   onApproveItem,
   onMoveItem,
   onQueueDelivery,
+  onRejectItem,
 }: {
   item: TriageItemView;
   isBusy: boolean;
@@ -539,6 +584,7 @@ function ConversationPanel({
   onApproveItem: (itemId: string) => Promise<void>;
   onMoveItem: (itemId: string, status: TriageStatus) => Promise<void>;
   onQueueDelivery: (itemId: string) => Promise<void>;
+  onRejectItem: (itemId: string) => Promise<void>;
 }) {
   if (state.kind === "loading") {
     return (
@@ -599,6 +645,7 @@ function ConversationPanel({
           onApproveItem={onApproveItem}
           onMoveItem={onMoveItem}
           onQueueDelivery={onQueueDelivery}
+          onRejectItem={onRejectItem}
         />
       </div>
     </div>
@@ -638,6 +685,7 @@ function FlagSummary({
 
 function getDraftStatusLabel(status: ConversationMessageView["status"] | undefined): string {
   if (status === "approved") return "Approved";
+  if (status === "rejected") return "Rejected, not sent";
   if (status === "queued") return "Queued for delivery";
   if (status === "sent") return "Sent";
   if (status === "failed") return "Delivery failed";
@@ -646,6 +694,7 @@ function getDraftStatusLabel(status: ConversationMessageView["status"] | undefin
 
 function getDraftActionLabel(status: ConversationMessageView["status"] | undefined): string {
   if (status === "approved") return "Queue for delivery";
+  if (status === "rejected") return "No action needed";
   if (status === "queued") return "Waiting for delivery provider";
   if (status === "sent") return "No action needed";
   if (status === "failed") return "Review delivery failure";
@@ -749,6 +798,11 @@ function ConversationMessageRow({
               Approved
             </span>
           )}
+          {isHeldDraft && message.status === "rejected" && (
+            <span className="inline-flex items-center rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-700">
+              Rejected, not sent
+            </span>
+          )}
           {isHeldDraft && message.status === "queued" && (
             <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-blue-700">
               Queued
@@ -764,9 +818,9 @@ function ConversationMessageRow({
               Failed
             </span>
           )}
-          {isHeldDraft && !["approved", "queued", "sent", "failed"].includes(message.status) && (
+          {isHeldDraft && !["approved", "rejected", "queued", "sent", "failed"].includes(message.status) && (
             <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
-              Held draft
+              Held draft, not sent
             </span>
           )}
         </div>
@@ -806,6 +860,7 @@ function ReviewAction({
   onApproveItem,
   onMoveItem,
   onQueueDelivery,
+  onRejectItem,
 }: {
   item: TriageItemView;
   canApproveDraft: boolean;
@@ -814,6 +869,7 @@ function ReviewAction({
   onApproveItem: (itemId: string) => Promise<void>;
   onMoveItem: (itemId: string, status: TriageStatus) => Promise<void>;
   onQueueDelivery: (itemId: string) => Promise<void>;
+  onRejectItem: (itemId: string) => Promise<void>;
 }) {
   if (canQueueDelivery) {
     return (
@@ -848,6 +904,33 @@ function ReviewAction({
   const onClick = canApproveDraft
     ? () => void onApproveItem(item.id)
     : () => void onMoveItem(item.id, nextStatus);
+
+  if (canApproveDraft) {
+    return (
+      <div className="flex flex-wrap justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => void onRejectItem(item.id)}
+          disabled={isBusy}
+          aria-label={`Reject draft item ${shortId(item.id)}`}
+          className="inline-flex min-w-32 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 font-bold text-slate-800 hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
+        >
+          {isBusy && <Loader2 size={16} className="animate-spin" />}
+          Reject draft
+        </button>
+        <button
+          type="button"
+          onClick={onClick}
+          disabled={isBusy}
+          aria-label={`${label} item ${shortId(item.id)}`}
+          className="inline-flex min-w-32 items-center justify-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 disabled:opacity-50 cursor-pointer"
+        >
+          {isBusy && <Loader2 size={16} className="animate-spin" />}
+          {label}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <button

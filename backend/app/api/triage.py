@@ -12,16 +12,19 @@ from app.api.schemas import (
     TriageItemList,
     TriageItemUpdate,
     TriageItemView,
+    TriageRejectionView,
 )
 from app.db.engine import get_session
 from app.services.triage import (
     InvalidTriageTransition,
     TriageDraftNotApprovable,
     TriageDraftNotQueueable,
+    TriageDraftNotRejectable,
     TriageItemNotFound,
     approve_triage_item_draft,
     list_triage_items,
     queue_triage_item_delivery,
+    reject_triage_item_draft,
     update_triage_item_status,
 )
 
@@ -77,6 +80,27 @@ async def approve_triage_item(
         raise HTTPException(
             status_code=409,
             detail={"error": "triage_draft_not_approvable"},
+        ) from exc
+
+
+@router.post(
+    "/items/{item_id}/reject",
+    response_model=TriageRejectionView,
+)
+async def reject_triage_item(
+    item_id: UUID,
+    session: SessionDep,
+) -> TriageRejectionView:
+    try:
+        return await reject_triage_item_draft(session, item_id)
+    except TriageItemNotFound as exc:
+        raise HTTPException(status_code=404, detail={"error": "triage_item_not_found"}) from exc
+    except InvalidTriageTransition as exc:
+        raise HTTPException(status_code=409, detail={"error": "invalid_triage_transition"}) from exc
+    except TriageDraftNotRejectable as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "triage_draft_not_rejectable"},
         ) from exc
 
 

@@ -13,6 +13,7 @@ from app.api.schemas import (
     TriageItemList,
     TriageItemView,
     TriageReason,
+    TriageRejectionView,
     TriageStatus,
 )
 from app.db.models import AuditLogEntry, ConversationMessage, Treatment, TriageItem
@@ -40,6 +41,10 @@ class TriageDraftNotApprovable(Exception):
 
 class TriageDraftNotQueueable(Exception):
     """Raised when a triage item does not point to an approved assistant draft."""
+
+
+class TriageDraftNotRejectable(Exception):
+    """Raised when a triage item does not point to a held assistant draft."""
 
 
 async def create_open_triage_item(
@@ -242,6 +247,59 @@ async def approve_triage_item_draft(
     )
 
 
+async def reject_triage_item_draft(
+    session: AsyncSession,
+    item_id: UUID,
+) -> TriageRejectionView:
+    """Reject a held assistant draft so it cannot be queued for delivery."""
+    item = await session.get(TriageItem, item_id)
+    if item is None:
+        raise TriageItemNotFound()
+    if item.status == "resolved":
+        raise InvalidTriageTransition()
+
+    message = await _get_rejectable_draft(session, item)
+    old_message_status = message.status
+    old_triage_status = item.status
+
+    message.status = "rejected"
+    item.status = "resolved"
+    await session.flush()
+
+    session.add(
+        AuditLogEntry(
+            event_type="triage_item_draft_rejected",
+            resource_type="triage_item",
+            resource_id=item.id,
+            # Rejection is an explicit pharmacist safety decision. The draft
+            # body remains only in conversation_messages, never in audit.
+            payload={
+                "triage_item_id": str(item.id),
+                "treatment_id": str(item.treatment_id),
+                "rejected_message_id": str(message.id),
+                "old_message_status": old_message_status,
+                "new_message_status": message.status,
+                "old_triage_status": old_triage_status,
+                "new_triage_status": item.status,
+            },
+        )
+    )
+    await session.flush()
+
+    log.info(
+        "triage_item_draft_rejected",
+        triage_item_id=str(item.id),
+        treatment_id=str(item.treatment_id),
+        rejected_message_id=str(message.id),
+        old_triage_status=old_triage_status,
+        new_triage_status=item.status,
+    )
+    return TriageRejectionView(
+        triage_item=TriageItemView.model_validate(item),
+        rejected_message=ConversationMessageView.model_validate(message),
+    )
+
+
 async def queue_triage_item_delivery(
     session: AsyncSession,
     item_id: UUID,
@@ -308,6 +366,28 @@ async def _get_approvable_draft(
         or message.status != "held_for_review"
     ):
         raise TriageDraftNotApprovable()
+
+    return message
+
+
+async def _get_rejectable_draft(
+    session: AsyncSession,
+    item: TriageItem,
+) -> ConversationMessage:
+    if item.conversation_message_id is None:
+        raise TriageDraftNotRejectable()
+
+    message = await session.get(ConversationMessage, item.conversation_message_id)
+    if message is None:
+        raise TriageDraftNotRejectable()
+
+    if (
+        message.treatment_id != item.treatment_id
+        or message.direction != "outbound"
+        or message.sender_type != "assistant"
+        or message.status != "held_for_review"
+    ):
+        raise TriageDraftNotRejectable()
 
     return message
 

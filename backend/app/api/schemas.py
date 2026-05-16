@@ -34,6 +34,7 @@ ConversationMessageStatus = Literal[
     "draft_ready",
     "held_for_review",
     "approved",
+    "rejected",
     "queued",
     "sent",
     "failed",
@@ -297,6 +298,11 @@ class TriageApprovalView(BaseModel):
 class TriageDeliveryView(BaseModel):
     triage_item: TriageItemView
     queued_message: ConversationMessageView
+
+
+class TriageRejectionView(BaseModel):
+    triage_item: TriageItemView
+    rejected_message: ConversationMessageView
 
 
 class TriageItemUpdate(BaseModel):

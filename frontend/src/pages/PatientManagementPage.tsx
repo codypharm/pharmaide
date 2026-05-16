@@ -1297,7 +1297,7 @@ function ConversationBubble({
           {isAssistant && message.status === "held_for_review" && (
             <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 font-bold uppercase tracking-wider text-amber-700">
               <CheckCircle2 size={10} />
-              Held
+              Held, not sent
             </span>
           )}
           {isOutbound && <DeliveryStatusBadge status={message.status} />}
