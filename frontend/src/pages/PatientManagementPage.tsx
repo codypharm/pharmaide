@@ -24,6 +24,7 @@ import {
   sendPharmacistMessage,
   updateTreatmentChatResponseMode,
   type ConversationMessageList,
+  type ConversationMessageStatus,
   type ConversationMessageView,
   type TreatmentDetail,
   type TreatmentListItem,
@@ -1051,16 +1052,49 @@ function ConversationBubble({ message }: { message: ConversationMessageView }) {
               Held
             </span>
           )}
-          {isOutbound && message.status === "queued" && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-bold uppercase tracking-wider text-emerald-700">
-              <CheckCircle2 size={10} />
-              Queued for WhatsApp
-            </span>
-          )}
+          {isOutbound && <DeliveryStatusBadge status={message.status} />}
         </div>
       </div>
     </div>
   );
+}
+
+function DeliveryStatusBadge({ status }: { status: ConversationMessageStatus }) {
+  const badge = deliveryStatusBadge(status);
+  if (!badge) return null;
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-bold uppercase tracking-wider ${badge.className}`}
+    >
+      <CheckCircle2 size={10} />
+      {badge.label}
+    </span>
+  );
+}
+
+function deliveryStatusBadge(
+  status: ConversationMessageStatus,
+): { label: string; className: string } | null {
+  if (status === "queued") {
+    return {
+      label: "Waiting to send",
+      className: "border-slate-200 bg-slate-50 text-slate-600",
+    };
+  }
+  if (status === "sent") {
+    return {
+      label: "Sent",
+      className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    };
+  }
+  if (status === "failed") {
+    return {
+      label: "Send failed",
+      className: "border-amber-200 bg-amber-50 text-amber-700",
+    };
+  }
+  return null;
 }
 
 function ReasoningPlaceholder() {

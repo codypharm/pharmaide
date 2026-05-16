@@ -324,7 +324,7 @@ describe("PatientManagementPage", () => {
       "data-message-side",
       "right",
     );
-    expect(screen.getByText("Queued for WhatsApp")).toBeTruthy();
+    expect(screen.getByText("Waiting to send")).toBeTruthy();
     expect(toast.success).toHaveBeenCalledWith("Pharmacist message queued", {
       description: "It will be sent through the WhatsApp delivery workflow.",
     });
