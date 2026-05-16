@@ -681,9 +681,10 @@ function NeedsReviewAlert({ items }: { items: TriageItemView[] }) {
         </div>
         <Link
           to="/dashboard/triage"
-          className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-slate-800"
+          aria-label="Open triage queue"
+          className="inline-flex shrink-0 items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-900 hover:bg-slate-50"
         >
-          Open Triage Queue
+          Open triage
         </Link>
       </div>
     </section>
@@ -930,9 +931,6 @@ function ChatResponseControl({
 }) {
   const isTakeover = mode === "pharmacist_takeover";
   const automationLabel = automationMode === "active" ? "Automation active" : "Automation paused";
-  const workflowNote = isTakeover
-    ? "Scheduled reminders and check-ins continue. Free-form replies wait for the pharmacist."
-    : "Scheduled reminders, check-ins, and AI reply drafting can run for this treatment.";
 
   return (
     <section
@@ -940,28 +938,13 @@ function ChatResponseControl({
         isTakeover ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-white"
       }`}
     >
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p
-            className={`text-[9px] font-bold uppercase tracking-wider ${
-              isTakeover ? "text-amber-700" : "text-slate-500"
-            }`}
-          >
-            Conversation control
-          </p>
-          <p className="mt-0.5 text-sm font-bold text-slate-900">
+          <p className="text-sm font-bold text-slate-900">
             {isTakeover ? "Pharmacist replying" : "AI replying"}
           </p>
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            <span className="rounded-full border border-slate-200 bg-white px-1.5 py-0.5 text-[9px] font-bold text-slate-600">
-              {automationLabel}
-            </span>
-            <span className="rounded-full border border-slate-200 bg-white px-1.5 py-0.5 text-[9px] font-bold text-slate-600">
-              Chat {isTakeover ? "manual" : "AI active"}
-            </span>
-          </div>
-          <p className="mt-1.5 text-[10px] font-medium leading-4 text-slate-600">
-            {workflowNote}
+          <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+            {automationLabel}
           </p>
         </div>
         <button
@@ -976,7 +959,7 @@ function ChatResponseControl({
               Updating
             </span>
           ) : isTakeover ? (
-            "Resume AI replies"
+            "Resume AI"
           ) : (
             "Take over"
           )}

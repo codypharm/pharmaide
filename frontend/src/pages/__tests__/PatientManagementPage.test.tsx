@@ -321,12 +321,10 @@ describe("PatientManagementPage", () => {
 
     await screen.findByText("Pharmacist replying");
     expect(screen.getByText("Automation active")).toBeTruthy();
-    expect(
-      screen.getByText(
-        "Scheduled reminders and check-ins continue. Free-form replies wait for the pharmacist.",
-      ),
-    ).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: /resume ai replies/i }));
+    expect(screen.queryByText("Conversation control")).toBeNull();
+    expect(screen.queryByText("Chat manual")).toBeNull();
+    expect(screen.queryByText(/scheduled reminders and check-ins continue/i)).toBeNull();
+    await user.click(screen.getByRole("button", { name: /resume ai/i }));
 
     await waitFor(() =>
       expect(updateSpy).toHaveBeenCalledWith(TAKEOVER_TREATMENTS.items[0].treatment.id, {
