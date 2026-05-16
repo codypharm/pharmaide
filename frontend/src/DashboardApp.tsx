@@ -11,10 +11,10 @@ function DashboardApp() {
       <aside className="w-64 bg-white border-r border-slate-200 flex flex-col z-40">
         <div className="p-8 pb-4">
           <Link to="/" className="flex items-center gap-2 group cursor-pointer">
-            <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-sm group-hover:bg-blue-700 transition-colors">
+            <div className="w-9 h-9 bg-[#5548E8] rounded-xl flex items-center justify-center text-white shadow-sm group-hover:bg-[#463AD4] transition-colors">
               <ShieldCheck size={20} />
             </div>
-            <h1 className="text-xl font-bold tracking-tighter text-slate-900 group-hover:text-blue-600 transition-colors">PharmaAide</h1>
+            <h1 className="text-xl font-bold tracking-tighter text-slate-900 group-hover:text-[#5548E8] transition-colors">PharmaAide</h1>
           </Link>
         </div>
 
@@ -104,7 +104,7 @@ function DashboardApp() {
           <div className="mt-8 px-4">
             <Link 
               to="/dashboard/new-treatment"
-              className="w-full bg-blue-600 hover:bg-blue-700 !text-white py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm font-bold transition-all shadow-sm shadow-blue-200"
+              className="w-full bg-[#5548E8] hover:bg-[#463AD4] !text-white py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm font-bold transition-all shadow-sm shadow-[#D9D5FB]"
             >
               <Plus size={18} />
               New Treatment
@@ -130,7 +130,7 @@ function DashboardApp() {
             <input 
               placeholder="Search Directory..." 
               type="text" 
-              className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all"
+              className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#D9D5FB] focus:border-[#5548E8] transition-all"
             />
           </div>
 
@@ -145,7 +145,7 @@ function DashboardApp() {
                   checked={isPrivacyMode}
                   onChange={(e) => setIsPrivacyMode(e.target.checked)}
                 />
-                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#5548E8]"></div>
               </div>
             </label>
             <button className="w-10 h-10 rounded-full hover:bg-slate-100 text-slate-500 flex items-center justify-center relative transition-colors">
