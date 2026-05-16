@@ -3,7 +3,6 @@ import {
   Bot,
   CheckCircle2,
   Download,
-  Filter,
   Loader2,
   RefreshCw,
   Search,
@@ -29,7 +28,6 @@ type FetchState =
 export default function SystemAuditsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [actorFilter, setActorFilter] = useState<ActorFilter>("All");
-  const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [state, setState] = useState<FetchState>({ kind: "loading" });
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
@@ -132,27 +130,23 @@ export default function SystemAuditsPage() {
     <div className="h-full overflow-y-auto p-8">
       <div className="flex flex-col gap-6">
         <Header
-          actorFilter={actorFilter}
-          showFilterMenu={showFilterMenu}
-          onToggleFilter={() => setShowFilterMenu((value) => !value)}
-          onSelectFilter={(value) => {
-            setActorFilter(value);
-            setShowFilterMenu(false);
-          }}
           onExport={exportVisibleLogs}
           exportDisabled={filteredLogs.length === 0}
         />
 
         <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-          <div className="p-4 border-b border-slate-100 flex flex-col gap-3 bg-slate-50/50 md:flex-row md:items-center md:justify-between">
-            <div className="relative w-full md:w-96">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search audits by event, resource, or actor..."
-                className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all"
-              />
+          <div className="p-4 border-b border-slate-100 flex flex-col gap-3 bg-slate-50/50 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+              <div className="relative w-full lg:w-96">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search audits by event, resource, or actor..."
+                  className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all"
+                />
+              </div>
+              <ActorSwitch value={actorFilter} onChange={setActorFilter} />
             </div>
             <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
               <ShieldCheck size={14} className="text-emerald-600" />
@@ -196,18 +190,44 @@ export default function SystemAuditsPage() {
   );
 }
 
+function ActorSwitch({
+  value,
+  onChange,
+}: {
+  value: ActorFilter;
+  onChange: (value: ActorFilter) => void;
+}) {
+  return (
+    <div
+      className="inline-flex w-fit rounded-xl border border-slate-200 bg-white p-1"
+      aria-label="Filter audits by actor"
+    >
+      {ACTOR_FILTERS.map((level) => (
+        <button
+          key={level}
+          type="button"
+          onClick={() => onChange(level)}
+          className={`inline-flex min-w-20 items-center justify-center rounded-lg px-3 py-1.5 text-xs font-bold transition-colors cursor-pointer ${
+            value === level
+              ? "bg-slate-900 text-white"
+              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+          }`}
+          aria-pressed={value === level}
+        >
+          {level}
+          {value === level && level !== "All" && (
+            <CheckCircle2 size={13} className="ml-1.5" />
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function Header({
-  actorFilter,
-  showFilterMenu,
-  onToggleFilter,
-  onSelectFilter,
   onExport,
   exportDisabled,
 }: {
-  actorFilter: ActorFilter;
-  showFilterMenu: boolean;
-  onToggleFilter: () => void;
-  onSelectFilter: (value: ActorFilter) => void;
   onExport: () => void;
   exportDisabled: boolean;
 }) {
@@ -221,49 +241,15 @@ function Header({
           Immutable record of AI decisions, tool calls, delivery state, and human actions.
         </p>
       </div>
-      <div className="flex gap-3 relative">
-        <button
-          type="button"
-          onClick={onToggleFilter}
-          className={`px-4 py-2 border rounded-xl font-semibold transition-all flex items-center gap-2 cursor-pointer ${
-            actorFilter !== "All"
-              ? "bg-blue-600 text-white border-blue-600"
-              : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
-          }`}
-        >
-          <Filter size={16} />
-          {actorFilter === "All" ? "Filter Logs" : `Actor: ${actorFilter}`}
-        </button>
-        {showFilterMenu && (
-          <div className="absolute top-12 right-44 w-48 bg-white border border-slate-200 rounded-xl z-50 py-2 overflow-hidden">
-            <p className="px-4 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50 mb-1">
-              Filter by Actor
-            </p>
-            {ACTOR_FILTERS.map((level) => (
-              <button
-                key={level}
-                type="button"
-                onClick={() => onSelectFilter(level)}
-                className={`w-full px-4 py-2 text-sm text-left hover:bg-slate-50 transition-colors flex items-center justify-between font-medium ${
-                  actorFilter === level ? "text-blue-700 bg-blue-50/50" : "text-slate-600"
-                }`}
-              >
-                {level}
-                {actorFilter === level && <CheckCircle2 size={14} />}
-              </button>
-            ))}
-          </div>
-        )}
-        <button
-          type="button"
-          onClick={onExport}
-          disabled={exportDisabled}
-          className="px-4 py-2 bg-slate-900 text-white rounded-xl font-semibold hover:bg-slate-800 transition-colors flex items-center gap-2 cursor-pointer disabled:cursor-not-allowed disabled:bg-slate-300"
-        >
-          <Download size={16} />
-          Export Audit Trail
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={onExport}
+        disabled={exportDisabled}
+        className="px-4 py-2 bg-slate-900 text-white rounded-xl font-semibold hover:bg-slate-800 transition-colors flex items-center gap-2 cursor-pointer disabled:cursor-not-allowed disabled:bg-slate-300"
+      >
+        <Download size={16} />
+        Export Audit Trail
+      </button>
     </div>
   );
 }

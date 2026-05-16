@@ -585,19 +585,18 @@ describe("PatientManagementPage", () => {
 
     renderPage();
 
-    await screen.findByText("Pharmacist replying");
-    expect(screen.getByText("Automation active")).toBeTruthy();
+    await screen.findByText("Pharmacist");
     expect(screen.queryByText("Conversation control")).toBeNull();
     expect(screen.queryByText("Chat manual")).toBeNull();
     expect(screen.queryByText(/scheduled reminders and check-ins continue/i)).toBeNull();
-    await user.click(screen.getByRole("button", { name: /resume ai/i }));
+    await user.click(screen.getByRole("switch", { name: /chat reply mode/i }));
 
     await waitFor(() =>
       expect(updateSpy).toHaveBeenCalledWith(TAKEOVER_TREATMENTS.items[0].treatment.id, {
         chat_response_mode: "ai_active",
       }),
     );
-    expect(await screen.findByText("AI replying")).toBeTruthy();
+    expect(await screen.findByText("Agent")).toBeTruthy();
     expect(toast.success).toHaveBeenCalledWith("AI replies resumed", {
       description: "The agent can draft future patient replies for this treatment.",
     });

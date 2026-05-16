@@ -544,7 +544,6 @@ export default function PatientManagementPage() {
                 incomingMessage={incomingMessage}
                 pharmacistMessage={pharmacistMessage}
                 chatResponseMode={selectedTreatment.treatment.chat_response_mode}
-                automationMode={selectedTreatment.treatment.automation_mode}
                 isSubmittingMessage={isSubmittingMessage}
                 isSendingPharmacistMessage={isSendingPharmacistMessage}
                 isUpdatingChatMode={isUpdatingChatMode}
@@ -994,7 +993,6 @@ function InteractionLog({
   incomingMessage,
   pharmacistMessage,
   chatResponseMode,
-  automationMode,
   isSubmittingMessage,
   isSendingPharmacistMessage,
   isUpdatingChatMode,
@@ -1014,7 +1012,6 @@ function InteractionLog({
   incomingMessage: string;
   pharmacistMessage: string;
   chatResponseMode: TreatmentView["chat_response_mode"];
-  automationMode: TreatmentView["automation_mode"];
   isSubmittingMessage: boolean;
   isSendingPharmacistMessage: boolean;
   isUpdatingChatMode: boolean;
@@ -1034,9 +1031,16 @@ function InteractionLog({
           <MessageSquare size={16} className="text-slate-400" />
           <h3 className="font-bold text-slate-900 text-sm">Interaction Log</h3>
         </div>
-        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
-          {formatLastUpdated(conversationLastUpdatedAt)}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+            {formatLastUpdated(conversationLastUpdatedAt)}
+          </span>
+          <ChatModeSwitch
+            mode={chatResponseMode}
+            isUpdating={isUpdatingChatMode}
+            onUpdateMode={onUpdateChatResponseMode}
+          />
+        </div>
       </div>
 
       <div className="p-1 bg-slate-200 mx-4 mt-4 rounded-lg flex gap-1">
@@ -1063,13 +1067,6 @@ function InteractionLog({
           Safety Review
         </button>
       </div>
-
-      <ChatResponseControl
-        mode={chatResponseMode}
-        automationMode={automationMode}
-        isUpdating={isUpdatingChatMode}
-        onUpdateMode={onUpdateChatResponseMode}
-      />
 
       <div className="flex-1 overflow-y-auto p-4">
         {activeProfileTab === "patient" ? (
@@ -1151,54 +1148,41 @@ function InteractionLog({
   );
 }
 
-function ChatResponseControl({
+function ChatModeSwitch({
   mode,
-  automationMode,
   isUpdating,
   onUpdateMode,
 }: {
   mode: TreatmentView["chat_response_mode"];
-  automationMode: TreatmentView["automation_mode"];
   isUpdating: boolean;
   onUpdateMode: (mode: TreatmentView["chat_response_mode"]) => void;
 }) {
   const isTakeover = mode === "pharmacist_takeover";
-  const automationLabel = automationMode === "active" ? "Automation active" : "Automation paused";
 
   return (
-    <section
-      className={`mx-4 mt-3 rounded-lg border px-3 py-2 ${
-        isTakeover ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-white"
-      }`}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold text-slate-900">
-            {isTakeover ? "Pharmacist replying" : "AI replying"}
-          </p>
-          <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-            {automationLabel}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => onUpdateMode(isTakeover ? "ai_active" : "pharmacist_takeover")}
+    <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-600 cursor-pointer">
+      <span className="w-24 text-right leading-4">
+        {isTakeover ? "Pharmacist" : "Agent"}
+      </span>
+      <span className="relative inline-flex items-center">
+        <input
+          type="checkbox"
+          role="switch"
+          aria-label="Chat reply mode"
+          className="peer sr-only"
+          checked={isTakeover}
+          onChange={(event) =>
+            onUpdateMode(event.target.checked ? "pharmacist_takeover" : "ai_active")
+          }
           disabled={isUpdating}
-          className="shrink-0 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-800 transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {isUpdating ? (
-            <span className="inline-flex items-center gap-1">
-              <Loader2 size={12} className="animate-spin" />
-              Updating
-            </span>
-          ) : isTakeover ? (
-            "Resume AI"
-          ) : (
-            "Take over"
-          )}
-        </button>
-      </div>
-    </section>
+        />
+        <span className="h-5 w-9 rounded-full bg-slate-300 transition-colors peer-checked:bg-slate-900 peer-disabled:opacity-60" />
+        <span className="absolute left-0.5 h-4 w-4 rounded-full bg-white transition-transform peer-checked:translate-x-4" />
+        {isUpdating && (
+          <Loader2 size={12} className="absolute left-3.5 animate-spin text-slate-500" />
+        )}
+      </span>
+    </label>
   );
 }
 

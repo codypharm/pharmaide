@@ -74,6 +74,19 @@ describe("SystemAuditsPage", () => {
     expect(screen.queryByText("Analysis Started")).toBeNull();
   });
 
+  it("filters loaded audits with the inline actor switch", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(auditsApi, "listAuditLogEntries").mockResolvedValue(AUDITS);
+
+    renderPage();
+
+    await screen.findByText("Analysis Started");
+    await user.click(screen.getByRole("button", { name: /^human$/i }));
+
+    expect(screen.getByText("Triage Item Status Changed")).toBeTruthy();
+    expect(screen.queryByText("Analysis Started")).toBeNull();
+  });
+
   it("shows an empty state when no audit entries exist yet", async () => {
     vi.spyOn(auditsApi, "listAuditLogEntries").mockResolvedValue({ items: [] });
 
