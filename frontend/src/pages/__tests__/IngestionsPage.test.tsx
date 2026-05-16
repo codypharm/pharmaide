@@ -22,6 +22,8 @@ function row(suffix: string): TreatmentListItem {
       id: `t-${suffix}`,
       patient_id: `p-${suffix}`,
       status: "pending",
+      chat_response_mode: "ai_active",
+      automation_mode: "active",
       clinical_objective: null,
       treatment_start_at: null,
       created_at: "2026-05-11T12:00:00Z",

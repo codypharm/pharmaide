@@ -26,6 +26,8 @@ const SAMPLE: TreatmentDetail = {
     id: "22222222-2222-2222-2222-222222222222",
     patient_id: "11111111-1111-1111-1111-111111111111",
     status: "pending",
+    chat_response_mode: "ai_active",
+    automation_mode: "active",
     clinical_objective: "Monitor for cough",
     treatment_start_at: "2026-05-16T08:30:00Z",
     created_at: "2026-05-11T12:00:00Z",

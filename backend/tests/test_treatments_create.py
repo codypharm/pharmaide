@@ -81,6 +81,8 @@ async def test_post_treatments_creates_full_lineage(
     assert treatment is not None
     assert treatment.patient_id == patient_id
     assert treatment.status == "pending"
+    assert treatment.chat_response_mode == "ai_active"
+    assert treatment.automation_mode == "active"
     assert treatment.clinical_objective == "Monitor for ACE-inhibitor cough"
     assert treatment.treatment_start_at is not None
 
@@ -116,6 +118,8 @@ async def test_post_treatments_creates_full_lineage(
     detail_response = await app_client.get(f"/treatments/{treatment_id}")
     assert detail_response.status_code == 200
     assert detail_response.json()["patient"]["allergies"] == ["Penicillin", "Sulfa"]
+    assert detail_response.json()["treatment"]["chat_response_mode"] == "ai_active"
+    assert detail_response.json()["treatment"]["automation_mode"] == "active"
     assert detail_response.json()["treatment"]["treatment_start_at"].startswith(
         "2026-05-16T08:30:00"
     )

@@ -38,6 +38,8 @@ ConversationMessageStatus = Literal[
     "sent",
     "failed",
 ]
+ChatResponseMode = Literal["ai_active", "pharmacist_takeover"]
+AutomationMode = Literal["active", "paused"]
 TriageReason = Literal[
     "input_guard",
     "referee",
@@ -320,6 +322,8 @@ class TreatmentView(BaseModel):
     id: UUID
     patient_id: UUID
     status: str
+    chat_response_mode: ChatResponseMode
+    automation_mode: AutomationMode
     clinical_objective: str | None
     treatment_start_at: datetime | None
     created_at: datetime

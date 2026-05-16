@@ -36,6 +36,15 @@ async def draft_patient_reply_for_treatment(
     treatment = await _load_treatment(session, treatment_id)
     if treatment is None:
         raise TreatmentNotFound()
+    if treatment.chat_response_mode == "pharmacist_takeover":
+        draft = _pharmacist_takeover_holding_draft()
+        log.info(
+            "patient_reply_holding_draft_generated",
+            treatment_id=str(treatment_id),
+            chat_response_mode=treatment.chat_response_mode,
+            automation_mode=treatment.automation_mode,
+        )
+        return draft
 
     recent_messages = await _recent_message_context(
         session,
@@ -72,6 +81,20 @@ async def draft_patient_reply_for_treatment(
         confidence=draft.confidence,
     )
     return draft
+
+
+def _pharmacist_takeover_holding_draft() -> PatientReplyDraft:
+    """Return a validated holding response while the pharmacist owns the thread."""
+    return PatientReplyDraft(
+        message=(
+            "Your pharmacist is reviewing this. I will let you know when there is an "
+            "update. Please continue following your current instructions unless your "
+            "pharmacist tells you otherwise."
+        ),
+        requires_pharmacist_review=False,
+        escalation_reason="none",
+        confidence=1.0,
+    )
 
 
 async def _load_treatment(session: AsyncSession, treatment_id: UUID) -> Treatment | None:

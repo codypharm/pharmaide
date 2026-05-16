@@ -56,6 +56,8 @@ async def test_get_returns_full_lineage_after_create(app_client: AsyncClient) ->
     assert detail["treatment"]["clinical_objective"] == "Monitor for cough"
     assert detail["treatment"]["treatment_start_at"].startswith("2026-05-16T08:30:00")
     assert detail["treatment"]["status"] == "pending"
+    assert detail["treatment"]["chat_response_mode"] == "ai_active"
+    assert detail["treatment"]["automation_mode"] == "active"
     # created_at is needed by the Treatment Detail page header.
     assert isinstance(detail["treatment"]["created_at"], str)
     assert detail["treatment"]["created_at"].endswith("Z") or (

@@ -58,6 +58,8 @@ export type TreatmentView = {
   id: string;
   patient_id: string;
   status: string;
+  chat_response_mode: "ai_active" | "pharmacist_takeover";
+  automation_mode: "active" | "paused";
   clinical_objective: string | null;
   treatment_start_at: string | null;
   created_at: string; // ISO 8601

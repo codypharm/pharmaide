@@ -82,6 +82,14 @@ class Treatment(Base):
     )
     # Lifecycle: pending → active (after Start Cycle) → completed | terminated.
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'pending'"))
+    # Chat ownership is separate from treatment automation. Pharmacist takeover
+    # blocks free-text AI answers without stopping reminders or check-ins.
+    chat_response_mode: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'ai_active'")
+    )
+    automation_mode: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'active'")
+    )
     clinical_objective: Mapped[str | None] = mapped_column(Text)
     treatment_start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Populated by Sprint 3 when the LangGraph thread is materialised.

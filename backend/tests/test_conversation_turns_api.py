@@ -14,7 +14,7 @@ from app.agents.safety_schemas import (
     RefereeResult,
     SafetyReview,
 )
-from app.db.models import AuditLogEntry
+from app.db.models import AuditLogEntry, Treatment
 from app.services import task_runner
 
 
@@ -79,6 +79,7 @@ async def test_post_conversation_turn_returns_held_draft_when_safety_blocks(
 @pytest.mark.usefixtures("postgres_container")
 async def test_held_conversation_turn_creates_open_triage_item(
     app_client: AsyncClient,
+    db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     treatment_id = await _create_treatment(app_client, "CONV-API-009")
@@ -103,6 +104,25 @@ async def test_held_conversation_turn_creates_open_triage_item(
     assert items[0]["conversation_message_id"] == turn["assistant_message"]["id"]
     assert items[0]["reason"] == "input_guard"
     assert items[0]["status"] == "open"
+
+    treatment = await db_session.get(Treatment, treatment_id)
+    assert treatment is not None
+    assert treatment.chat_response_mode == "pharmacist_takeover"
+    assert treatment.automation_mode == "active"
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.event_type == "treatment_chat_response_mode_changed"
+        )
+    )
+    assert audit is not None
+    assert audit.payload == {
+        "old_chat_response_mode": "ai_active",
+        "new_chat_response_mode": "pharmacist_takeover",
+        "automation_mode": "active",
+        "trigger": "triage_item_opened",
+        "triage_item_id": items[0]["id"],
+    }
 
 
 @pytest.mark.usefixtures("postgres_container")
@@ -349,6 +369,45 @@ async def test_post_patient_reply_draft_holds_when_safety_blocks(
     assert payload["assistant_message"]["status"] == "held_for_review"
     assert payload["assistant_message"]["safety_hold_reason"] == "input_guard"
     assert payload["safety_decision"]["status"] == "hold_for_pharmacist"
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_patient_reply_draft_uses_holding_response_during_pharmacist_takeover(
+    app_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    treatment_id = await _create_treatment(app_client, "CONV-API-013")
+    _patch_safety_decision(monkeypatch, treatment_id, status="hold_for_pharmacist")
+    held = await app_client.post(
+        f"/treatments/{treatment_id}/conversation-turns",
+        json={
+            "patient_message": "Can I take an extra dose?",
+            "assistant_draft": "This draft must be reviewed.",
+            "prescription_context": "Amoxicillin 500 mg three times daily.",
+        },
+    )
+    assert held.status_code == 201, held.text
+
+    async def fail_if_llm_draft_runs(*args: object, **kwargs: object) -> object:
+        raise AssertionError("takeover holding replies must not call the patient-reply LLM")
+
+    monkeypatch.setattr(
+        "app.services.patient_reply_drafts.draft_patient_reply",
+        fail_if_llm_draft_runs,
+    )
+    _patch_safety_decision(monkeypatch, treatment_id, status="send")
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/patient-reply-drafts",
+        json={"patient_message": "Any update on my question?"},
+    )
+
+    assert response.status_code == 201, response.text
+    payload = response.json()
+    assert payload["inbound_message"]["body"] == "Any update on my question?"
+    assert payload["assistant_message"]["status"] == "draft_ready"
+    assert "pharmacist is reviewing" in payload["assistant_message"]["body"]
+    assert payload["safety_decision"]["status"] == "send"
 
 
 @pytest.mark.usefixtures("postgres_container")

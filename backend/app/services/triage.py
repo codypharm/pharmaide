@@ -15,7 +15,7 @@ from app.api.schemas import (
     TriageReason,
     TriageStatus,
 )
-from app.db.models import AuditLogEntry, ConversationMessage, TriageItem
+from app.db.models import AuditLogEntry, ConversationMessage, Treatment, TriageItem
 
 log = structlog.get_logger(__name__)
 
@@ -58,6 +58,7 @@ async def create_open_triage_item(
     )
     session.add(item)
     await session.flush()
+    await _activate_pharmacist_takeover(session, treatment_id=treatment_id, triage_item=item)
     session.add(
         AuditLogEntry(
             event_type="triage_item_opened",
@@ -85,6 +86,45 @@ async def create_open_triage_item(
         status="open",
     )
     return TriageItemView.model_validate(item)
+
+
+async def _activate_pharmacist_takeover(
+    session: AsyncSession,
+    *,
+    treatment_id: UUID,
+    triage_item: TriageItem,
+) -> None:
+    treatment = await session.get(Treatment, treatment_id)
+    if treatment is None or treatment.chat_response_mode == "pharmacist_takeover":
+        return
+
+    old_mode = treatment.chat_response_mode
+    treatment.chat_response_mode = "pharmacist_takeover"
+    session.add(
+        AuditLogEntry(
+            event_type="treatment_chat_response_mode_changed",
+            resource_type="treatment",
+            resource_id=treatment.id,
+            # Conversation control changes are workflow metadata. Keep the
+            # patient message and held draft body in conversation_messages only.
+            payload={
+                "old_chat_response_mode": old_mode,
+                "new_chat_response_mode": treatment.chat_response_mode,
+                "automation_mode": treatment.automation_mode,
+                "trigger": "triage_item_opened",
+                "triage_item_id": str(triage_item.id),
+            },
+        )
+    )
+    log.info(
+        "treatment_chat_response_mode_changed",
+        treatment_id=str(treatment.id),
+        old_chat_response_mode=old_mode,
+        new_chat_response_mode=treatment.chat_response_mode,
+        automation_mode=treatment.automation_mode,
+        trigger="triage_item_opened",
+        triage_item_id=str(triage_item.id),
+    )
 
 
 async def list_triage_items(

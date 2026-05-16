@@ -20,6 +20,8 @@ const SURVEILLANCE_TREATMENTS: TreatmentList = {
         id: "88340000-0000-4000-8000-000000000001",
         patient_id: "patient-1",
         status: "pending",
+        chat_response_mode: "ai_active",
+        automation_mode: "active",
         clinical_objective: "Monitor dizziness",
         treatment_start_at: null,
         created_at: "2026-05-15T10:00:00Z",
