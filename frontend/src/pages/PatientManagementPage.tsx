@@ -501,6 +501,10 @@ export default function PatientManagementPage() {
                   triageItems={triageItems}
                   isPrivacyMode={isPrivacyMode}
                   onSelectTreatment={setSelectedTreatmentId}
+                  onOpenSafetyReview={(treatmentId) => {
+                    setSelectedTreatmentId(treatmentId);
+                    setActiveProfileTab("reasoning");
+                  }}
                 />
               ))}
               {filteredTreatments.length === 0 && (
@@ -566,12 +570,14 @@ function PatientTreatmentGroup({
   triageItems,
   isPrivacyMode,
   onSelectTreatment,
+  onOpenSafetyReview,
 }: {
   group: PatientTreatmentGroup;
   selectedTreatmentId: string | null;
   triageItems: TriageItemView[];
   isPrivacyMode: boolean;
   onSelectTreatment: (treatmentId: string) => void;
+  onOpenSafetyReview: (treatmentId: string) => void;
 }) {
   const patient = group.items[0].patient;
   const treatmentCountLabel = `${group.items.length} treatment${group.items.length === 1 ? "" : "s"}`;
@@ -602,6 +608,7 @@ function PatientTreatmentGroup({
             isSelected={selectedTreatmentId === item.treatment.id}
             activeFlagCount={activeFlagCountForTreatment(triageItems, item.treatment.id)}
             onSelect={() => onSelectTreatment(item.treatment.id)}
+            onOpenSafetyReview={() => onOpenSafetyReview(item.treatment.id)}
           />
         ))}
       </div>
@@ -659,11 +666,13 @@ function TreatmentRow({
   isSelected,
   activeFlagCount,
   onSelect,
+  onOpenSafetyReview,
 }: {
   item: TreatmentListItem;
   isSelected: boolean;
   activeFlagCount: number;
   onSelect: () => void;
+  onOpenSafetyReview: () => void;
 }) {
   const medicationLabel =
     item.medication_count > 1
@@ -674,7 +683,13 @@ function TreatmentRow({
   return (
     <button
       type="button"
-      onClick={onSelect}
+      onClick={(event) => {
+        if ((event.target as HTMLElement).closest("[data-flag-badge]")) {
+          onOpenSafetyReview();
+          return;
+        }
+        onSelect();
+      }}
       className={`mx-4 mt-2 w-[calc(100%-2rem)] rounded-lg border p-3 text-left cursor-pointer transition-all hover:bg-slate-50/80 ${
         isSelected ? "border-blue-200 bg-blue-50/60" : "border-slate-100 bg-white"
       }`}
@@ -693,7 +708,10 @@ function TreatmentRow({
             {statusLabel(item.treatment.status)}
           </span>
           {activeFlagCount > 0 && (
-            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-700">
+            <span
+              data-flag-badge
+              className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-700"
+            >
               {activeFlagCount} flag{activeFlagCount === 1 ? "" : "s"}
             </span>
           )}
@@ -1037,7 +1055,7 @@ function InteractionLog({
               : "text-slate-500 hover:text-slate-700"
           }`}
         >
-          Agent Reasoning
+          Safety Review
         </button>
       </div>
 
@@ -1056,7 +1074,7 @@ function InteractionLog({
             onRetryMessageDelivery={onRetryMessageDelivery}
           />
         ) : (
-          <AgentReasoningPanel
+          <SafetyReviewPanel
             activeTriageItems={activeTriageItems}
             conversationState={conversationState}
           />
@@ -1337,7 +1355,7 @@ function deliveryStatusBadge(
   return null;
 }
 
-function AgentReasoningPanel({
+function SafetyReviewPanel({
   activeTriageItems,
   conversationState,
 }: {
@@ -1371,13 +1389,13 @@ function AgentReasoningPanel({
       </div>
 
       {activeTriageItems.map((item) => (
-        <ReasoningFlagCard key={item.id} item={item} message={findMessage(messages, item)} />
+        <SafetyReviewFlagCard key={item.id} item={item} message={findMessage(messages, item)} />
       ))}
     </div>
   );
 }
 
-function ReasoningFlagCard({
+function SafetyReviewFlagCard({
   item,
   message,
 }: {
@@ -1399,7 +1417,7 @@ function ReasoningFlagCard({
       </div>
       <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
         <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-          {message ? reasoningMessageLabel(message) : "Message context unavailable"}
+          {message ? safetyReviewMessageLabel(message) : "Message context unavailable"}
         </p>
         {message ? (
           <p className="mt-2 text-xs leading-5 text-slate-700 whitespace-pre-wrap">{message.body}</p>
@@ -1421,7 +1439,7 @@ function findMessage(
   return messages.find((message) => message.id === item.conversation_message_id) ?? null;
 }
 
-function reasoningMessageLabel(message: ConversationMessageView): string {
+function safetyReviewMessageLabel(message: ConversationMessageView): string {
   if (message.status === "held_for_review") return "Held draft";
   if (message.status === "failed") return "Failed delivery";
   return statusLabel(message.sender_type);
