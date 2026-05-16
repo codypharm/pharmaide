@@ -55,6 +55,13 @@ const REASON_LABELS: Record<TriageReason, string> = {
   non_responsive: "Patient follow-up needed",
 };
 
+const HOLD_REASON_LABELS: Record<string, string> = {
+  input_guard: "Incoming patient message needs review",
+  referee: "Draft needs clinical review",
+  output_guard: "Draft response needs safety review",
+  draft_requires_review: "Draft needs pharmacist review",
+};
+
 const STATUS_LABELS: Record<TriageStatus, string> = {
   open: "Open",
   acknowledged: "Acknowledged",
@@ -666,9 +673,7 @@ function FlagSummary({
 }) {
   const draftStatus = getDraftStatusLabel(heldDraft?.status);
   const actionNeeded = getDraftActionLabel(heldDraft?.status);
-  const holdReason = heldDraft?.safety_hold_reason
-    ? REASON_LABELS[heldDraft.safety_hold_reason as TriageReason] ?? heldDraft.safety_hold_reason
-    : "Not recorded";
+  const holdReason = formatHoldReason(heldDraft?.safety_hold_reason);
 
   return (
     <section className="rounded-xl border border-amber-200 bg-amber-50/70 p-4">
@@ -834,11 +839,16 @@ function ConversationMessageRow({
       <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-800">{message.body}</p>
       {message.safety_hold_reason && (
         <p className="mt-3 text-xs font-semibold text-amber-700">
-          Hold reason: {REASON_LABELS[message.safety_hold_reason as TriageReason] ?? message.safety_hold_reason}
+          Hold reason: {formatHoldReason(message.safety_hold_reason)}
         </p>
       )}
     </div>
   );
+}
+
+function formatHoldReason(reason: string | null | undefined): string {
+  if (!reason) return "Not recorded";
+  return HOLD_REASON_LABELS[reason] ?? REASON_LABELS[reason as TriageReason] ?? "Needs review";
 }
 
 function StatusBadge({ status }: { status: TriageStatus }) {

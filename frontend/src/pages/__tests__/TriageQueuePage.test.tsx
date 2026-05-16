@@ -181,4 +181,33 @@ describe("TriageQueuePage", () => {
     expect(screen.getAllByText("You can skip the next dose.").length).toBeGreaterThan(0);
     expect(screen.getByText("Held draft, not sent")).toBeTruthy();
   });
+
+  it("shows pharmacist-facing wording for draft review hold reasons", async () => {
+    const user = userEvent.setup();
+    const draftReviewItem: TriageItemView = {
+      ...OPEN_ITEM,
+      reason: "dose_change_request",
+    };
+    vi.spyOn(triageApi, "listTriageItems").mockResolvedValue({
+      items: [draftReviewItem],
+    });
+    vi.spyOn(treatmentsApi, "listConversationMessages").mockResolvedValue({
+      items: [
+        CONVERSATION_MESSAGES.items[0],
+        {
+          ...CONVERSATION_MESSAGES.items[1],
+          safety_hold_reason: "draft_requires_review",
+        },
+      ],
+    });
+
+    renderPage();
+
+    await screen.findByText("Dose-change request");
+    await user.click(screen.getByRole("button", { name: /review item/i }));
+
+    await screen.findByText("Flag Summary");
+    expect(screen.getAllByText(/Draft needs pharmacist review/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/draft_requires_review/)).toBeNull();
+  });
 });
