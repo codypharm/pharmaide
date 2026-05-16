@@ -1,5 +1,6 @@
 """Internal worker seam for buffered patient messages."""
 
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
@@ -34,6 +35,7 @@ async def test_process_buffered_patient_turn_creates_one_assistant_reply_without
     treatment_id = await _create_treatment(app_client, "BUFFER-ENDPOINT-001")
     await buffer_patient_message(db_session, treatment_id=treatment_id, message="I took it")
     await buffer_patient_message(db_session, treatment_id=treatment_id, message="but I vomited")
+    await _age_buffered_messages(db_session, treatment_id)
     _patch_generated_reply(monkeypatch)
     _patch_safety_decision(monkeypatch, treatment_id)
 
@@ -83,6 +85,29 @@ async def test_process_buffered_patient_turn_returns_zero_when_no_messages(
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_process_buffered_patient_turn_waits_for_default_debounce_window(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    treatment_id = await _create_treatment(app_client, "BUFFER-ENDPOINT-004")
+    await buffer_patient_message(db_session, treatment_id=treatment_id, message="hello")
+
+    response = await app_client.post(
+        f"/internal/treatments/{treatment_id}/process-buffered-patient-turn"
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "processed_count": 0,
+        "assistant_message_id": None,
+        "assistant_status": None,
+    }
+    message = await db_session.scalar(select(ConversationMessage))
+    assert message is not None
+    assert message.processed_at is None
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_process_buffered_patient_turn_keeps_messages_retryable_when_reply_fails(
     app_client: AsyncClient,
     db_session: AsyncSession,
@@ -90,6 +115,7 @@ async def test_process_buffered_patient_turn_keeps_messages_retryable_when_reply
 ) -> None:
     treatment_id = await _create_treatment(app_client, "BUFFER-ENDPOINT-003")
     await buffer_patient_message(db_session, treatment_id=treatment_id, message="I feel worse")
+    await _age_buffered_messages(db_session, treatment_id)
 
     async def fail_draft_patient_reply_for_treatment(*args: object, **kwargs: object) -> object:
         raise RuntimeError("draft failed")
@@ -134,6 +160,18 @@ async def _create_treatment(app_client: AsyncClient, mrn: str) -> UUID:
     )
     assert response.status_code == 201, response.text
     return UUID(response.json()["treatment_id"])
+
+
+async def _age_buffered_messages(db_session: AsyncSession, treatment_id: UUID) -> None:
+    messages = (
+        await db_session.execute(
+            select(ConversationMessage).where(ConversationMessage.treatment_id == treatment_id)
+        )
+    ).scalars().all()
+    old_enough = datetime.now(UTC) - timedelta(seconds=10)
+    for message in messages:
+        message.created_at = old_enough
+    await db_session.flush()
 
 
 def _patch_generated_reply(monkeypatch: pytest.MonkeyPatch) -> None:

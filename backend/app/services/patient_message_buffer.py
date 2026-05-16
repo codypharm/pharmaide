@@ -8,7 +8,7 @@ conversation_messages and writes only metadata to audit rows.
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import structlog
@@ -20,6 +20,7 @@ from app.db.models import AuditLogEntry, ConversationMessage, Treatment
 log = structlog.get_logger(__name__)
 
 BufferedTurnHandler = Callable[["BufferedPatientTurn"], Awaitable[None]]
+DEFAULT_BUFFER_MINIMUM_AGE = timedelta(seconds=5)
 
 
 class TreatmentNotFound(Exception):
@@ -76,13 +77,21 @@ async def process_buffered_patient_turn(
     treatment_id: UUID,
     handle_turn: BufferedTurnHandler,
     limit: int = 10,
+    minimum_age: timedelta = DEFAULT_BUFFER_MINIMUM_AGE,
+    now: datetime | None = None,
 ) -> ProcessBufferedTurnResult:
     """Aggregate unprocessed patient messages and hand them to a turn handler."""
     treatment = await session.get(Treatment, treatment_id)
     if treatment is None:
         raise TreatmentNotFound()
 
-    messages = await _load_unprocessed_messages(session, treatment_id=treatment_id, limit=limit)
+    cutoff = _aware_utc(now or datetime.now(UTC)) - minimum_age
+    messages = await _load_unprocessed_messages(
+        session,
+        treatment_id=treatment_id,
+        limit=limit,
+        created_before_or_at=cutoff,
+    )
     if not messages:
         return ProcessBufferedTurnResult(processed_count=0)
 
@@ -113,6 +122,7 @@ async def _load_unprocessed_messages(
     *,
     treatment_id: UUID,
     limit: int,
+    created_before_or_at: datetime,
 ) -> list[ConversationMessage]:
     result = await session.execute(
         select(ConversationMessage)
@@ -122,6 +132,7 @@ async def _load_unprocessed_messages(
             ConversationMessage.sender_type == "patient",
             ConversationMessage.status == "received",
             ConversationMessage.processed_at.is_(None),
+            ConversationMessage.created_at <= created_before_or_at,
         )
         .order_by(ConversationMessage.created_at.asc(), ConversationMessage.id.asc())
         .limit(limit)
@@ -174,3 +185,9 @@ def _required_text(message: str) -> str:
     if not stripped:
         raise ValueError("message must not be blank")
     return stripped
+
+
+def _aware_utc(value: datetime) -> datetime:
+    if value.tzinfo is None or value.utcoffset() is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
