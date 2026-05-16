@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useOutletContext } from "react-router-dom";
+import { Link, useNavigate, useOutletContext } from "react-router-dom";
 import {
   AlertCircle,
   CheckCircle2,
@@ -200,7 +200,12 @@ function IngestionsTable({
   items: TreatmentListItem[];
   isPrivacyMode: boolean;
 }) {
+  const navigate = useNavigate();
   const phiClass = isPrivacyMode ? "blur-sm select-none" : "";
+  const openTreatment = (treatmentId: string) => {
+    navigate(`/dashboard/treatments/${treatmentId}`);
+  };
+
   return (
     <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">
       <div className="overflow-x-auto">
@@ -219,7 +224,17 @@ function IngestionsTable({
             {items.map((row, i) => (
               <tr
                 key={row.treatment.id}
-                className={`border-b border-slate-100 last:border-b-0 ${i % 2 === 1 ? "bg-slate-50/50" : ""} hover:bg-[#F0EFFF]/60`}
+                role="link"
+                tabIndex={0}
+                aria-label={`View treatment for ${row.patient.name}`}
+                onClick={() => openTreatment(row.treatment.id)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    openTreatment(row.treatment.id);
+                  }
+                }}
+                className={`border-b border-slate-100 last:border-b-0 cursor-pointer focus:outline-none focus:bg-[#F0EFFF]/70 ${i % 2 === 1 ? "bg-slate-50/50" : ""} hover:bg-[#F0EFFF]/60`}
               >
                 <td className="px-6 py-3 text-slate-700 tabular-nums">
                   {formatCreatedAt(row.treatment.created_at)}
@@ -242,6 +257,7 @@ function IngestionsTable({
                 <td className="px-6 py-3 text-right">
                   <Link
                     to={`/dashboard/treatments/${row.treatment.id}`}
+                    onClick={(event) => event.stopPropagation()}
                     className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100"
                     aria-label={`View treatment ${row.treatment.id}`}
                   >

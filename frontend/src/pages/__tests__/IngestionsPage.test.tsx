@@ -65,6 +65,22 @@ describe("IngestionsPage", () => {
     expect(screen.getAllByText("MRN-001").length).toBeGreaterThan(0);
   });
 
+  it("opens treatment detail when the row is clicked", async () => {
+    vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue({
+      items: [row("001")],
+    } satisfies TreatmentList);
+
+    const user = userEvent.setup();
+    renderPage();
+
+    const treatmentRow = await screen.findByRole("link", {
+      name: /view treatment for patient 001/i,
+    });
+    await user.click(treatmentRow);
+
+    expect(screen.getByText("detail")).toBeInTheDocument();
+  });
+
   it("shows an empty state when there are no ingestions", async () => {
     vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue({ items: [] });
 
