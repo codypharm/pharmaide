@@ -537,7 +537,7 @@ function TriageTable({
                   <td className="px-6 py-4">
                     <Link
                       to={`/dashboard/treatments/${item.treatment_id}`}
-                      className="font-mono font-bold text-blue-700 hover:underline"
+                      className="font-mono font-bold text-[#5548E8] hover:underline"
                     >
                       {shortId(item.treatment_id)}
                     </Link>
@@ -822,7 +822,7 @@ function ConversationMessageRow({
             </span>
           )}
           {isHeldDraft && message.status === "queued" && (
-            <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-blue-700">
+            <span className="inline-flex items-center rounded-full border border-[#D9D5FB] bg-[#F0EFFF] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#463AD4]">
               Queued
             </span>
           )}
