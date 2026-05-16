@@ -320,6 +320,12 @@ describe("PatientManagementPage", () => {
     renderPage();
 
     await screen.findByText("Pharmacist replying");
+    expect(screen.getByText("Automation active")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Scheduled reminders and check-ins continue. Free-form replies wait for the pharmacist.",
+      ),
+    ).toBeTruthy();
     await user.click(screen.getByRole("button", { name: /resume ai replies/i }));
 
     await waitFor(() =>

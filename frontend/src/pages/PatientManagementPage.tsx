@@ -424,6 +424,7 @@ export default function PatientManagementPage() {
                 incomingMessage={incomingMessage}
                 pharmacistMessage={pharmacistMessage}
                 chatResponseMode={selectedTreatment.treatment.chat_response_mode}
+                automationMode={selectedTreatment.treatment.automation_mode}
                 isSubmittingMessage={isSubmittingMessage}
                 isSendingPharmacistMessage={isSendingPharmacistMessage}
                 isUpdatingChatMode={isUpdatingChatMode}
@@ -772,6 +773,7 @@ function InteractionLog({
   incomingMessage,
   pharmacistMessage,
   chatResponseMode,
+  automationMode,
   isSubmittingMessage,
   isSendingPharmacistMessage,
   isUpdatingChatMode,
@@ -787,6 +789,7 @@ function InteractionLog({
   incomingMessage: string;
   pharmacistMessage: string;
   chatResponseMode: TreatmentView["chat_response_mode"];
+  automationMode: TreatmentView["automation_mode"];
   isSubmittingMessage: boolean;
   isSendingPharmacistMessage: boolean;
   isUpdatingChatMode: boolean;
@@ -836,6 +839,7 @@ function InteractionLog({
 
       <ChatResponseControl
         mode={chatResponseMode}
+        automationMode={automationMode}
         isUpdating={isUpdatingChatMode}
         onUpdateMode={onUpdateChatResponseMode}
       />
@@ -915,39 +919,56 @@ function InteractionLog({
 
 function ChatResponseControl({
   mode,
+  automationMode,
   isUpdating,
   onUpdateMode,
 }: {
   mode: TreatmentView["chat_response_mode"];
+  automationMode: TreatmentView["automation_mode"];
   isUpdating: boolean;
   onUpdateMode: (mode: TreatmentView["chat_response_mode"]) => void;
 }) {
   const isTakeover = mode === "pharmacist_takeover";
+  const automationLabel = automationMode === "active" ? "Automation active" : "Automation paused";
+  const workflowNote = isTakeover
+    ? "Scheduled reminders and check-ins continue. Free-form replies wait for the pharmacist."
+    : "Scheduled reminders, check-ins, and AI reply drafting can run for this treatment.";
 
   return (
     <section
-      className={`mx-4 mt-3 rounded-xl border p-3 ${
+      className={`mx-4 mt-3 rounded-lg border px-3 py-2 ${
         isTakeover ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-white"
       }`}
     >
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
           <p
-            className={`text-[10px] font-bold uppercase tracking-wider ${
+            className={`text-[9px] font-bold uppercase tracking-wider ${
               isTakeover ? "text-amber-700" : "text-slate-500"
             }`}
           >
             Conversation control
           </p>
-          <p className="mt-1 text-sm font-bold text-slate-900">
+          <p className="mt-0.5 text-sm font-bold text-slate-900">
             {isTakeover ? "Pharmacist replying" : "AI replying"}
+          </p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            <span className="rounded-full border border-slate-200 bg-white px-1.5 py-0.5 text-[9px] font-bold text-slate-600">
+              {automationLabel}
+            </span>
+            <span className="rounded-full border border-slate-200 bg-white px-1.5 py-0.5 text-[9px] font-bold text-slate-600">
+              Chat {isTakeover ? "manual" : "AI active"}
+            </span>
+          </div>
+          <p className="mt-1.5 text-[10px] font-medium leading-4 text-slate-600">
+            {workflowNote}
           </p>
         </div>
         <button
           type="button"
           onClick={() => onUpdateMode(isTakeover ? "ai_active" : "pharmacist_takeover")}
           disabled={isUpdating}
-          className="shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-800 transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="shrink-0 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-800 transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isUpdating ? (
             <span className="inline-flex items-center gap-1">
