@@ -34,8 +34,10 @@ from app.api.schemas import (
     PatientReplyDraftCreate,
     PharmacistConversationMessageCreate,
     TreatmentAnalysisView,
+    TreatmentChatResponseModeUpdate,
     TreatmentDetail,
     TreatmentList,
+    TreatmentView,
 )
 from app.config import Settings, get_settings
 from app.db.engine import get_session, get_session_factory
@@ -86,6 +88,10 @@ from app.services.treatments import (
     get_treatment,
     list_treatments,
     treatment_exists,
+    update_chat_response_mode,
+)
+from app.services.treatments import (
+    TreatmentNotFound as TreatmentCommandNotFound,
 )
 
 # FastAPI's modern dependency form. Prevents the lint trap where
@@ -152,6 +158,26 @@ async def get_treatment_by_id(treatment_id: UUID, session: SessionDep) -> Treatm
     if detail is None:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"})
     return detail
+
+
+@router.post(
+    "/treatments/{treatment_id}/chat-response-mode",
+    response_model=TreatmentView,
+)
+async def post_treatment_chat_response_mode(
+    treatment_id: UUID,
+    body: TreatmentChatResponseModeUpdate,
+    session_factory: SessionFactoryDep,
+) -> TreatmentView:
+    try:
+        async with session_factory() as session, session.begin():
+            return await update_chat_response_mode(
+                session,
+                treatment_id,
+                chat_response_mode=body.chat_response_mode,
+            )
+    except TreatmentCommandNotFound as exc:
+        raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
 
 
 @router.post(

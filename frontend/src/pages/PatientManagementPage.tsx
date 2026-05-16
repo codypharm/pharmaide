@@ -22,10 +22,12 @@ import {
   listConversationMessages,
   listTreatments,
   sendPharmacistMessage,
+  updateTreatmentChatResponseMode,
   type ConversationMessageList,
   type ConversationMessageView,
   type TreatmentDetail,
   type TreatmentListItem,
+  type TreatmentView,
 } from "../api/treatments";
 import {
   listTriageItems,
@@ -128,6 +130,7 @@ export default function PatientManagementPage() {
   const [pharmacistMessage, setPharmacistMessage] = useState("");
   const [isSubmittingMessage, setIsSubmittingMessage] = useState(false);
   const [isSendingPharmacistMessage, setIsSendingPharmacistMessage] = useState(false);
+  const [isUpdatingChatMode, setIsUpdatingChatMode] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -306,6 +309,47 @@ export default function PatientManagementPage() {
     }
   }
 
+  async function updateChatResponseMode(mode: TreatmentView["chat_response_mode"]) {
+    if (!selectedTreatment || isUpdatingChatMode) return;
+
+    setIsUpdatingChatMode(true);
+    try {
+      const updated = await updateTreatmentChatResponseMode(selectedTreatment.treatment.id, {
+        chat_response_mode: mode,
+      });
+      applyUpdatedTreatment(updated);
+      toast.success(mode === "ai_active" ? "AI replies resumed" : "Pharmacist takeover active", {
+        description:
+          mode === "ai_active"
+            ? "The agent can draft future patient replies for this treatment."
+            : "Future patient reply drafts will wait while the pharmacist handles this thread.",
+      });
+    } catch (err: unknown) {
+      const requestId = err instanceof ApiError ? err.requestId : null;
+      toast.error("Could not update conversation control", {
+        description: `Reference ID: ${requestId ?? "unknown"}`,
+      });
+    } finally {
+      setIsUpdatingChatMode(false);
+    }
+  }
+
+  function applyUpdatedTreatment(updated: TreatmentView) {
+    setTreatmentState((current) => {
+      if (current.kind !== "ok") return current;
+      return {
+        kind: "ok",
+        items: current.items.map((item) =>
+          item.treatment.id === updated.id ? { ...item, treatment: updated } : item,
+        ),
+      };
+    });
+    setTreatmentDetailState((current) => {
+      if (current.kind !== "ok" || current.data.treatment.id !== updated.id) return current;
+      return { kind: "ok", data: { ...current.data, treatment: updated } };
+    });
+  }
+
   async function refreshTriageItems(): Promise<void> {
     try {
       const res = await listTriageItems({ limit: PAGE_SIZE, offset: 0 });
@@ -379,12 +423,15 @@ export default function PatientManagementPage() {
                 conversationState={conversationState}
                 incomingMessage={incomingMessage}
                 pharmacistMessage={pharmacistMessage}
+                chatResponseMode={selectedTreatment.treatment.chat_response_mode}
                 isSubmittingMessage={isSubmittingMessage}
                 isSendingPharmacistMessage={isSendingPharmacistMessage}
+                isUpdatingChatMode={isUpdatingChatMode}
                 onChangeIncomingMessage={setIncomingMessage}
                 onChangePharmacistMessage={setPharmacistMessage}
                 onSubmitIncomingMessage={submitIncomingMessage}
                 onSubmitPharmacistMessage={submitPharmacistMessage}
+                onUpdateChatResponseMode={updateChatResponseMode}
                 onSetActiveProfileTab={setActiveProfileTab}
               />
             </div>
@@ -724,24 +771,30 @@ function InteractionLog({
   conversationState,
   incomingMessage,
   pharmacistMessage,
+  chatResponseMode,
   isSubmittingMessage,
   isSendingPharmacistMessage,
+  isUpdatingChatMode,
   onChangeIncomingMessage,
   onChangePharmacistMessage,
   onSubmitIncomingMessage,
   onSubmitPharmacistMessage,
+  onUpdateChatResponseMode,
   onSetActiveProfileTab,
 }: {
   activeProfileTab: "patient" | "reasoning";
   conversationState: ConversationState;
   incomingMessage: string;
   pharmacistMessage: string;
+  chatResponseMode: TreatmentView["chat_response_mode"];
   isSubmittingMessage: boolean;
   isSendingPharmacistMessage: boolean;
+  isUpdatingChatMode: boolean;
   onChangeIncomingMessage: (value: string) => void;
   onChangePharmacistMessage: (value: string) => void;
   onSubmitIncomingMessage: () => void;
   onSubmitPharmacistMessage: () => void;
+  onUpdateChatResponseMode: (mode: TreatmentView["chat_response_mode"]) => void;
   onSetActiveProfileTab: (value: "patient" | "reasoning") => void;
 }) {
   return (
@@ -780,6 +833,12 @@ function InteractionLog({
           Agent Reasoning
         </button>
       </div>
+
+      <ChatResponseControl
+        mode={chatResponseMode}
+        isUpdating={isUpdatingChatMode}
+        onUpdateMode={onUpdateChatResponseMode}
+      />
 
       <div className="flex-1 overflow-y-auto p-4">
         {activeProfileTab === "patient" ? (
@@ -846,6 +905,58 @@ function InteractionLog({
         </div>
       </div>
     </aside>
+  );
+}
+
+function ChatResponseControl({
+  mode,
+  isUpdating,
+  onUpdateMode,
+}: {
+  mode: TreatmentView["chat_response_mode"];
+  isUpdating: boolean;
+  onUpdateMode: (mode: TreatmentView["chat_response_mode"]) => void;
+}) {
+  const isTakeover = mode === "pharmacist_takeover";
+
+  return (
+    <section
+      className={`mx-4 mt-3 rounded-xl border p-3 ${
+        isTakeover ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-white"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p
+            className={`text-[10px] font-bold uppercase tracking-wider ${
+              isTakeover ? "text-amber-700" : "text-slate-500"
+            }`}
+          >
+            Conversation control
+          </p>
+          <p className="mt-1 text-sm font-bold text-slate-900">
+            {isTakeover ? "Pharmacist replying" : "AI replying"}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onUpdateMode(isTakeover ? "ai_active" : "pharmacist_takeover")}
+          disabled={isUpdating}
+          className="shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-800 transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isUpdating ? (
+            <span className="inline-flex items-center gap-1">
+              <Loader2 size={12} className="animate-spin" />
+              Updating
+            </span>
+          ) : isTakeover ? (
+            "Resume AI replies"
+          ) : (
+            "Take over"
+          )}
+        </button>
+      </div>
+    </section>
   );
 }
 

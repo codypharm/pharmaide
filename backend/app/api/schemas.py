@@ -344,6 +344,10 @@ class TreatmentView(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class TreatmentChatResponseModeUpdate(BaseModel):
+    chat_response_mode: ChatResponseMode
+
+
 class MedicationView(BaseModel):
     id: UUID
     name: str

@@ -8,12 +8,14 @@ flow exercise this function directly via db_session.
 from uuid import UUID
 
 import phonenumbers
+import structlog
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.schemas import (
+    ChatResponseMode,
     CreateTreatmentRequest,
     CreateTreatmentResponse,
     MedicationView,
@@ -24,6 +26,8 @@ from app.api.schemas import (
     TreatmentView,
 )
 from app.db.models import AuditLogEntry, Medication, Patient, Treatment
+
+log = structlog.get_logger(__name__)
 
 
 def _to_e164(rfc3966_phone: str) -> str:
@@ -38,6 +42,10 @@ def _to_e164(rfc3966_phone: str) -> str:
 
 class MRNConflict(Exception):
     """Raised when a patient with the requested MRN already exists."""
+
+
+class TreatmentNotFound(Exception):
+    """Raised when a treatment-specific command references an unknown treatment."""
 
 
 async def create_treatment(
@@ -149,3 +157,46 @@ async def list_treatments(
         for t in treatments
     ]
     return TreatmentList(items=items)
+
+
+async def update_chat_response_mode(
+    session: AsyncSession,
+    treatment_id: UUID,
+    *,
+    chat_response_mode: ChatResponseMode,
+) -> TreatmentView:
+    """Let pharmacists hand patient replies between AI and manual control."""
+    treatment = await session.get(Treatment, treatment_id)
+    if treatment is None:
+        raise TreatmentNotFound()
+
+    old_mode = treatment.chat_response_mode
+    treatment.chat_response_mode = chat_response_mode
+
+    if old_mode != chat_response_mode:
+        session.add(
+            AuditLogEntry(
+                event_type="treatment_chat_response_mode_changed",
+                resource_type="treatment",
+                resource_id=treatment.id,
+                # This is workflow state only; conversation text stays in
+                # conversation_messages and is not duplicated into audit rows.
+                payload={
+                    "old_chat_response_mode": old_mode,
+                    "new_chat_response_mode": chat_response_mode,
+                    "automation_mode": treatment.automation_mode,
+                    "trigger": "manual_pharmacist_control",
+                },
+            )
+        )
+        log.info(
+            "treatment_chat_response_mode_changed",
+            treatment_id=str(treatment.id),
+            old_chat_response_mode=old_mode,
+            new_chat_response_mode=chat_response_mode,
+            automation_mode=treatment.automation_mode,
+            trigger="manual_pharmacist_control",
+        )
+
+    await session.flush()
+    return TreatmentView.model_validate(treatment)

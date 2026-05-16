@@ -88,6 +88,18 @@ const MESSAGES: ConversationMessageList = {
   ],
 };
 
+const TAKEOVER_TREATMENTS: TreatmentList = {
+  items: [
+    {
+      ...TREATMENTS.items[0],
+      treatment: {
+        ...TREATMENTS.items[0].treatment,
+        chat_response_mode: "pharmacist_takeover",
+      },
+    },
+  ],
+};
+
 const DETAIL: TreatmentDetail = {
   patient: TREATMENTS.items[0].patient,
   treatment: TREATMENTS.items[0].treatment,
@@ -111,6 +123,11 @@ const DETAIL: TreatmentDetail = {
       ordinal: 1,
     },
   ],
+};
+
+const TAKEOVER_DETAIL: TreatmentDetail = {
+  ...DETAIL,
+  treatment: TAKEOVER_TREATMENTS.items[0].treatment,
 };
 
 const HELD_TURN: ConversationTurnView = {
@@ -275,6 +292,35 @@ describe("PatientManagementPage", () => {
     await screen.findByText("Please continue the current dose.");
     expect(toast.success).toHaveBeenCalledWith("Pharmacist message queued", {
       description: "It will be sent through the WhatsApp delivery workflow.",
+    });
+  });
+
+  it("lets the pharmacist resume AI replies from takeover mode", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue(TAKEOVER_TREATMENTS);
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(TAKEOVER_DETAIL);
+    vi.spyOn(treatmentsApi, "listConversationMessages").mockResolvedValue(MESSAGES);
+    vi.spyOn(triageApi, "listTriageItems").mockResolvedValue(TRIAGE_ITEMS);
+    const updateSpy = vi
+      .spyOn(treatmentsApi, "updateTreatmentChatResponseMode")
+      .mockResolvedValue({
+        ...TAKEOVER_TREATMENTS.items[0].treatment,
+        chat_response_mode: "ai_active",
+      });
+
+    renderPage();
+
+    await screen.findByText("Pharmacist replying");
+    await user.click(screen.getByRole("button", { name: /resume ai replies/i }));
+
+    await waitFor(() =>
+      expect(updateSpy).toHaveBeenCalledWith(TAKEOVER_TREATMENTS.items[0].treatment.id, {
+        chat_response_mode: "ai_active",
+      }),
+    );
+    expect(await screen.findByText("AI replying")).toBeTruthy();
+    expect(toast.success).toHaveBeenCalledWith("AI replies resumed", {
+      description: "The agent can draft future patient replies for this treatment.",
     });
   });
 });

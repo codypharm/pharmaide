@@ -9,6 +9,7 @@ import {
   listPatientCheckIns,
   listTreatments,
   sendPharmacistMessage,
+  updateTreatmentChatResponseMode,
   triggerAnalysis,
 } from "../treatments";
 
@@ -365,6 +366,33 @@ describe("conversation messages", () => {
     });
     expect(result.sender_type).toBe("pharmacist");
     expect(result.status).toBe("queued");
+  });
+
+  it("updates treatment chat response mode", async () => {
+    const spy = mockFetch({
+      status: 200,
+      body: {
+        id: "t1",
+        patient_id: "p1",
+        status: "active",
+        chat_response_mode: "ai_active",
+        automation_mode: "active",
+        clinical_objective: null,
+        treatment_start_at: null,
+        created_at: "2026-05-18T10:02:00Z",
+      },
+    });
+
+    const result = await updateTreatmentChatResponseMode("t1", {
+      chat_response_mode: "ai_active",
+    });
+
+    const calledUrl = spy.mock.calls[0]?.[0] as string;
+    const init = spy.mock.calls[0]?.[1] as RequestInit;
+    expect(calledUrl).toMatch(/\/treatments\/t1\/chat-response-mode$/);
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(String(init.body))).toEqual({ chat_response_mode: "ai_active" });
+    expect(result.chat_response_mode).toBe("ai_active");
   });
 });
 

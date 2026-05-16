@@ -472,6 +472,53 @@ async def test_post_patient_reply_draft_uses_holding_response_during_pharmacist_
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_post_chat_response_mode_resumes_ai_replies_and_audits_change(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    treatment_id = await _create_treatment(app_client, "CONV-API-016")
+    _patch_safety_decision(monkeypatch, treatment_id, status="hold_for_pharmacist")
+    held = await app_client.post(
+        f"/treatments/{treatment_id}/conversation-turns",
+        json={
+            "patient_message": "Can I take an extra dose?",
+            "assistant_draft": "This draft must be reviewed.",
+            "prescription_context": "Amoxicillin 500 mg three times daily.",
+        },
+    )
+    assert held.status_code == 201, held.text
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/chat-response-mode",
+        json={"chat_response_mode": "ai_active"},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["id"] == str(treatment_id)
+    assert payload["chat_response_mode"] == "ai_active"
+    assert payload["automation_mode"] == "active"
+
+    treatment = await db_session.get(Treatment, treatment_id)
+    assert treatment is not None
+    assert treatment.chat_response_mode == "ai_active"
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry)
+        .where(AuditLogEntry.event_type == "treatment_chat_response_mode_changed")
+        .order_by(AuditLogEntry.created_at.desc())
+    )
+    assert audit is not None
+    assert audit.payload == {
+        "old_chat_response_mode": "pharmacist_takeover",
+        "new_chat_response_mode": "ai_active",
+        "automation_mode": "active",
+        "trigger": "manual_pharmacist_control",
+    }
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_post_patient_reply_draft_returns_404_for_unknown_treatment(
     app_client: AsyncClient,
 ) -> None:

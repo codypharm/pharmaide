@@ -225,6 +225,10 @@ export type PharmacistMessageCreate = {
   message: string;
 };
 
+export type TreatmentChatResponseModeUpdate = {
+  chat_response_mode: TreatmentView["chat_response_mode"];
+};
+
 export function listConversationMessages(
   treatmentId: string,
   params: ListConversationMessagesParams = {},
@@ -254,6 +258,16 @@ export function sendPharmacistMessage(
 ): Promise<ConversationMessageView> {
   return postJson<PharmacistMessageCreate, ConversationMessageView>(
     `/treatments/${treatmentId}/pharmacist-messages`,
+    payload,
+  );
+}
+
+export function updateTreatmentChatResponseMode(
+  treatmentId: string,
+  payload: TreatmentChatResponseModeUpdate,
+): Promise<TreatmentView> {
+  return postJson<TreatmentChatResponseModeUpdate, TreatmentView>(
+    `/treatments/${treatmentId}/chat-response-mode`,
     payload,
   );
 }
