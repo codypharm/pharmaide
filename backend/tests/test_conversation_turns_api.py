@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.patient_reply import PatientReplyDraft
@@ -14,7 +14,15 @@ from app.agents.safety_schemas import (
     RefereeResult,
     SafetyReview,
 )
-from app.db.models import AuditLogEntry, ConversationMessage, Treatment
+from app.db.models import (
+    AdherenceEvent,
+    AuditLogEntry,
+    ConversationMessage,
+    Medication,
+    PatientCheckIn,
+    Treatment,
+    TriageItem,
+)
 from app.services import task_runner
 
 
@@ -456,6 +464,118 @@ async def test_post_patient_reply_draft_generates_ready_conversation_turn(
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_post_patient_reply_draft_records_taken_reply_as_adherence_event(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    treatment_id = await _create_treatment(app_client, "CONV-API-019")
+    medication_id = await _first_medication_id(db_session, treatment_id)
+    await _seed_monitoring_reminder(db_session, treatment_id, medication_id)
+    _patch_generated_reply(monkeypatch)
+    _patch_safety_decision(monkeypatch, treatment_id, status="send")
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/patient-reply-drafts",
+        json={"patient_message": "Taken"},
+    )
+
+    assert response.status_code == 201, response.text
+    event = await db_session.scalar(select(AdherenceEvent))
+    assert event is not None
+    assert event.treatment_id == treatment_id
+    assert event.medication_id == medication_id
+    assert event.status == "taken"
+    assert event.source == "patient"
+    assert event.occurred_at is not None
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.event_type == "patient_reply_adherence_captured"
+        )
+    )
+    assert audit is not None
+    assert audit.payload == {
+        "treatment_id": str(treatment_id),
+        "inbound_message_id": response.json()["inbound_message"]["id"],
+        "medication_id": str(medication_id),
+        "status": "taken",
+        "reminder_key": f"{medication_id}:PT0S:morning dose",
+        "reminder_key_present": True,
+    }
+    assert "amoxicillin" not in str(audit.payload).lower()
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_patient_reply_draft_does_not_duplicate_adherence_for_same_reminder(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    treatment_id = await _create_treatment(app_client, "CONV-API-021")
+    medication_id = await _first_medication_id(db_session, treatment_id)
+    await _seed_monitoring_reminder(db_session, treatment_id, medication_id)
+    _patch_generated_reply(monkeypatch)
+    _patch_safety_decision(monkeypatch, treatment_id, status="send")
+
+    first = await app_client.post(
+        f"/treatments/{treatment_id}/patient-reply-drafts",
+        json={"patient_message": "Taken"},
+    )
+    second = await app_client.post(
+        f"/treatments/{treatment_id}/patient-reply-drafts",
+        json={"patient_message": "Taken"},
+    )
+
+    assert first.status_code == 201, first.text
+    assert second.status_code == 201, second.text
+    event_count = await db_session.scalar(select(func.count()).select_from(AdherenceEvent))
+    capture_audit_count = await db_session.scalar(
+        select(func.count())
+        .select_from(AuditLogEntry)
+        .where(AuditLogEntry.event_type == "patient_reply_adherence_captured")
+    )
+    assert event_count == 1
+    assert capture_audit_count == 1
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_patient_reply_draft_records_side_effect_as_check_in_and_triage(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    treatment_id = await _create_treatment(app_client, "CONV-API-020")
+    _patch_generated_reply(monkeypatch)
+    _patch_safety_decision(monkeypatch, treatment_id, status="send")
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/patient-reply-drafts",
+        json={"patient_message": "I vomited after taking it"},
+    )
+
+    assert response.status_code == 201, response.text
+    payload = response.json()
+    assert payload["assistant_message"]["status"] == "held_for_review"
+    assert payload["assistant_message"]["safety_hold_reason"] == "draft_requires_review"
+
+    check_in = await db_session.scalar(select(PatientCheckIn))
+    assert check_in is not None
+    assert check_in.treatment_id == treatment_id
+    assert check_in.report_type == "side_effect"
+    assert check_in.source == "patient"
+    assert check_in.message == "I vomited after taking it"
+    assert check_in.observed_at is not None
+
+    triage = await db_session.scalar(select(TriageItem))
+    assert triage is not None
+    assert triage.treatment_id == treatment_id
+    assert triage.conversation_message_id == UUID(payload["assistant_message"]["id"])
+    assert triage.reason == "side_effect"
+    assert triage.status == "open"
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_post_patient_reply_draft_holds_when_safety_blocks(
     app_client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -711,6 +831,47 @@ async def _create_treatment(app_client: AsyncClient, mrn: str) -> UUID:
     )
     assert response.status_code == 201
     return UUID(response.json()["treatment_id"])
+
+
+async def _first_medication_id(db_session: AsyncSession, treatment_id: UUID) -> UUID:
+    medication_id = await db_session.scalar(
+        select(Medication.id).where(Medication.treatment_id == treatment_id)
+    )
+    assert medication_id is not None
+    return medication_id
+
+
+async def _seed_monitoring_reminder(
+    db_session: AsyncSession,
+    treatment_id: UUID,
+    medication_id: UUID,
+) -> None:
+    reminder = ConversationMessage(
+        treatment_id=treatment_id,
+        direction="outbound",
+        sender_type="assistant",
+        channel="whatsapp",
+        status="sent",
+        body="Reminder: it is time for Amoxicillin (morning dose).",
+    )
+    db_session.add(reminder)
+    await db_session.flush()
+    db_session.add(
+        AuditLogEntry(
+            event_type="monitoring_message_queued",
+            resource_type="conversation_message",
+            resource_id=reminder.id,
+            payload={
+                "treatment_id": str(treatment_id),
+                "message_id": str(reminder.id),
+                "reminder_key": f"{medication_id}:PT0S:morning dose",
+                "scheduled_for_present": True,
+                "channel": "whatsapp",
+                "status": "queued",
+            },
+        )
+    )
+    await db_session.flush()
 
 
 def _patch_safety_decision(

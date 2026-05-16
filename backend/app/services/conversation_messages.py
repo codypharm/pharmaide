@@ -27,6 +27,10 @@ from app.api.schemas import (
     TriageReason,
 )
 from app.db.models import AuditLogEntry, ConversationMessage, Treatment
+from app.services.patient_reply_capture import (
+    capture_patient_reply_state,
+    triage_reason_for_patient_reply,
+)
 from app.services.patient_safety import review_patient_draft_safety
 from app.services.triage import create_open_triage_item
 
@@ -59,6 +63,11 @@ async def record_patient_conversation_message(
     session.add(inbound)
     await session.flush()
 
+    await capture_patient_reply_state(
+        session,
+        treatment_id=treatment_id,
+        inbound_message=inbound,
+    )
     _audit_patient_message(session, treatment_id, inbound)
     await session.flush()
 
@@ -221,6 +230,11 @@ async def submit_patient_conversation_turn(
     inbound = _build_patient_inbound_message(treatment_id=treatment_id, body=inbound_body)
     session.add(inbound)
     await session.flush()
+    patient_reply_classification = await capture_patient_reply_state(
+        session,
+        treatment_id=treatment_id,
+        inbound_message=inbound,
+    )
 
     decision = await review_patient_draft_safety(
         session,
@@ -236,8 +250,13 @@ async def submit_patient_conversation_turn(
         safety_provider_timeout_seconds=safety_provider_timeout_seconds,
         providers=providers,
     )
-    decision = _apply_draft_review_hold(decision, draft_review_reason=draft_review_reason)
-    triage_reason = _triage_reason_for_held_draft(decision, draft_review_reason)
+    capture_triage_reason = triage_reason_for_patient_reply(patient_reply_classification)
+    effective_draft_review_reason = draft_review_reason or capture_triage_reason
+    decision = _apply_draft_review_hold(
+        decision,
+        draft_review_reason=effective_draft_review_reason,
+    )
+    triage_reason = _triage_reason_for_held_draft(decision, effective_draft_review_reason)
     assistant = ConversationMessage(
         treatment_id=treatment_id,
         direction="outbound",
@@ -331,6 +350,11 @@ async def submit_pharmacist_takeover_holding_turn(
     )
     session.add_all([inbound, assistant])
     await session.flush()
+    await capture_patient_reply_state(
+        session,
+        treatment_id=treatment_id,
+        inbound_message=inbound,
+    )
 
     decision = _allow_deterministic_holding_reply(treatment_id, draft_body)
     _audit_conversation_turn(session, treatment_id, inbound, assistant, decision.status)
