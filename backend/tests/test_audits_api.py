@@ -81,3 +81,51 @@ async def test_get_audits_supports_offset_pagination(
     assert response.status_code == 200, response.text
     payload = response.json()
     assert [item["event_type"] for item in payload["items"]] == ["analysis_started"]
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_get_audits_filters_entries_before_pagination(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    human_actor_id = uuid4()
+    matching = AuditLogEntry(
+        actor_id=human_actor_id,
+        event_type="triage_item_status_changed",
+        resource_type="triage_item",
+        resource_id=uuid4(),
+        payload={"old_status": "open", "new_status": "acknowledged"},
+        created_at=datetime(2026, 5, 15, 12, 0, tzinfo=UTC),
+    )
+    wrong_event = AuditLogEntry(
+        actor_id=human_actor_id,
+        event_type="analysis_started",
+        resource_type="triage_item",
+        resource_id=uuid4(),
+        payload={"medication_count": 2},
+        created_at=datetime(2026, 5, 15, 13, 0, tzinfo=UTC),
+    )
+    wrong_actor = AuditLogEntry(
+        actor_id=uuid4(),
+        event_type="triage_item_status_changed",
+        resource_type="triage_item",
+        resource_id=uuid4(),
+        payload={"old_status": "open", "new_status": "resolved"},
+        created_at=datetime(2026, 5, 15, 14, 0, tzinfo=UTC),
+    )
+    db_session.add_all([matching, wrong_event, wrong_actor])
+    await db_session.flush()
+
+    response = await app_client.get(
+        "/audits",
+        params={
+            "event_type": "triage_item_status_changed",
+            "resource_type": "triage_item",
+            "actor_id": str(human_actor_id),
+            "limit": 1,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert [item["id"] for item in payload["items"]] == [str(matching.id)]
