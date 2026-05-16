@@ -138,6 +138,19 @@ const HELD_TURN: ConversationTurnView = {
   },
 };
 
+const PHARMACIST_MESSAGE = {
+  id: "msg-pharmacist",
+  treatment_id: TREATMENTS.items[0].treatment.id,
+  direction: "outbound" as const,
+  sender_type: "pharmacist" as const,
+  channel: "whatsapp" as const,
+  status: "queued" as const,
+  body: "Please continue the current dose.",
+  safety_hold_reason: null,
+  external_message_id: null,
+  created_at: "2026-05-15T10:03:00Z",
+};
+
 const TRIAGE_ITEMS: TriageItemList = {
   items: [
     {
@@ -228,6 +241,40 @@ describe("PatientManagementPage", () => {
     await screen.findByText("You can stop it now.");
     expect(toast.success).toHaveBeenCalledWith("Draft held for pharmacist review", {
       description: "The item is now available in the triage queue.",
+    });
+  });
+
+  it("queues a pharmacist WhatsApp message from the chat panel", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue(TREATMENTS);
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(DETAIL);
+    vi.spyOn(triageApi, "listTriageItems").mockResolvedValue(TRIAGE_ITEMS);
+    vi.spyOn(treatmentsApi, "listConversationMessages")
+      .mockResolvedValueOnce(MESSAGES)
+      .mockResolvedValueOnce({
+        items: [...MESSAGES.items, PHARMACIST_MESSAGE],
+      });
+    const sendSpy = vi
+      .spyOn(treatmentsApi, "sendPharmacistMessage")
+      .mockResolvedValue(PHARMACIST_MESSAGE);
+
+    renderPage();
+
+    await screen.findByText("I feel dizzy today.");
+    await user.type(
+      screen.getByLabelText(/pharmacist whatsapp message/i),
+      "Please continue the current dose.",
+    );
+    await user.click(screen.getByRole("button", { name: /send pharmacist message/i }));
+
+    await waitFor(() =>
+      expect(sendSpy).toHaveBeenCalledWith(TREATMENTS.items[0].treatment.id, {
+        message: "Please continue the current dose.",
+      }),
+    );
+    await screen.findByText("Please continue the current dose.");
+    expect(toast.success).toHaveBeenCalledWith("Pharmacist message queued", {
+      description: "It will be sent through the WhatsApp delivery workflow.",
     });
   });
 });

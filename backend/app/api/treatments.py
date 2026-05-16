@@ -32,6 +32,7 @@ from app.api.schemas import (
     PatientCheckInView,
     PatientConversationMessageCreate,
     PatientReplyDraftCreate,
+    PharmacistConversationMessageCreate,
     TreatmentAnalysisView,
     TreatmentDetail,
     TreatmentList,
@@ -63,6 +64,7 @@ from app.services.conversation_messages import (
 from app.services.conversation_messages import (
     list_conversation_messages,
     record_patient_conversation_message,
+    record_pharmacist_conversation_message,
     submit_patient_conversation_turn,
 )
 from app.services.patient_checkins import (
@@ -263,6 +265,27 @@ async def post_patient_message(
     try:
         async with session_factory() as session, session.begin():
             return await record_patient_conversation_message(
+                session,
+                treatment_id=treatment_id,
+                message=body.message,
+            )
+    except ConversationTreatmentNotFound as exc:
+        raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
+
+
+@router.post(
+    "/treatments/{treatment_id}/pharmacist-messages",
+    status_code=201,
+    response_model=ConversationMessageView,
+)
+async def post_pharmacist_message(
+    treatment_id: UUID,
+    body: PharmacistConversationMessageCreate,
+    session_factory: SessionFactoryDep,
+) -> ConversationMessageView:
+    try:
+        async with session_factory() as session, session.begin():
+            return await record_pharmacist_conversation_message(
                 session,
                 treatment_id=treatment_id,
                 message=body.message,

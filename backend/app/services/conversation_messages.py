@@ -56,6 +56,41 @@ async def record_patient_conversation_message(
     return ConversationMessageView.model_validate(inbound)
 
 
+async def record_pharmacist_conversation_message(
+    session: AsyncSession,
+    *,
+    treatment_id: UUID,
+    message: str,
+) -> ConversationMessageView:
+    """Queue one pharmacist-authored outbound WhatsApp message."""
+    treatment = await session.get(Treatment, treatment_id)
+    if treatment is None:
+        raise TreatmentNotFound()
+
+    outbound = ConversationMessage(
+        treatment_id=treatment_id,
+        direction="outbound",
+        sender_type="pharmacist",
+        channel="whatsapp",
+        status="queued",
+        body=_required_text(message, "message"),
+    )
+    session.add(outbound)
+    await session.flush()
+
+    _audit_pharmacist_message(session, treatment_id, outbound)
+    await session.flush()
+
+    log.info(
+        "pharmacist_conversation_message_queued",
+        treatment_id=str(treatment_id),
+        message_id=str(outbound.id),
+        channel=outbound.channel,
+        status=outbound.status,
+    )
+    return ConversationMessageView.model_validate(outbound)
+
+
 async def list_conversation_messages(
     session: AsyncSession,
     treatment_id: UUID,
@@ -208,6 +243,28 @@ def _audit_patient_message(
                 "treatment_id": str(treatment_id),
                 "message_id": str(message.id),
                 "channel": message.channel,
+            },
+        )
+    )
+
+
+def _audit_pharmacist_message(
+    session: AsyncSession,
+    treatment_id: UUID,
+    message: ConversationMessage,
+) -> None:
+    session.add(
+        AuditLogEntry(
+            event_type="pharmacist_conversation_message_queued",
+            resource_type="conversation_message",
+            resource_id=message.id,
+            # Pharmacist-authored messages can include PHI and clinical advice.
+            # Audit only delivery workflow metadata.
+            payload={
+                "treatment_id": str(treatment_id),
+                "message_id": str(message.id),
+                "channel": message.channel,
+                "status": message.status,
             },
         )
     )

@@ -221,6 +221,10 @@ export type PatientReplyDraftCreate = {
   patient_message: string;
 };
 
+export type PharmacistMessageCreate = {
+  message: string;
+};
+
 export function listConversationMessages(
   treatmentId: string,
   params: ListConversationMessagesParams = {},
@@ -240,6 +244,16 @@ export function draftPatientReply(
 ): Promise<ConversationTurnView> {
   return postJson<PatientReplyDraftCreate, ConversationTurnView>(
     `/treatments/${treatmentId}/patient-reply-drafts`,
+    payload,
+  );
+}
+
+export function sendPharmacistMessage(
+  treatmentId: string,
+  payload: PharmacistMessageCreate,
+): Promise<ConversationMessageView> {
+  return postJson<PharmacistMessageCreate, ConversationMessageView>(
+    `/treatments/${treatmentId}/pharmacist-messages`,
     payload,
   );
 }

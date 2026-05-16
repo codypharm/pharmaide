@@ -8,6 +8,7 @@ import {
   listConversationMessages,
   listPatientCheckIns,
   listTreatments,
+  sendPharmacistMessage,
   triggerAnalysis,
 } from "../treatments";
 
@@ -332,6 +333,38 @@ describe("conversation messages", () => {
     expect(init.method).toBe("POST");
     expect(JSON.parse(String(init.body))).toEqual({ patient_message: "I feel dizzy." });
     expect(result.assistant_message.status).toBe("held_for_review");
+  });
+
+  it("queues a pharmacist message for WhatsApp delivery", async () => {
+    const spy = mockFetch({
+      status: 201,
+      body: {
+        id: "msg-pharm",
+        treatment_id: "t1",
+        direction: "outbound",
+        sender_type: "pharmacist",
+        channel: "whatsapp",
+        status: "queued",
+        body: "Please continue the current dose.",
+        safety_hold_reason: null,
+        external_message_id: null,
+        created_at: "2026-05-18T10:02:00Z",
+      },
+    });
+
+    const result = await sendPharmacistMessage("t1", {
+      message: "Please continue the current dose.",
+    });
+
+    const calledUrl = spy.mock.calls[0]?.[0] as string;
+    const init = spy.mock.calls[0]?.[1] as RequestInit;
+    expect(calledUrl).toMatch(/\/treatments\/t1\/pharmacist-messages$/);
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(String(init.body))).toEqual({
+      message: "Please continue the current dose.",
+    });
+    expect(result.sender_type).toBe("pharmacist");
+    expect(result.status).toBe("queued");
   });
 });
 

@@ -262,6 +262,67 @@ async def test_post_patient_message_returns_404_for_unknown_treatment(
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_post_pharmacist_message_records_queued_outbound_message_and_non_phi_audit(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    treatment_id = await _create_treatment(app_client, "CONV-API-014")
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/pharmacist-messages",
+        json={"message": "  Please continue the current dose and call us if dizziness worsens.  "},
+    )
+
+    assert response.status_code == 201, response.text
+    payload = response.json()
+    assert payload["treatment_id"] == str(treatment_id)
+    assert payload["direction"] == "outbound"
+    assert payload["sender_type"] == "pharmacist"
+    assert payload["channel"] == "whatsapp"
+    assert payload["status"] == "queued"
+    assert payload["body"] == "Please continue the current dose and call us if dizziness worsens."
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.event_type == "pharmacist_conversation_message_queued"
+        )
+    )
+    assert audit is not None
+    assert audit.payload == {
+        "treatment_id": str(treatment_id),
+        "message_id": payload["id"],
+        "channel": "whatsapp",
+        "status": "queued",
+    }
+    assert "dizziness" not in str(audit.payload).lower()
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_pharmacist_message_rejects_blank_message(app_client: AsyncClient) -> None:
+    treatment_id = await _create_treatment(app_client, "CONV-API-015")
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/pharmacist-messages",
+        json={"message": "   "},
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_pharmacist_message_returns_404_for_unknown_treatment(
+    app_client: AsyncClient,
+) -> None:
+    response = await app_client.post(
+        f"/treatments/{uuid4()}/pharmacist-messages",
+        json={"message": "Hello"},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": {"error": "treatment_not_found"}}
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_list_conversation_messages_returns_oldest_first(
     app_client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,

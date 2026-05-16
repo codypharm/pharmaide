@@ -21,6 +21,7 @@ import {
   getTreatment,
   listConversationMessages,
   listTreatments,
+  sendPharmacistMessage,
   type ConversationMessageList,
   type ConversationMessageView,
   type TreatmentDetail,
@@ -124,7 +125,9 @@ export default function PatientManagementPage() {
   const [activeProfileTab, setActiveProfileTab] = useState<"patient" | "reasoning">("patient");
   const [searchQuery, setSearchQuery] = useState("");
   const [incomingMessage, setIncomingMessage] = useState("");
+  const [pharmacistMessage, setPharmacistMessage] = useState("");
   const [isSubmittingMessage, setIsSubmittingMessage] = useState(false);
+  const [isSendingPharmacistMessage, setIsSendingPharmacistMessage] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -276,6 +279,33 @@ export default function PatientManagementPage() {
     }
   }
 
+  async function submitPharmacistMessage() {
+    if (!selectedTreatment || isSendingPharmacistMessage) return;
+
+    const message = pharmacistMessage.trim();
+    if (!message) {
+      toast.error("Enter a pharmacist WhatsApp message first");
+      return;
+    }
+
+    setIsSendingPharmacistMessage(true);
+    try {
+      await sendPharmacistMessage(selectedTreatment.treatment.id, { message });
+      setPharmacistMessage("");
+      await refreshConversation(selectedTreatment.treatment.id);
+      toast.success("Pharmacist message queued", {
+        description: "It will be sent through the WhatsApp delivery workflow.",
+      });
+    } catch (err: unknown) {
+      const requestId = err instanceof ApiError ? err.requestId : null;
+      toast.error("Could not queue pharmacist message", {
+        description: `Reference ID: ${requestId ?? "unknown"}`,
+      });
+    } finally {
+      setIsSendingPharmacistMessage(false);
+    }
+  }
+
   async function refreshTriageItems(): Promise<void> {
     try {
       const res = await listTriageItems({ limit: PAGE_SIZE, offset: 0 });
@@ -348,9 +378,13 @@ export default function PatientManagementPage() {
                 activeProfileTab={activeProfileTab}
                 conversationState={conversationState}
                 incomingMessage={incomingMessage}
+                pharmacistMessage={pharmacistMessage}
                 isSubmittingMessage={isSubmittingMessage}
+                isSendingPharmacistMessage={isSendingPharmacistMessage}
                 onChangeIncomingMessage={setIncomingMessage}
+                onChangePharmacistMessage={setPharmacistMessage}
                 onSubmitIncomingMessage={submitIncomingMessage}
+                onSubmitPharmacistMessage={submitPharmacistMessage}
                 onSetActiveProfileTab={setActiveProfileTab}
               />
             </div>
@@ -689,17 +723,25 @@ function InteractionLog({
   activeProfileTab,
   conversationState,
   incomingMessage,
+  pharmacistMessage,
   isSubmittingMessage,
+  isSendingPharmacistMessage,
   onChangeIncomingMessage,
+  onChangePharmacistMessage,
   onSubmitIncomingMessage,
+  onSubmitPharmacistMessage,
   onSetActiveProfileTab,
 }: {
   activeProfileTab: "patient" | "reasoning";
   conversationState: ConversationState;
   incomingMessage: string;
+  pharmacistMessage: string;
   isSubmittingMessage: boolean;
+  isSendingPharmacistMessage: boolean;
   onChangeIncomingMessage: (value: string) => void;
+  onChangePharmacistMessage: (value: string) => void;
   onSubmitIncomingMessage: () => void;
+  onSubmitPharmacistMessage: () => void;
   onSetActiveProfileTab: (value: "patient" | "reasoning") => void;
 }) {
   return (
@@ -747,7 +789,37 @@ function InteractionLog({
         )}
       </div>
 
-      <div className="p-4 border-t border-slate-200 bg-white">
+      <div className="p-4 border-t border-slate-200 bg-white space-y-4">
+        <div>
+          <label
+            htmlFor="pharmacist-whatsapp-message"
+            className="mb-2 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
+          >
+            Pharmacist WhatsApp Message
+          </label>
+          <div className="flex gap-2">
+            <input
+              id="pharmacist-whatsapp-message"
+              value={pharmacistMessage}
+              onChange={(event) => onChangePharmacistMessage(event.target.value)}
+              placeholder="Type pharmacist reply..."
+              className="flex-1 pl-4 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-100 transition-all"
+            />
+            <button
+              type="button"
+              onClick={onSubmitPharmacistMessage}
+              disabled={isSendingPharmacistMessage}
+              aria-label="Send pharmacist message"
+              className="w-9 h-9 bg-slate-900 text-white rounded-lg flex items-center justify-center hover:bg-slate-800 transition-all cursor-pointer disabled:opacity-50"
+            >
+              {isSendingPharmacistMessage ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Send size={14} />
+              )}
+            </button>
+          </div>
+        </div>
         <label
           htmlFor="incoming-whatsapp-message"
           className="mb-2 block text-[10px] font-bold uppercase tracking-wider text-slate-500"
@@ -822,18 +894,25 @@ function ConversationMessages({ state }: { state: ConversationState }) {
 function ConversationBubble({ message }: { message: ConversationMessageView }) {
   const isPatient = message.sender_type === "patient";
   const isAssistant = message.sender_type === "assistant";
+  const isPharmacist = message.sender_type === "pharmacist";
   const bubbleClass = isPatient
     ? "bg-blue-600 text-white rounded-tr-none"
+    : isPharmacist
+      ? "bg-emerald-50 text-emerald-950 border border-emerald-100 rounded-tl-none"
     : "bg-slate-100 text-slate-700 rounded-tl-none";
 
   return (
     <div className={`flex gap-3 ${isPatient ? "flex-row-reverse" : ""}`}>
       <div
         className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-          isPatient ? "bg-blue-100 text-blue-700" : "bg-slate-900 text-white"
+          isPatient
+            ? "bg-blue-100 text-blue-700"
+            : isPharmacist
+              ? "bg-emerald-100 text-emerald-700"
+              : "bg-slate-900 text-white"
         }`}
       >
-        {isPatient ? <User size={16} /> : <Bot size={16} />}
+        {isPatient || isPharmacist ? <User size={16} /> : <Bot size={16} />}
       </div>
       <div className="max-w-[85%]">
         <div className={`rounded-2xl p-3 ${bubbleClass}`}>
@@ -845,6 +924,12 @@ function ConversationBubble({ message }: { message: ConversationMessageView }) {
             <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 font-bold uppercase tracking-wider text-amber-700">
               <CheckCircle2 size={10} />
               Held
+            </span>
+          )}
+          {isPharmacist && message.status === "queued" && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-bold uppercase tracking-wider text-emerald-700">
+              <CheckCircle2 size={10} />
+              Queued
             </span>
           )}
         </div>

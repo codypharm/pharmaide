@@ -248,6 +248,19 @@ class PatientConversationMessageCreate(BaseModel):
         return stripped
 
 
+class PharmacistConversationMessageCreate(BaseModel):
+    message: str = Field(min_length=1, max_length=4000)
+
+    @field_validator("message")
+    @classmethod
+    def normalise_message(cls, value: str) -> str:
+        """Store outbound pharmacist messages without transport whitespace."""
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("message must not be blank")
+        return stripped
+
+
 class PatientReplyDraftCreate(BaseModel):
     patient_message: str = Field(min_length=1, max_length=4000)
 
