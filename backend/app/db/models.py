@@ -270,6 +270,9 @@ class ConversationMessage(Base):
     body: Mapped[str] = mapped_column(Text, nullable=False)
     safety_hold_reason: Mapped[str | None] = mapped_column(Text)
     external_message_id: Mapped[str | None] = mapped_column(Text)
+    # Inbound WhatsApp messages can arrive in bursts. processed_at marks rows
+    # already included in an aggregated patient turn.
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
     )
@@ -278,6 +281,12 @@ class ConversationMessage(Base):
 
     __table_args__ = (
         Index("idx_conversation_messages_treatment_created", "treatment_id", created_at.desc()),
+        Index(
+            "idx_conversation_messages_unprocessed",
+            "treatment_id",
+            "processed_at",
+            postgresql_where=text("direction = 'inbound' AND sender_type = 'patient'"),
+        ),
     )
 
 
