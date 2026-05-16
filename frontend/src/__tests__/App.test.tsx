@@ -48,7 +48,7 @@ afterEach(() => {
 async function openDashboard() {
   const user = userEvent.setup();
   render(<App />);
-  await user.click(screen.getByRole("button", { name: "Get Started" }));
+  await user.click(screen.getAllByRole("button", { name: /open surveillance/i })[0]);
   return user;
 }
 
@@ -56,8 +56,9 @@ describe("PharmaAide app shell", () => {
   it("renders the public landing page first", () => {
     render(<App />);
 
-    expect(screen.getByRole("heading", { level: 1 })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Get Started" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: /pharmaaide keeps/i })).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /open surveillance/i }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /review triage/i })).toBeTruthy();
     // Dashboard chrome should not be present yet.
     expect(screen.queryByRole("link", { name: /surveillance/i })).not.toBeInTheDocument();
   });

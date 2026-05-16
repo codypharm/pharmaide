@@ -1,308 +1,353 @@
-import { 
-  ArrowRight, 
-  Pill, 
-  ShieldCheck, 
-  Zap, 
-  Users, 
-  Lock, 
-  Globe, 
-  CheckCircle2, 
-  PlayCircle,
-  MessageSquare,
+import {
   Activity,
-  Search,
-  ChevronRight,
-  Shield,
-  Bot,
-  Layers
+  ArrowRight,
+  CheckCircle2,
+  ClipboardList,
+  Database,
+  MessageSquareWarning,
+  ShieldCheck,
+  Stethoscope,
+  type LucideIcon,
 } from "lucide-react";
+import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
+
+const capabilities: Array<{
+  icon: LucideIcon;
+  title: string;
+  text: string;
+}> = [
+  {
+    icon: Activity,
+    title: "Patient surveillance",
+    text: "Follow active treatments, patient updates, adherence signals, and pharmacist takeovers from one clinical workspace.",
+  },
+  {
+    icon: MessageSquareWarning,
+    title: "Human review queue",
+    text: "Hold uncertain patient-facing drafts until the pharmacist approves, edits, or rejects the response.",
+  },
+  {
+    icon: Database,
+    title: "Grounded guidance",
+    text: "Use clinic protocols, treatment context, RxNorm grounding, and DailyMed references to support safer follow-up.",
+  },
+];
+
+const workflow = [
+  "Patient messages arrive through WhatsApp",
+  "Agent drafts are checked before patient delivery",
+  "Pharmacists approve, reject, or take over the conversation",
+];
 
 export default function LandingPage() {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-[#F5F5F6] font-['Public_Sans'] text-slate-900 overflow-x-hidden selection:bg-blue-100 selection:text-blue-900">
-      {/* Background Mesh Gradient */}
-      <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
-        <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-blue-100/30 rounded-full blur-[120px]" />
-        <div className="absolute bottom-[-10%] right-[-5%] w-[50%] h-[50%] bg-teal-100/20 rounded-full blur-[100px]" />
-        <div className="absolute top-[30%] left-[40%] w-[40%] h-[40%] bg-slate-200/20 rounded-full blur-[140px]" />
-      </div>
-
-      {/* Top Navbar */}
-      <nav className="fixed top-0 left-0 right-0 z-[100] px-8 py-5 bg-white/60 backdrop-blur-2xl border-b border-slate-100/50 flex items-center justify-between">
-        <div className="flex items-center gap-16">
-          <div className="flex items-center gap-2.5 group cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-xl shadow-blue-600/10 group-hover:scale-105 transition-transform duration-500">
-              <Shield size={22} strokeWidth={2.5} />
-            </div>
-            <span className="text-xl font-extrabold tracking-tighter text-slate-900">PharmaAide</span>
-          </div>
-          <div className="hidden lg:flex items-center gap-10">
-            {["Solutions", "Safety", "Security", "Clinical Intelligence"].map((item) => (
-              <a 
-                key={item} 
-                href={`#${item.toLowerCase().replace(' ', '-')}`} 
-                className="text-[13px] font-bold text-slate-500 hover:text-slate-900 transition-all hover:translate-y-[-1px]"
-              >
-                {item}
-              </a>
-            ))}
-          </div>
-        </div>
-        <div className="flex items-center gap-4">
-          <button 
-            onClick={() => navigate('/dashboard/surveillance')}
-            className="px-6 py-2.5 text-[13px] font-bold text-slate-500 hover:text-slate-900 transition-colors cursor-pointer"
+    <div className="min-h-screen bg-[#F5F5F6] font-['Public_Sans'] text-slate-950">
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+          <button
+            type="button"
+            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+            className="flex items-center gap-3 text-left cursor-pointer"
           >
-            Clinical Login
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#5548E8] text-white">
+              <ShieldCheck size={19} />
+            </span>
+            <span>
+              <span className="block text-sm font-black tracking-tight">PharmaAide</span>
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                Clinical operations
+              </span>
+            </span>
           </button>
-          <button 
-            onClick={() => navigate('/dashboard/triage')}
-            className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-[13px] font-bold hover:bg-blue-700 transition-all cursor-pointer"
-          >
-            Launch Command Center
-          </button>
-        </div>
-      </nav>
 
-      {/* Hero Section */}
-      <header className="relative pt-48 pb-32 px-8 max-w-7xl mx-auto">
-        <div className="grid lg:grid-cols-2 gap-24 items-center">
-          <div className="relative z-10">
-            
-            <h1 className="text-7xl lg:text-8xl font-black leading-[0.9] tracking-tighter mb-10 text-slate-900">
-              The <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-600 to-blue-600">Intelligence</span> <br />
-              Layer for <br />
-              Patient Care.
-            </h1>
-            <p className="text-xl text-slate-500 leading-relaxed mb-12 max-w-lg font-medium">
-              Bridging the clinical gap with agentic AI grounded in precision. Automate adherence, triage side effects, and empower pharmacists.
-            </p>
-            <div className="flex items-center gap-4">
-              <button 
-                onClick={() => navigate('/dashboard/triage')}
-                className="px-8 py-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all flex items-center gap-2 active:scale-95 cursor-pointer"
-              >
-                Get Started
-                <ArrowRight size={18} />
-              </button>
-              <button className="px-8 py-4 bg-white border border-slate-200 text-slate-900 rounded-xl font-bold hover:bg-slate-50 transition-all active:scale-95 cursor-pointer">
-                View Documentation
-              </button>
-            </div>
-            
-            <div className="mt-20 flex items-center gap-12 grayscale opacity-40">
-              <div className="font-black text-2xl tracking-tighter">DailyMed</div>
-              <div className="font-black text-2xl tracking-tighter">RxNorm</div>
-              <div className="font-black text-2xl tracking-tighter">HL7 FHIR</div>
-            </div>
-          </div>
-          
-          <div className="relative lg:h-[700px] flex items-center justify-center">
-            {/* Visual Abstract UI Element */}
-            <div className="relative w-full max-w-md aspect-[4/5] bg-white rounded-[40px] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.15)] border border-slate-100 p-8 flex flex-col gap-6 overflow-hidden rotate-2 hover:rotate-0 transition-transform duration-700 group">
-              <div className="flex items-center justify-between border-b border-slate-50 pb-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-teal-50 text-teal-600 rounded-xl flex items-center justify-center">
-                    <ShieldCheck size={20} />
-                  </div>
-                  <div>
-                    <div className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">System Status</div>
-                    <div className="text-sm font-bold text-slate-900">Clinically Grounded</div>
-                  </div>
-                </div>
-                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
-              </div>
-              
-              <div className="space-y-4 py-4">
-                <div className="h-4 w-3/4 bg-slate-50 rounded-full" />
-                <div className="h-4 w-1/2 bg-slate-50 rounded-full" />
-                <div className="h-24 w-full bg-slate-50/50 rounded-3xl border border-dashed border-slate-200 flex items-center justify-center text-slate-300">
-                  <Bot size={32} />
-                </div>
-              </div>
-              
-              <div className="mt-auto pt-6 border-t border-slate-50 flex items-center gap-4">
-                <div className="w-8 h-8 rounded-full bg-slate-100" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-2 w-1/2 bg-slate-100 rounded-full" />
-                  <div className="h-2 w-1/3 bg-slate-50 rounded-full" />
-                </div>
-              </div>
-              
-              {/* Floating Decorative Elements */}
-              <div className="absolute -top-10 -right-10 w-32 h-32 bg-teal-500/10 rounded-full blur-2xl group-hover:bg-teal-500/20 transition-colors" />
-            </div>
-            
-            {/* Background Circle Gradient */}
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-teal-100/40 via-transparent to-transparent -z-10 scale-150" />
-          </div>
+          <nav className="hidden items-center gap-6 text-xs font-bold uppercase tracking-wider text-slate-500 md:flex">
+            <a href="#capabilities" className="hover:text-slate-950">
+              Capabilities
+            </a>
+            <a href="#safety" className="hover:text-slate-950">
+              Safety
+            </a>
+            <a href="#workflow" className="hover:text-slate-950">
+              Workflow
+            </a>
+          </nav>
+
+          <button
+            type="button"
+            onClick={() => navigate("/dashboard/surveillance")}
+            className="inline-flex items-center gap-2 rounded-lg border border-[#5548E8] bg-[#5548E8] px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-[#463AD4] cursor-pointer"
+          >
+            Open Surveillance
+            <ArrowRight size={15} />
+          </button>
         </div>
       </header>
 
-      {/* Philosophy Section */}
-      <section className="bg-[#131b2e] py-40 px-8 relative overflow-hidden" id="safety">
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-blue-900/10 opacity-30 pointer-events-none" />
-        <div className="max-w-5xl mx-auto text-center relative z-10">
-          <div className="inline-block px-5 py-1.5 bg-white/5 border border-white/10 rounded-full text-[10px] font-black text-blue-400 uppercase tracking-[0.3em] mb-12">
-            Safety-First Architecture
-          </div>
-          <h2 className="text-5xl lg:text-7xl font-bold text-white mb-10 tracking-tighter leading-tight">
-            AI with a <span className="italic text-blue-400">Clinical Soul.</span>
-          </h2>
-          <p className="text-xl lg:text-2xl text-slate-400 leading-relaxed font-medium max-w-3xl mx-auto">
-            Traditional health-tech is passive. PharmaAide is <span className="text-white font-bold">agentic.</span> Our systems don't just remind—they reason, triage, and act as a digital twin for the pharmacist.
-          </p>
-        </div>
-      </section>
-
-      {/* Features Grid */}
-      <section className="py-40 px-8 max-w-7xl mx-auto" id="solutions">
-        <div className="flex flex-col lg:flex-row items-end justify-between mb-24 gap-8">
-          <div className="max-w-2xl">
-            <h2 className="text-5xl font-black text-slate-900 mb-6 tracking-tighter">Unified Adherence Operations</h2>
-            <p className="text-xl text-slate-500 font-medium">Everything you need to manage patient adherence at scale, with the precision of a clinical team.</p>
-          </div>
-          <button className="px-8 py-4 bg-blue-50 border border-blue-100 text-blue-600 rounded-2xl font-bold flex items-center gap-2 hover:bg-blue-100 transition-all">
-            Explore All Features
-            <ChevronRight size={18} />
-          </button>
-        </div>
-
-        <div className="grid lg:grid-cols-3 gap-8">
-          {[
-            { 
-              icon: Search, 
-              title: "Triage & Reasoning", 
-              desc: "Automated analysis of patient chat history to surface side effects, non-compliance, and medication concerns before they escalate.",
-              color: "bg-blue-50 text-blue-600"
-            },
-            { 
-              icon: MessageSquare, 
-              title: "WhatsApp Engagement", 
-              desc: "Natural conversations powered by LLMs grounded in your specific clinical guidelines. No more rigid menu-based bots.",
-              color: "bg-emerald-50 text-emerald-600"
-            },
-            { 
-              icon: Shield, 
-              title: "Clinical Guardrails", 
-              desc: "Multi-layer safety checks ensuring all AI output is verified against drug databases and HIPAA-compliant standards.",
-              color: "bg-teal-50 text-teal-600"
-            }
-          ].map((feature, i) => (
-            <div key={i} className="group p-10 bg-white border border-slate-100 rounded-[32px] hover:shadow-[0_40px_80px_-20px_rgba(0,0,0,0.1)] transition-all duration-500 hover:-translate-y-2">
-              <div className={`w-14 h-14 ${feature.color} rounded-2xl flex items-center justify-center mb-8 shadow-sm group-hover:scale-110 transition-transform`}>
-                <feature.icon size={28} />
-              </div>
-              <h3 className="text-2xl font-bold mb-4 text-slate-900">{feature.title}</h3>
-              <p className="text-slate-500 leading-relaxed font-medium">{feature.desc}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Visual Demo Section */}
-      <section className="bg-slate-50 py-40 px-8 overflow-hidden" id="clinical-intelligence">
-        <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-24 items-center">
-          <div className="relative">
-            <div className="absolute inset-0 bg-gradient-to-br from-teal-400/20 to-blue-400/20 blur-3xl opacity-30" />
-            <div className="relative bg-[#131b2e] rounded-[40px] p-2 shadow-2xl overflow-hidden border border-white/10">
-              <div className="bg-slate-800 rounded-[36px] overflow-hidden border border-white/5 aspect-video flex items-center justify-center">
-                 <div className="flex flex-col items-center gap-4">
-                    <PlayCircle size={64} className="text-teal-400 animate-pulse" />
-                    <span className="text-white/50 font-bold uppercase tracking-widest text-[10px]">Interactive Session Preview</span>
-                 </div>
-              </div>
-            </div>
-          </div>
+      <main>
+        <section className="mx-auto grid max-w-7xl gap-8 px-6 py-12 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-50 border border-amber-100 rounded-full text-[10px] font-bold text-amber-600 uppercase tracking-wider mb-8">
-              Live Reasoning Engine
-            </div>
-            <h2 className="text-5xl font-black text-slate-900 mb-8 tracking-tighter leading-tight">
-              A Dashboard That <br />
-              <span className="text-teal-600 italic">Thinks</span> With You.
-            </h2>
-            <p className="text-xl text-slate-500 leading-relaxed mb-10 font-medium">
-              PharmaAide doesn't just show data; it provides clinical context. See exactly why an agent flagged a patient, with citations from RxNorm and treatment history.
+            <p className="mb-4 inline-flex rounded-full border border-[#D9D5FB] bg-[#F0EFFF] px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-[#463AD4]">
+              Pharmacist-in-the-loop medication support
             </p>
-            <ul className="space-y-6 mb-12">
-              {["Real-time triage scoring", "Side-effect causal mapping", "Automated intervention drafting"].map((item, i) => (
-                <li key={i} className="flex items-center gap-3 text-slate-700 font-bold">
-                  <div className="w-6 h-6 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center shrink-0">
-                    <CheckCircle2 size={14} />
-                  </div>
-                  {item}
+            <h1 className="max-w-3xl text-4xl font-black leading-tight tracking-tight text-slate-950 md:text-6xl">
+              PharmaAide keeps patient conversations clinically supervised.
+            </h1>
+            <p className="mt-6 max-w-2xl text-base leading-7 text-slate-600">
+              A medication follow-up workspace where AI drafts, pharmacists review,
+              and every patient-facing response stays inside a safety-first workflow.
+            </p>
+
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => navigate("/dashboard/surveillance")}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#5548E8] bg-[#5548E8] px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-[#463AD4] cursor-pointer"
+              >
+                Open Surveillance
+                <Activity size={16} />
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate("/dashboard/triage")}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-900 transition-colors hover:bg-slate-50 cursor-pointer"
+              >
+                Review Triage
+                <MessageSquareWarning size={16} />
+              </button>
+            </div>
+          </div>
+
+          <ClinicalPreview />
+        </section>
+
+        <section id="capabilities" className="border-y border-slate-200 bg-white">
+          <div className="mx-auto max-w-7xl px-6 py-10">
+            <div className="max-w-2xl">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Built for pharmacy teams
+              </p>
+              <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
+                Supervised automation for medication follow-up.
+              </h2>
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                Designed for pharmacists who need patient messaging, clinical
+                review, and medication follow-up in the same controlled workflow.
+              </p>
+            </div>
+
+            <div className="mt-6 grid gap-4 md:grid-cols-3">
+              {capabilities.map((item) => (
+                <CapabilityCard key={item.title} item={item} />
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="safety" className="mx-auto grid max-w-7xl gap-6 px-6 py-10 lg:grid-cols-2">
+          <InfoPanel
+            icon={<ShieldCheck size={20} />}
+            title="Safety stays before delivery"
+            text="Patient-facing drafts are validated, held when uncertain, and routed to pharmacist review before they can be sent."
+          />
+          <InfoPanel
+            icon={<Database size={20} />}
+            title="Grounded by clinic context"
+            text="Treatment analysis can cite clinic-uploaded knowledge and public DailyMed references without exposing patient text in audit logs."
+          />
+        </section>
+
+        <section id="workflow" className="mx-auto max-w-7xl px-6 pb-14">
+          <div className="rounded-lg border border-slate-200 bg-white p-6">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  Operating model
+                </p>
+                <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">
+                  AI assists. Pharmacists stay in control.
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate("/dashboard/triage")}
+                className="inline-flex w-fit items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-900 transition-colors hover:bg-slate-50 cursor-pointer"
+              >
+                Review flagged drafts
+                <ArrowRight size={15} />
+              </button>
+            </div>
+            <ol className="mt-6 grid gap-3 md:grid-cols-3">
+              {workflow.map((step, index) => (
+                <li key={step} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    Step {index + 1}
+                  </span>
+                  <p className="mt-2 text-sm font-semibold leading-6 text-slate-900">{step}</p>
                 </li>
               ))}
-            </ul>
-            <button 
-              onClick={() => navigate('/dashboard/triage')}
-              className="px-10 py-5 bg-blue-600 text-white rounded-[24px] font-bold shadow-2xl shadow-blue-900/20 hover:bg-blue-700 transition-all active:scale-95 cursor-pointer"
-            >
-              Explore Command Center
-            </button>
+            </ol>
           </div>
-        </div>
-      </section>
-
-      {/* CTA Footer */}
-      <footer className="bg-white py-40 px-8 border-t border-slate-100">
-        <div className="max-w-4xl mx-auto text-center">
-          <div className="w-20 h-20 bg-blue-600 rounded-[28px] flex items-center justify-center text-white mx-auto mb-12 shadow-2xl shadow-blue-600/20">
-            <Shield size={40} />
-          </div>
-          <h2 className="text-5xl lg:text-7xl font-black text-slate-900 mb-8 tracking-tighter">Ready to evolve?</h2>
-          <p className="text-2xl text-slate-400 font-medium mb-16 leading-relaxed">
-            Join the elite pharmacies leveraging agentic AI to redefine patient adherence and clinical safety.
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
-            <button 
-              onClick={() => navigate('/dashboard/triage')}
-              className="w-full sm:w-auto px-12 py-6 bg-blue-600 text-white rounded-[30px] font-bold shadow-2xl shadow-blue-900/30 hover:bg-blue-700 transition-all hover:scale-105 active:scale-95"
-            >
-              Get Started for Free
-            </button>
-            <button className="w-full sm:w-auto px-12 py-6 bg-white border border-slate-200 text-slate-900 rounded-[30px] font-bold hover:bg-slate-50 transition-all">
-              Talk to a Specialist
-            </button>
-          </div>
-          
-          <div className="mt-32 pt-16 border-t border-slate-50 flex flex-col md:flex-row items-center justify-between gap-8 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">
-            <div className="flex items-center gap-8">
-              <a href="#" className="hover:text-slate-900 transition-colors">Privacy</a>
-              <a href="#" className="hover:text-slate-900 transition-colors">Security</a>
-              <a href="#" className="hover:text-slate-900 transition-colors">Terms</a>
-            </div>
-            <div>© 2026 PharmaAide Clinical Ops. HIPAA Compliant.</div>
-          </div>
-        </div>
-      </footer>
+        </section>
+      </main>
     </div>
   );
-};
+}
 
-
-function UserPlus(props: any) {
+function ClinicalPreview() {
   return (
-    <svg 
-      {...props} 
-      xmlns="http://www.w3.org/2000/svg" 
-      width="24" 
-      height="24" 
-      viewBox="0 0 24 24" 
-      fill="none" 
-      stroke="currentColor" 
-      strokeWidth="2" 
-      strokeLinecap="round" 
-      strokeLinejoin="round"
+    <section
+      aria-label="Clinical operations preview"
+      className="rounded-lg border border-slate-200 bg-white"
     >
-      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <line x1="19" y1="8" x2="19" y2="14" />
-      <line x1="22" y1="11" x2="16" y2="11" />
-    </svg>
+      <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            Product preview
+          </p>
+          <h2 className="mt-1 text-lg font-black text-slate-950">Surveillance workspace</h2>
+        </div>
+        <span className="rounded-full border border-[#D9D5FB] bg-[#F0EFFF] px-3 py-1 text-xs font-bold text-[#463AD4]">
+          Supervised
+        </span>
+      </div>
+
+      <div className="grid gap-0 md:grid-cols-[0.9fr_1.1fr]">
+        <div className="border-b border-slate-200 p-5 md:border-b-0 md:border-r">
+          <p className="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            Patient queue
+          </p>
+          <div className="space-y-2">
+            <PreviewRow name="Eleanor V." detail="Metronidazole follow-up" flag="Review" />
+            <PreviewRow name="Thomas M." detail="Lisinopril check-in" flag="Due" />
+            <PreviewRow name="Amina K." detail="Amoxicillin recovery" flag="Clear" />
+          </div>
+        </div>
+
+        <div className="p-5">
+          <p className="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            Pharmacist review
+          </p>
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+            <div className="flex items-start gap-3">
+              <MessageSquareWarning size={18} className="mt-0.5 text-amber-700" />
+              <div>
+                <p className="text-sm font-black text-slate-950">Draft held for review</p>
+                <p className="mt-1 text-sm leading-6 text-slate-700">
+                  Patient reports ongoing symptoms. The response waits for pharmacist approval.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <PreviewSignal icon={<ClipboardList size={16} />} label="Review workflow" />
+            <PreviewSignal icon={<Stethoscope size={16} />} label="Treatment context" />
+          </div>
+
+          <div className="mt-4 rounded-lg border border-slate-200 p-4">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              Safety checks
+            </p>
+            <div className="mt-3 space-y-2">
+              {["Medication grounding", "Clinical safety review", "Audit metadata"].map((item) => (
+                <div key={item} className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+                  <CheckCircle2 size={15} className="text-emerald-600" />
+                  {item}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function CapabilityCard({
+  item,
+}: {
+  item: {
+    icon: LucideIcon;
+    title: string;
+    text: string;
+  };
+}) {
+  const Icon = item.icon;
+
+  return (
+    <article className="rounded-lg border border-slate-200 bg-white p-5">
+      <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#D9D5FB] bg-[#F0EFFF] text-[#5548E8]">
+        <Icon size={19} />
+      </div>
+      <h3 className="mt-5 text-lg font-black tracking-tight text-slate-950">{item.title}</h3>
+      <p className="mt-3 text-sm leading-6 text-slate-600">{item.text}</p>
+    </article>
+  );
+}
+
+function PreviewRow({
+  name,
+  detail,
+  flag,
+}: {
+  name: string;
+  detail: string;
+  flag: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-black text-slate-950">{name}</p>
+        <p className="mt-1 truncate text-xs font-semibold text-slate-500">{detail}</p>
+      </div>
+      <span className="shrink-0 rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-600">
+        {flag}
+      </span>
+    </div>
+  );
+}
+
+function PreviewSignal({
+  icon,
+  label,
+}: {
+  icon: ReactNode;
+  label: string;
+}) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <div className="flex items-center gap-2 text-[#5548E8]">
+        {icon}
+        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
+          {label}
+        </span>
+      </div>
+      <p className="mt-3 text-sm font-semibold leading-6 text-slate-800">
+        Visible to the pharmacist before patient delivery.
+      </p>
+    </div>
+  );
+}
+
+function InfoPanel({
+  icon,
+  title,
+  text,
+}: {
+  icon: ReactNode;
+  title: string;
+  text: string;
+}) {
+  return (
+    <article className="rounded-lg border border-slate-200 bg-white p-6">
+      <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#D9D5FB] bg-[#F0EFFF] text-[#5548E8]">
+        {icon}
+      </div>
+      <h2 className="mt-5 text-xl font-black tracking-tight text-slate-950">{title}</h2>
+      <p className="mt-3 text-sm leading-6 text-slate-600">{text}</p>
+    </article>
   );
 }
