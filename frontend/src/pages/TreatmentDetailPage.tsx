@@ -20,6 +20,7 @@ import {
   getTreatment,
   listAdherenceEvents,
   listPatientCheckIns,
+  startTreatmentCycle,
   triggerAnalysis,
   type AdherenceEventStatus,
   type AdherenceEventView,
@@ -61,6 +62,9 @@ export default function TreatmentDetailPage() {
   const { isPrivacyMode } = useOutletContext<OutletContext>();
   const [state, setState] = useState<FetchState>({ kind: "loading" });
   const [activeTab, setActiveTab] = useState<"overview" | "reasoning">("overview");
+  const [startCycleState, setStartCycleState] = useState<
+    { kind: "idle" | "starting" } | { kind: "error"; requestId: string | null }
+  >({ kind: "idle" });
 
   useEffect(() => {
     if (!id) return;
@@ -85,6 +89,24 @@ export default function TreatmentDetailPage() {
     };
   }, [id]);
 
+  const handleStartCycle = async () => {
+    if (state.kind !== "ok") return;
+    setStartCycleState({ kind: "starting" });
+    try {
+      const treatment = await startTreatmentCycle(state.data.treatment.id);
+      setState({
+        kind: "ok",
+        data: { ...state.data, treatment },
+      });
+      setStartCycleState({ kind: "idle" });
+    } catch (err) {
+      setStartCycleState({
+        kind: "error",
+        requestId: err instanceof ApiError ? err.requestId : null,
+      });
+    }
+  };
+
   return (
     <div className="h-full overflow-y-auto p-8">
       <div className="flex flex-col gap-6">
@@ -98,7 +120,11 @@ export default function TreatmentDetailPage() {
             {activeTab === "overview" ? (
               <>
                 <PatientCard data={state.data} isPrivacyMode={isPrivacyMode} />
-                <TreatmentCard data={state.data} />
+                <TreatmentCard
+                  data={state.data}
+                  startCycleState={startCycleState}
+                  onStartCycle={handleStartCycle}
+                />
                 <MedicationsCard data={state.data} />
                 <PatientUpdatesCard
                   treatmentId={state.data.treatment.id}
@@ -1206,18 +1232,64 @@ function PatientCard({
   );
 }
 
-function TreatmentCard({ data }: { data: TreatmentDetail }) {
+function TreatmentCard({
+  data,
+  startCycleState,
+  onStartCycle,
+}: {
+  data: TreatmentDetail;
+  startCycleState: { kind: "idle" | "starting" } | { kind: "error"; requestId: string | null };
+  onStartCycle: () => void;
+}) {
   const t = data.treatment;
+  const isActive = t.status === "active";
+  const isStarting = startCycleState.kind === "starting";
   return (
     <Section title="Treatment" icon={<ClipboardList size={16} />}>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-        <Field label="Status" value={t.status} />
-        <Field
-          label="Treatment Starts"
-          value={t.treatment_start_at ? formatCreatedAt(t.treatment_start_at) : "Not set"}
-        />
-        <Field label="Created" value={formatCreatedAt(t.created_at)} />
-        <Field label="Treatment ID" value={t.id} />
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+        <div className="grid flex-1 grid-cols-2 gap-6 md:grid-cols-3">
+          <Field label="Status" value={t.status} />
+          <Field
+            label="Treatment Starts"
+            value={t.treatment_start_at ? formatCreatedAt(t.treatment_start_at) : "Not set"}
+          />
+          <Field label="Created" value={formatCreatedAt(t.created_at)} />
+          <Field label="Treatment ID" value={t.id} />
+        </div>
+        <div className="flex min-w-48 flex-col items-start gap-2 lg:items-end">
+          <button
+            type="button"
+            onClick={onStartCycle}
+            disabled={isActive || isStarting}
+            className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition-colors ${
+              isActive
+                ? "cursor-not-allowed border border-emerald-200 bg-emerald-50 text-emerald-700"
+                : "cursor-pointer bg-[#5548E8] text-white hover:bg-[#463AD4] disabled:cursor-wait disabled:bg-slate-400"
+            }`}
+          >
+            {isStarting ? (
+              <>
+                <Loader2 size={15} className="animate-spin" />
+                Starting
+              </>
+            ) : isActive ? (
+              <>
+                <ShieldCheck size={15} />
+                Cycle active
+              </>
+            ) : (
+              <>
+                <Play size={15} />
+                Start Cycle
+              </>
+            )}
+          </button>
+          {startCycleState.kind === "error" && (
+            <p className="max-w-64 text-xs font-semibold text-red-700">
+              Could not start cycle. Reference ID: {startCycleState.requestId ?? "unknown"}
+            </p>
+          )}
+        </div>
       </div>
       {t.clinical_objective && (
         <div className="mt-6">

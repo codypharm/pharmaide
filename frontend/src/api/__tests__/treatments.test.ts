@@ -10,6 +10,7 @@ import {
   listTreatments,
   retryConversationMessageDelivery,
   sendPharmacistMessage,
+  startTreatmentCycle,
   updateTreatmentClinicalObjective,
   updateTreatmentChatResponseMode,
   triggerAnalysis,
@@ -424,6 +425,30 @@ describe("conversation messages", () => {
       clinical_objective: "Monitor nausea",
     });
     expect(result.clinical_objective).toBe("Monitor nausea");
+  });
+
+  it("starts a treatment cycle", async () => {
+    const spy = mockFetch({
+      status: 200,
+      body: {
+        id: "t1",
+        patient_id: "p1",
+        status: "active",
+        chat_response_mode: "ai_active",
+        automation_mode: "active",
+        clinical_objective: null,
+        treatment_start_at: null,
+        created_at: "2026-05-18T10:02:00Z",
+      },
+    });
+
+    const result = await startTreatmentCycle("t1");
+
+    const calledUrl = spy.mock.calls[0]?.[0] as string;
+    const init = spy.mock.calls[0]?.[1] as RequestInit;
+    expect(calledUrl).toMatch(/\/treatments\/t1\/start-cycle$/);
+    expect(init.method).toBe("POST");
+    expect(result.status).toBe("active");
   });
 
   it("retries a failed WhatsApp conversation message", async () => {

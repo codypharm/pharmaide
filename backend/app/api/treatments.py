@@ -93,6 +93,7 @@ from app.services.treatments import (
     create_treatment,
     get_treatment,
     list_treatments,
+    start_treatment_cycle,
     treatment_exists,
     update_chat_response_mode,
     update_clinical_objective,
@@ -183,6 +184,21 @@ async def post_treatment_chat_response_mode(
                 treatment_id,
                 chat_response_mode=body.chat_response_mode,
             )
+    except TreatmentCommandNotFound as exc:
+        raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
+
+
+@router.post(
+    "/treatments/{treatment_id}/start-cycle",
+    response_model=TreatmentView,
+)
+async def post_treatment_start_cycle(
+    treatment_id: UUID,
+    session_factory: SessionFactoryDep,
+) -> TreatmentView:
+    try:
+        async with session_factory() as session, session.begin():
+            return await start_treatment_cycle(session, treatment_id)
     except TreatmentCommandNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
 

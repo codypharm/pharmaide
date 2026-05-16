@@ -301,6 +301,13 @@ export function updateTreatmentClinicalObjective(
   );
 }
 
+export function startTreatmentCycle(treatmentId: string): Promise<TreatmentView> {
+  return postJson<undefined, TreatmentView>(
+    `/treatments/${treatmentId}/start-cycle`,
+    undefined,
+  );
+}
+
 // GET /treatments — paginated list. Mirrors backend TreatmentList.
 
 export type TreatmentListItem = {

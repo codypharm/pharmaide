@@ -225,6 +225,23 @@ describe("TreatmentDetailPage", () => {
     );
   });
 
+  it("lets the pharmacist start the treatment cycle", async () => {
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(SAMPLE);
+    const startCycle = vi.spyOn(treatmentsApi, "startTreatmentCycle").mockResolvedValue({
+      ...SAMPLE.treatment,
+      status: "active",
+    });
+    const user = userEvent.setup();
+
+    renderAt(SAMPLE.treatment.id);
+
+    await screen.findByText("Eleanor Vance");
+    await user.click(screen.getByRole("button", { name: /start cycle/i }));
+
+    expect(startCycle).toHaveBeenCalledWith(SAMPLE.treatment.id);
+    expect(await screen.findByRole("button", { name: /cycle active/i })).toBeDisabled();
+  });
+
   it("shows a 'not found' empty state when the treatment is missing", async () => {
     vi.spyOn(treatmentsApi, "getTreatment").mockRejectedValue(
       new NotFoundError("req_x", { detail: { error: "treatment_not_found" } }, "treatment_not_found"),

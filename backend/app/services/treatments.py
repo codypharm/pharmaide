@@ -202,6 +202,41 @@ async def update_chat_response_mode(
     return TreatmentView.model_validate(treatment)
 
 
+async def start_treatment_cycle(session: AsyncSession, treatment_id: UUID) -> TreatmentView:
+    """Activate monitoring for a treatment after pharmacist review."""
+    treatment = await session.get(Treatment, treatment_id)
+    if treatment is None:
+        raise TreatmentNotFound()
+
+    old_status = treatment.status
+    if old_status != "active":
+        treatment.status = "active"
+        session.add(
+            AuditLogEntry(
+                event_type="treatment_cycle_started",
+                resource_type="treatment",
+                resource_id=treatment.id,
+                # WhatsApp onboarding is intentionally not sent in this slice;
+                # audit the workflow state without patient or medication text.
+                payload={
+                    "old_status": old_status,
+                    "new_status": "active",
+                    "onboarding_delivery": "not_configured",
+                },
+            )
+        )
+        log.info(
+            "treatment_cycle_started",
+            treatment_id=str(treatment.id),
+            old_status=old_status,
+            new_status="active",
+            onboarding_delivery="not_configured",
+        )
+
+    await session.flush()
+    return TreatmentView.model_validate(treatment)
+
+
 async def update_clinical_objective(
     session: AsyncSession,
     treatment_id: UUID,
