@@ -428,6 +428,30 @@ describe("TreatmentDetailPage", () => {
     expect(screen.getByRole("button", { name: /start cycle/i })).toBeDisabled();
   });
 
+  it("lets the pharmacist update the treatment objective", async () => {
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(SAMPLE);
+    const updateObjective = vi
+      .spyOn(treatmentsApi, "updateTreatmentClinicalObjective")
+      .mockResolvedValue({
+        ...SAMPLE.treatment,
+        clinical_objective: "Monitor dizziness and cough",
+      });
+    const user = userEvent.setup();
+
+    renderAt(SAMPLE.treatment.id);
+
+    await screen.findByText("Eleanor Vance");
+    const objective = screen.getByLabelText(/^treatment objective$/i);
+    await user.clear(objective);
+    await user.type(objective, "Monitor dizziness and cough");
+    await user.click(screen.getByRole("button", { name: /save objective/i }));
+
+    expect(updateObjective).toHaveBeenCalledWith(SAMPLE.treatment.id, {
+      clinical_objective: "Monitor dizziness and cough",
+    });
+    expect(await screen.findByDisplayValue("Monitor dizziness and cough")).toBeTruthy();
+  });
+
   it("disables cycle start until analysis is completed", async () => {
     vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(SAMPLE);
     vi.spyOn(treatmentsApi, "getAnalysis").mockResolvedValue(RUNNING_ANALYSIS);

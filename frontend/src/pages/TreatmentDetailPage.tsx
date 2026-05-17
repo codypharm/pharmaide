@@ -31,6 +31,7 @@ import {
   startTreatmentCycle,
   terminateTreatment,
   triggerAnalysis,
+  updateTreatmentClinicalObjective,
   type AdherenceEventStatus,
   type AdherenceEventView,
   type AnalysisResult,
@@ -174,6 +175,14 @@ export default function TreatmentDetailPage() {
     });
   };
 
+  const handleTreatmentUpdated = (treatment: TreatmentView) => {
+    if (state.kind !== "ok") return;
+    setState({
+      kind: "ok",
+      data: { ...state.data, treatment },
+    });
+  };
+
   const handleTreatmentDetailReloaded = (detail: TreatmentDetail) => {
     setState({ kind: "ok", data: detail });
     if (detail.treatment.status === "pending" && detail.treatment.automation_mode === "paused") {
@@ -200,6 +209,7 @@ export default function TreatmentDetailPage() {
                   activationAnalysis={activationAnalysis}
                   onStartCycle={handleStartCycle}
                   onTerminated={handleTreatmentTerminated}
+                  onUpdated={handleTreatmentUpdated}
                 />
                 <CompletionReportCard
                   treatment={state.data.treatment}
@@ -1365,12 +1375,14 @@ function TreatmentCard({
   activationAnalysis,
   onStartCycle,
   onTerminated,
+  onUpdated,
 }: {
   data: TreatmentDetail;
   startCycleState: { kind: "idle" | "starting" } | { kind: "error"; requestId: string | null };
   activationAnalysis: ActivationAnalysisState;
   onStartCycle: () => void;
   onTerminated: (treatment: TreatmentView) => void;
+  onUpdated: (treatment: TreatmentView) => void;
 }) {
   const t = data.treatment;
   const isActive = t.status === "active";
@@ -1389,6 +1401,9 @@ function TreatmentCard({
     | { kind: "error"; requestId: string | null }
   >({ kind: "idle" });
   const canTerminate = isActive && terminateState.kind !== "saving";
+  const [objectiveState, setObjectiveState] = useState<
+    { kind: "idle" | "saving" } | { kind: "error"; requestId: string | null }
+  >({ kind: "idle" });
 
   async function handleTerminate(): Promise<void> {
     if (!canTerminate) return;
@@ -1399,6 +1414,22 @@ function TreatmentCard({
       setTerminateState({ kind: "idle" });
     } catch (err) {
       setTerminateState({
+        kind: "error",
+        requestId: err instanceof ApiError ? err.requestId : null,
+      });
+    }
+  }
+
+  async function handleObjectiveSave(value: string): Promise<void> {
+    setObjectiveState({ kind: "saving" });
+    try {
+      const treatment = await updateTreatmentClinicalObjective(t.id, {
+        clinical_objective: value.trim() || null,
+      });
+      onUpdated(treatment);
+      setObjectiveState({ kind: "idle" });
+    } catch (err) {
+      setObjectiveState({
         kind: "error",
         requestId: err instanceof ApiError ? err.requestId : null,
       });
@@ -1469,13 +1500,16 @@ function TreatmentCard({
           </div>
         )}
       </div>
-      {t.clinical_objective && (
-        <div className="mt-6">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-            Clinical Objective
-          </div>
-          <div className="text-sm text-slate-900">{t.clinical_objective}</div>
-        </div>
+      <TreatmentObjectiveEditor
+        value={t.clinical_objective}
+        isSaving={objectiveState.kind === "saving"}
+        onSave={(value) => void handleObjectiveSave(value)}
+      />
+      {objectiveState.kind === "error" && (
+        <p className="mt-2 text-xs font-semibold text-red-700">
+          Could not update treatment objective. Reference ID:{" "}
+          {objectiveState.requestId ?? "unknown"}
+        </p>
       )}
       {(isActive || terminateState.kind === "error") && (
         <div className="mt-6 border-t border-slate-100 pt-4">
@@ -1531,6 +1565,66 @@ function TreatmentCard({
         </div>
       )}
     </Section>
+  );
+}
+
+function TreatmentObjectiveEditor({
+  value,
+  isSaving,
+  onSave,
+}: {
+  value: string | null;
+  isSaving: boolean;
+  onSave: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(value ?? "");
+
+  useEffect(() => {
+    setDraft(value ?? "");
+  }, [value]);
+
+  const isDirty = draft.trim() !== (value ?? "").trim();
+
+  return (
+    <form
+      className="mt-6"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (isDirty && !isSaving) onSave(draft);
+      }}
+    >
+      <label
+        htmlFor="treatment-detail-objective"
+        className="block text-[11px] font-bold uppercase tracking-wider text-slate-500"
+      >
+        Treatment Objective
+      </label>
+      <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-start">
+        <textarea
+          id="treatment-detail-objective"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder="Add monitoring objective..."
+          rows={3}
+          className="min-w-0 flex-1 resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-900 focus:border-[#5548E8] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#D9D5FB]"
+        />
+        <button
+          type="submit"
+          aria-label="Save objective"
+          disabled={!isDirty || isSaving}
+          className="inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-bold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 sm:self-start"
+        >
+          {isSaving ? (
+            <>
+              <Loader2 size={14} className="animate-spin" />
+              Saving
+            </>
+          ) : (
+            "Save Objective"
+          )}
+        </button>
+      </div>
+    </form>
   );
 }
 
