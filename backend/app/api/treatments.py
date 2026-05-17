@@ -78,6 +78,13 @@ from app.services.conversation_messages import (
 from app.services.conversation_messages import (
     TreatmentNotFound as ConversationTreatmentNotFound,
 )
+from app.services.course_completion_report import (
+    CourseCompletionReport,
+    build_course_completion_report,
+)
+from app.services.course_completion_report import (
+    TreatmentNotFound as CompletionReportTreatmentNotFound,
+)
 from app.services.patient_checkins import (
     TreatmentNotFound as CheckInTreatmentNotFound,
 )
@@ -171,6 +178,26 @@ async def get_treatment_by_id(treatment_id: UUID, session: SessionDep) -> Treatm
     if detail is None:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"})
     return detail
+
+
+@router.get(
+    "/treatments/{treatment_id}/completion-report",
+    response_model=CourseCompletionReport,
+)
+async def get_treatment_completion_report(
+    treatment_id: UUID,
+    session: SessionDep,
+) -> CourseCompletionReport:
+    try:
+        report = await build_course_completion_report(session, treatment_id=treatment_id)
+    except CompletionReportTreatmentNotFound as exc:
+        raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
+
+    # The builder is reusable for deterministic counts, but this HTTP endpoint
+    # only exposes finalized course reports after completion.
+    if report.status != "completed":
+        raise HTTPException(status_code=409, detail={"error": "treatment_not_completed"})
+    return report
 
 
 @router.post(
