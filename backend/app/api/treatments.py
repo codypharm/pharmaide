@@ -5,7 +5,7 @@ here — the service owns the transaction; this module owns HTTP semantics
 (status codes, error envelopes, dependency wiring).
 """
 
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -168,8 +168,16 @@ async def list_treatments_route(
     session: SessionDep,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
+    status: Annotated[Literal["pending", "active", "completed"] | None, Query()] = None,
+    archived: Annotated[bool | None, Query()] = None,
 ) -> TreatmentList:
-    return await list_treatments(session, limit=limit, offset=offset)
+    return await list_treatments(
+        session,
+        limit=limit,
+        offset=offset,
+        status=status,
+        archived=archived,
+    )
 
 
 @router.get(

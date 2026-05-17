@@ -4,9 +4,13 @@ Returns lean summary rows (no full medication list) so dashboard pages
 can render a queue/feed view without per-row roundtrips.
 """
 
+from datetime import UTC, datetime
+
 import pytest
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.models import Treatment
 from app.services import task_runner
 
 
@@ -96,6 +100,47 @@ async def test_list_respects_limit_and_offset(app_client: AsyncClient) -> None:
     page_1_ids = {r["treatment"]["id"] for r in page_1["items"]}
     page_2_ids = {r["treatment"]["id"] for r in page_2["items"]}
     assert page_1_ids.isdisjoint(page_2_ids)
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_list_filters_by_status_and_archived_state(
+    app_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    pending = await app_client.post(
+        "/treatments", json=_body("FILTER-001", "Pending Patient", "Lisinopril")
+    )
+    completed = await app_client.post(
+        "/treatments", json=_body("FILTER-002", "Completed Patient", "Amoxicillin")
+    )
+    archived = await app_client.post(
+        "/treatments", json=_body("FILTER-003", "Archived Patient", "Ibuprofen")
+    )
+    assert pending.status_code == 201
+    assert completed.status_code == 201
+    assert archived.status_code == 201
+
+    completed_row = await db_session.get(Treatment, completed.json()["treatment_id"])
+    archived_row = await db_session.get(Treatment, archived.json()["treatment_id"])
+    assert completed_row is not None
+    assert archived_row is not None
+    completed_row.status = "completed"
+    archived_row.status = "completed"
+    archived_row.archived_at = datetime.now(UTC)
+    await db_session.flush()
+
+    completed_response = await app_client.get(
+        "/treatments", params={"status": "completed", "archived": "false"}
+    )
+    archived_response = await app_client.get("/treatments", params={"archived": "true"})
+
+    assert completed_response.status_code == 200
+    completed_mrns = {item["patient"]["mrn"] for item in completed_response.json()["items"]}
+    assert "FILTER-002" in completed_mrns
+    assert "FILTER-003" not in completed_mrns
+
+    assert archived_response.status_code == 200
+    archived_mrns = {item["patient"]["mrn"] for item in archived_response.json()["items"]}
+    assert archived_mrns == {"FILTER-003"}
 
 
 @pytest.mark.usefixtures("postgres_container")

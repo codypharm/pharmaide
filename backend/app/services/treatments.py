@@ -143,12 +143,25 @@ async def treatment_exists(session: AsyncSession, treatment_id: UUID) -> bool:
 
 
 async def list_treatments(
-    session: AsyncSession, limit: int, offset: int
+    session: AsyncSession,
+    limit: int,
+    offset: int,
+    *,
+    status: str | None = None,
+    archived: bool | None = None,
 ) -> TreatmentList:
     # selectinload pre-fetches patient + medications in batched queries so
     # the list-row mapping below stays sync — no N+1, no awaits in the loop.
+    statement = select(Treatment)
+    if status is not None:
+        statement = statement.where(Treatment.status == status)
+    if archived is True:
+        statement = statement.where(Treatment.archived_at.is_not(None))
+    elif archived is False:
+        statement = statement.where(Treatment.archived_at.is_(None))
+
     result = await session.execute(
-        select(Treatment)
+        statement
         .order_by(Treatment.created_at.desc())
         .limit(limit)
         .offset(offset)
