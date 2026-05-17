@@ -120,7 +120,7 @@ async def run_due_monitoring_for_treatment(
             skipped_count += 1
             continue
 
-        reminder_key = _reminder_key(reminder)
+        reminder_key = reminder_key_for_slot(reminder)
         if await _reminder_already_queued(session, treatment_id, reminder_key):
             skipped_count += 1
             continue
@@ -308,7 +308,8 @@ def _audit_due_monitoring_run(
     )
 
 
-def _reminder_key(reminder: ReminderSlot) -> str:
+def reminder_key_for_slot(reminder: ReminderSlot) -> str:
+    """Return the stable audit key shared by monitoring and completion checks."""
     return (
         f"{reminder.medication_id}:"
         f"{_serialise_offset(reminder.offset_from_start)}:"
