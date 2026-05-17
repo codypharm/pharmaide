@@ -353,6 +353,13 @@ export function archiveTreatment(treatmentId: string): Promise<TreatmentView> {
   );
 }
 
+export function terminateTreatment(treatmentId: string): Promise<TreatmentView> {
+  return postJson<undefined, TreatmentView>(
+    `/treatments/${treatmentId}/terminate`,
+    undefined,
+  );
+}
+
 // GET /treatments — paginated list. Mirrors backend TreatmentList.
 
 export type TreatmentListItem = {

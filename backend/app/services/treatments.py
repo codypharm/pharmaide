@@ -61,6 +61,10 @@ class TreatmentNotCompleted(Exception):
     """Raised when a completion-only command targets an unfinished treatment."""
 
 
+class TreatmentAlreadyCompleted(Exception):
+    """Raised when a terminal command would rewrite a completed course."""
+
+
 async def create_treatment(
     session: AsyncSession, request: CreateTreatmentRequest
 ) -> CreateTreatmentResponse:
@@ -340,6 +344,49 @@ async def archive_treatment(session: AsyncSession, treatment_id: UUID) -> Treatm
         "treatment_archived",
         treatment_id=str(treatment.id),
         status=treatment.status,
+    )
+
+    await session.flush()
+    return TreatmentView.model_validate(treatment)
+
+
+async def terminate_treatment(session: AsyncSession, treatment_id: UUID) -> TreatmentView:
+    """Stop monitoring for a pending or active treatment before normal completion."""
+    treatment = await session.get(Treatment, treatment_id)
+    if treatment is None:
+        raise TreatmentNotFound()
+    if treatment.status == "completed":
+        raise TreatmentAlreadyCompleted()
+    if treatment.status == "terminated":
+        return TreatmentView.model_validate(treatment)
+
+    old_status = treatment.status
+    old_automation_mode = treatment.automation_mode
+    treatment.status = "terminated"
+    treatment.automation_mode = "paused"
+    session.add(
+        AuditLogEntry(
+            event_type="treatment_terminated",
+            resource_type="treatment",
+            resource_id=treatment.id,
+            # Termination audit records workflow state only. Reason text can
+            # contain patient context, so it is intentionally left out here.
+            payload={
+                "old_status": old_status,
+                "new_status": treatment.status,
+                "old_automation_mode": old_automation_mode,
+                "new_automation_mode": treatment.automation_mode,
+                "already_terminated": False,
+            },
+        )
+    )
+    log.info(
+        "treatment_terminated",
+        treatment_id=str(treatment.id),
+        old_status=old_status,
+        new_status=treatment.status,
+        old_automation_mode=old_automation_mode,
+        new_automation_mode=treatment.automation_mode,
     )
 
     await session.flush()

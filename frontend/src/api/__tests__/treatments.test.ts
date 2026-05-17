@@ -14,6 +14,7 @@ import {
   retryConversationMessageDelivery,
   sendPharmacistMessage,
   startTreatmentCycle,
+  terminateTreatment,
   updateTreatmentClinicalObjective,
   updateTreatmentChatResponseMode,
   triggerAnalysis,
@@ -623,6 +624,32 @@ describe("archiveTreatment", () => {
     const calledUrl = spy.mock.calls[0]?.[0] as string;
     expect(calledUrl).toMatch(/\/treatments\/t1\/archive$/);
     expect(result.archived_at).toBe("2026-05-20T12:00:00Z");
+  });
+});
+
+describe("terminateTreatment", () => {
+  it("terminates a pending or active treatment course", async () => {
+    const spy = mockFetch({
+      status: 200,
+      body: {
+        id: "t1",
+        patient_id: "p1",
+        status: "terminated",
+        chat_response_mode: "ai_active",
+        automation_mode: "paused",
+        clinical_objective: null,
+        treatment_start_at: "2026-05-16T08:30:00Z",
+        archived_at: null,
+        created_at: "2026-05-11T12:00:00Z",
+      },
+    });
+
+    const result = await terminateTreatment("t1");
+
+    const calledUrl = spy.mock.calls[0]?.[0] as string;
+    expect(calledUrl).toMatch(/\/treatments\/t1\/terminate$/);
+    expect(result.status).toBe("terminated");
+    expect(result.automation_mode).toBe("paused");
   });
 });
 

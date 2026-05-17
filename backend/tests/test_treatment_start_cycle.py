@@ -198,6 +198,99 @@ async def test_post_archive_returns_404_for_missing_treatment(app_client: AsyncC
     assert response.json() == {"detail": {"error": "treatment_not_found"}}
 
 
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_terminate_active_treatment_sets_terminal_state_and_audits(
+    app_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    create = await app_client.post("/treatments", json=_treatment_body("TERMINATE-001"))
+    assert create.status_code == 201, create.text
+    treatment_id = UUID(create.json()["treatment_id"])
+    treatment = await db_session.get(Treatment, treatment_id)
+    assert treatment is not None
+    treatment.status = "active"
+    await db_session.flush()
+
+    response = await app_client.post(f"/treatments/{treatment_id}/terminate")
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["status"] == "terminated"
+    assert payload["automation_mode"] == "paused"
+
+    await db_session.refresh(treatment)
+    assert treatment.status == "terminated"
+    assert treatment.automation_mode == "paused"
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.resource_id == treatment_id,
+            AuditLogEntry.event_type == "treatment_terminated",
+        )
+    )
+    assert audit is not None
+    assert audit.payload == {
+        "old_status": "active",
+        "new_status": "terminated",
+        "old_automation_mode": "active",
+        "new_automation_mode": "paused",
+        "already_terminated": False,
+    }
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_terminate_is_idempotent_for_already_terminated_treatment(
+    app_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    create = await app_client.post("/treatments", json=_treatment_body("TERMINATE-002"))
+    assert create.status_code == 201, create.text
+    treatment_id = UUID(create.json()["treatment_id"])
+    treatment = await db_session.get(Treatment, treatment_id)
+    assert treatment is not None
+    treatment.status = "terminated"
+    treatment.automation_mode = "paused"
+    await db_session.flush()
+
+    response = await app_client.post(f"/treatments/{treatment_id}/terminate")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "terminated"
+    audit_count = await db_session.scalar(
+        select(func.count())
+        .select_from(AuditLogEntry)
+        .where(
+            AuditLogEntry.resource_id == treatment_id,
+            AuditLogEntry.event_type == "treatment_terminated",
+        )
+    )
+    assert audit_count == 0
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_terminate_rejects_completed_treatment(
+    app_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    create = await app_client.post("/treatments", json=_treatment_body("TERMINATE-003"))
+    assert create.status_code == 201, create.text
+    treatment_id = UUID(create.json()["treatment_id"])
+    treatment = await db_session.get(Treatment, treatment_id)
+    assert treatment is not None
+    treatment.status = "completed"
+    await db_session.flush()
+
+    response = await app_client.post(f"/treatments/{treatment_id}/terminate")
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": {"error": "treatment_already_completed"}}
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_terminate_returns_404_for_missing_treatment(app_client: AsyncClient) -> None:
+    response = await app_client.post(f"/treatments/{uuid4()}/terminate")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": {"error": "treatment_not_found"}}
+
+
 def _treatment_body(mrn: str) -> dict[str, object]:
     return {
         "patient": {
