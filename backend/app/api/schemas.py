@@ -10,7 +10,7 @@ from datetime import date, datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_extra_types.phone_numbers import PhoneNumber
 
 from app.agents.safety_schemas import PatientDraftSafetyDecision
@@ -99,10 +99,20 @@ class TreatmentCreate(BaseModel):
 
 
 class CreateTreatmentRequest(BaseModel):
-    patient: PatientCreate
+    patient: PatientCreate | None = None
+    patient_id: UUID | None = None
     treatment: TreatmentCreate
     medications: list[MedicationCreate] = Field(min_length=1)
     ingestion_method: IngestionMethod
+
+    @model_validator(mode="after")
+    def require_exactly_one_patient_source(self) -> "CreateTreatmentRequest":
+        """A treatment is created for either a new patient or an existing one."""
+        has_new_patient = self.patient is not None
+        has_existing_patient = self.patient_id is not None
+        if has_new_patient == has_existing_patient:
+            raise ValueError("provide exactly one of patient or patient_id")
+        return self
 
 
 class CreateTreatmentResponse(BaseModel):

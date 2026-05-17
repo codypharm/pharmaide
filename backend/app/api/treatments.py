@@ -103,6 +103,7 @@ from app.services.patient_reply_drafts import (
 from app.services.treatments import (
     AnalysisNotCompleted,
     MRNConflict,
+    PatientNotFound,
     TreatmentNotCompleted,
     archive_treatment,
     create_treatment,
@@ -145,6 +146,8 @@ async def post_treatment(
             analysis_id = await create_pending_analysis(session, created.treatment_id)
     except MRNConflict as exc:
         raise HTTPException(status_code=409, detail={"error": "mrn_already_exists"}) from exc
+    except PatientNotFound as exc:
+        raise HTTPException(status_code=404, detail={"error": "patient_not_found"}) from exc
     timeout_seconds = settings.analysis_timeout_seconds
     try:
         _schedule_analysis(

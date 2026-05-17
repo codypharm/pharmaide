@@ -123,3 +123,103 @@ async def test_post_treatments_creates_full_lineage(
     assert detail_response.json()["treatment"]["treatment_start_at"].startswith(
         "2026-05-16T08:30:00"
     )
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_treatments_can_attach_to_existing_patient(
+    app_client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(task_runner, "schedule", lambda *args, **kwargs: None)
+    first = await app_client.post(
+        "/treatments",
+        json={
+            "patient": {
+                "name": "Eleanor Vance",
+                "dob": "1955-10-12",
+                "mrn": "ATTACH-MRN-001",
+                "phone": "+18005551212",
+                "allergies": ["Sulfa"],
+            },
+            "treatment": {
+                "clinical_objective": "Monitor cough",
+                "treatment_start_at": "2026-05-16T08:30:00Z",
+            },
+            "medications": [
+                {
+                    "name": "Lisinopril",
+                    "dosage": "10 mg",
+                    "frequency": "Once Daily (QD)",
+                    "duration": "30 days",
+                    "objective": None,
+                }
+            ],
+            "ingestion_method": "structured",
+        },
+    )
+    assert first.status_code == 201, first.text
+    patient_id = first.json()["patient_id"]
+
+    second = await app_client.post(
+        "/treatments",
+        json={
+            "patient_id": patient_id,
+            "treatment": {
+                "clinical_objective": "Monitor recovery",
+                "treatment_start_at": "2026-05-20T08:30:00Z",
+            },
+            "medications": [
+                {
+                    "name": "Amoxicillin",
+                    "dosage": "500 mg",
+                    "frequency": "Twice Daily (BID)",
+                    "duration": "7 days",
+                    "objective": None,
+                }
+            ],
+            "ingestion_method": "structured",
+        },
+    )
+
+    assert second.status_code == 201, second.text
+    second_payload = second.json()
+    assert second_payload["patient_id"] == patient_id
+    assert second_payload["treatment_id"] != first.json()["treatment_id"]
+
+    patients = list((await db_session.execute(select(Patient))).scalars())
+    assert len(patients) == 1
+
+    treatment = await db_session.get(Treatment, UUID(second_payload["treatment_id"]))
+    assert treatment is not None
+    assert str(treatment.patient_id) == patient_id
+    assert treatment.clinical_objective == "Monitor recovery"
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_treatments_returns_404_for_unknown_existing_patient(
+    app_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(task_runner, "schedule", lambda *args, **kwargs: None)
+
+    response = await app_client.post(
+        "/treatments",
+        json={
+            "patient_id": "11111111-1111-4111-8111-111111111111",
+            "treatment": {
+                "clinical_objective": "Monitor recovery",
+                "treatment_start_at": "2026-05-20T08:30:00Z",
+            },
+            "medications": [
+                {
+                    "name": "Amoxicillin",
+                    "dosage": "500 mg",
+                    "frequency": "Twice Daily (BID)",
+                    "duration": "7 days",
+                    "objective": None,
+                }
+            ],
+            "ingestion_method": "structured",
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": {"error": "patient_not_found"}}

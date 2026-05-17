@@ -45,6 +45,10 @@ class MRNConflict(Exception):
     """Raised when a patient with the requested MRN already exists."""
 
 
+class PatientNotFound(Exception):
+    """Raised when a treatment is attached to a missing patient."""
+
+
 class TreatmentNotFound(Exception):
     """Raised when a treatment-specific command references an unknown treatment."""
 
@@ -60,20 +64,7 @@ class TreatmentNotCompleted(Exception):
 async def create_treatment(
     session: AsyncSession, request: CreateTreatmentRequest
 ) -> CreateTreatmentResponse:
-    patient = Patient(
-        name=request.patient.name,
-        dob=request.patient.dob,
-        mrn=request.patient.mrn,
-        phone=_to_e164(str(request.patient.phone)),
-        allergies=request.patient.allergies,
-    )
-    session.add(patient)
-    try:
-        await session.flush()
-    except IntegrityError as exc:
-        # mrn UNIQUE is the only constraint that can fire here right now.
-        # Re-raise as a domain-typed exception the route translates to 409.
-        raise MRNConflict() from exc
+    patient = await _resolve_treatment_patient(session, request)
 
     treatment = Treatment(
         patient_id=patient.id,
@@ -119,6 +110,33 @@ async def create_treatment(
     await session.flush()
 
     return CreateTreatmentResponse(treatment_id=treatment.id, patient_id=patient.id)
+
+
+async def _resolve_treatment_patient(
+    session: AsyncSession, request: CreateTreatmentRequest
+) -> Patient:
+    if request.patient_id is not None:
+        patient = await session.get(Patient, request.patient_id)
+        if patient is None:
+            raise PatientNotFound()
+        return patient
+
+    assert request.patient is not None
+    patient = Patient(
+        name=request.patient.name,
+        dob=request.patient.dob,
+        mrn=request.patient.mrn,
+        phone=_to_e164(str(request.patient.phone)),
+        allergies=request.patient.allergies,
+    )
+    session.add(patient)
+    try:
+        await session.flush()
+    except IntegrityError as exc:
+        # mrn UNIQUE is the only constraint that can fire here right now.
+        # Re-raise as a domain-typed exception the route translates to 409.
+        raise MRNConflict() from exc
+    return patient
 
 
 async def get_treatment(session: AsyncSession, treatment_id: UUID) -> TreatmentDetail | None:
