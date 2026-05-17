@@ -78,6 +78,31 @@ async def test_run_treatment_monitoring_queues_due_reminder_message_and_audits(
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_run_treatment_monitoring_completes_course_after_final_reminder_is_queued(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    treatment_id = await _active_treatment_with_analysis(
+        app_client,
+        db_session,
+        mrn="MONITOR-COMPLETE-001",
+    )
+
+    response = await app_client.post(f"/internal/treatments/{treatment_id}/run-due-monitoring")
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"queued_count": 1, "skipped_count": 0}
+    treatment = await db_session.get(Treatment, treatment_id)
+    assert treatment is not None
+    assert treatment.status == "completed"
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(AuditLogEntry.event_type == "treatment_completed")
+    )
+    assert audit is not None
+    assert audit.resource_id == treatment_id
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_run_treatment_monitoring_does_not_duplicate_existing_reminder_message(
     app_client: AsyncClient,
     db_session: AsyncSession,
@@ -93,8 +118,8 @@ async def test_run_treatment_monitoring_does_not_duplicate_existing_reminder_mes
 
     assert first.status_code == 200, first.text
     assert first.json() == {"queued_count": 1, "skipped_count": 0}
-    assert second.status_code == 200, second.text
-    assert second.json() == {"queued_count": 0, "skipped_count": 1}
+    assert second.status_code == 409
+    assert second.json() == {"detail": {"error": "treatment_not_active"}}
     message_count = await db_session.scalar(select(func.count()).select_from(ConversationMessage))
     assert message_count == 1
 
@@ -147,9 +172,9 @@ async def test_run_due_monitoring_processes_active_automated_treatments_once(
     }
     assert second.status_code == 200, second.text
     assert second.json() == {
-        "processed_count": 1,
+        "processed_count": 0,
         "queued_count": 0,
-        "skipped_count": 1,
+        "skipped_count": 0,
     }
 
     messages = (await db_session.execute(select(ConversationMessage))).scalars().all()

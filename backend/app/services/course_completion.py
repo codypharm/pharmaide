@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.analysis_schemas import AnalysisResult
 from app.db.models import AuditLogEntry, Treatment, TreatmentAnalysis
-from app.services.monitoring import reminder_key_for_slot
+from app.services.schedule_keys import reminder_key_for_slot
 
 log = structlog.get_logger(__name__)
 

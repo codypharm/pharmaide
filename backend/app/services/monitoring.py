@@ -6,7 +6,7 @@ WhatsApp delivery remains the separate message-delivery worker.
 """
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from uuid import UUID
 
 import structlog
@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.agents.analysis_schemas import AnalysisResult, ReminderSlot
+from app.agents.analysis_schemas import AnalysisResult
 from app.db.models import (
     AuditLogEntry,
     ConversationMessage,
@@ -23,6 +23,8 @@ from app.db.models import (
     Treatment,
     TreatmentAnalysis,
 )
+from app.services.course_completion import complete_treatment_course_if_finished
+from app.services.schedule_keys import reminder_key_for_slot
 
 log = structlog.get_logger(__name__)
 SYSTEM_RESOURCE_ID = UUID("00000000-0000-0000-0000-000000000000")
@@ -142,6 +144,11 @@ async def run_due_monitoring_for_treatment(
         queued_count += 1
 
     await session.flush()
+    await complete_treatment_course_if_finished(
+        session,
+        treatment_id=treatment_id,
+        now=current_time,
+    )
     log.info(
         "treatment_due_monitoring_run",
         treatment_id=str(treatment_id),
@@ -306,37 +313,6 @@ def _audit_due_monitoring_run(
             },
         )
     )
-
-
-def reminder_key_for_slot(reminder: ReminderSlot) -> str:
-    """Return the stable audit key shared by monitoring and completion checks."""
-    return (
-        f"{reminder.medication_id}:"
-        f"{_serialise_offset(reminder.offset_from_start)}:"
-        f"{reminder.human_label}"
-    )
-
-
-def _serialise_offset(offset: timedelta) -> str:
-    seconds = int(offset.total_seconds())
-    if seconds == 0:
-        return "PT0S"
-    sign = "-" if seconds < 0 else ""
-    seconds = abs(seconds)
-    days, remainder = divmod(seconds, 86_400)
-    hours, remainder = divmod(remainder, 3_600)
-    minutes, seconds = divmod(remainder, 60)
-    date_part = f"{days}D" if days else ""
-    time_part = "".join(
-        [
-            f"{hours}H" if hours else "",
-            f"{minutes}M" if minutes else "",
-            f"{seconds}S" if seconds else "",
-        ]
-    )
-    if time_part:
-        return f"{sign}P{date_part}T{time_part}"
-    return f"{sign}P{date_part}"
 
 
 def _aware_utc(value: datetime) -> datetime:
