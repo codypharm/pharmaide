@@ -124,6 +124,34 @@ export async function getJson<TResponse>(
   return parseJsonResponse<TResponse>(response);
 }
 
+export async function getText(
+  path: string,
+  options: RequestOptions = {},
+): Promise<string> {
+  const response = await fetch(`${baseUrl()}${path}`, {
+    method: "GET",
+    headers: options.headers,
+  });
+  const requestId = response.headers.get("X-Request-ID");
+  const text = await response.text();
+  if (response.ok) {
+    return text;
+  }
+
+  let parsed: unknown = text;
+  try {
+    parsed = text ? JSON.parse(text) : null;
+  } catch {
+    parsed = text;
+  }
+  throw new ApiError(
+    response.status,
+    requestId,
+    parsed,
+    `Request failed: ${response.status}`,
+  );
+}
+
 export async function deleteJson<TResponse = null>(
   path: string,
   options: RequestOptions = {},

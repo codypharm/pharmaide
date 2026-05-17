@@ -23,7 +23,7 @@ Keep each item as a small, reviewable slice.
 - Buffered-message operator visibility: expose processing/retry state only where pharmacists need it, without showing queue internals in routine chat UI.
 - Silence/non-response handling for missed check-ins.
 - Adherence page real data and recent-event visibility.
-- System audit filters, export, and production audit coverage review.
+- Production audit coverage review for remaining clinical, delivery, and infrastructure actions.
 - Licensed DDI provider replacement when Lexicomp, DrugBank, or another approved source is available.
 
 ## Global Standard Checklist

@@ -110,6 +110,42 @@ describe("SystemAuditsPage", () => {
     );
   });
 
+  it("exports backend-filtered audit CSV from applied exact filters", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(auditsApi, "listAuditLogEntries").mockResolvedValue(AUDITS);
+    const exportSpy = vi
+      .spyOn(auditsApi, "exportAuditLogEntries")
+      .mockResolvedValue("id,event_type\n33333333-3333-4333-8333-333333333333,triage_item_status_changed\n");
+    const createObjectUrl = vi
+      .spyOn(URL, "createObjectURL")
+      .mockReturnValue("blob:audit-export");
+    const revokeObjectUrl = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+
+    renderPage();
+
+    await screen.findByText("Analysis Started");
+    await user.selectOptions(screen.getByLabelText(/event type/i), "triage_item_status_changed");
+    await user.selectOptions(screen.getByLabelText(/resource type/i), "triage_item");
+    await user.type(screen.getByLabelText(/actor id/i), "44444444-4444-4444-8444-444444444444");
+    await user.click(screen.getByRole("button", { name: /apply audit filters/i }));
+    await user.click(screen.getByRole("button", { name: /export audit trail/i }));
+
+    await waitFor(() =>
+      expect(exportSpy).toHaveBeenCalledWith({
+        limit: 1000,
+        event_type: "triage_item_status_changed",
+        resource_type: "triage_item",
+        actor_id: "44444444-4444-4444-8444-444444444444",
+      }),
+    );
+    expect(createObjectUrl).toHaveBeenCalled();
+    expect(click).toHaveBeenCalled();
+    expect(revokeObjectUrl).toHaveBeenCalledWith("blob:audit-export");
+  });
+
   it("shows an empty state when no audit entries exist yet", async () => {
     vi.spyOn(auditsApi, "listAuditLogEntries").mockResolvedValue({ items: [] });
 

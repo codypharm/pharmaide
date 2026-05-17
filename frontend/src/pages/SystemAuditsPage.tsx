@@ -12,7 +12,11 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { listAuditLogEntries, type AuditLogEntryView } from "../api/audits";
+import {
+  exportAuditLogEntries,
+  listAuditLogEntries,
+  type AuditLogEntryView,
+} from "../api/audits";
 import { ApiError } from "../api/client";
 
 const PAGE_SIZE = 50;
@@ -77,6 +81,8 @@ export default function SystemAuditsPage() {
     useState<AuditExactFilters>(EMPTY_EXACT_FILTERS);
   const [state, setState] = useState<FetchState>({ kind: "loading" });
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportErrorRequestId, setExportErrorRequestId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setState({ kind: "loading" });
@@ -152,48 +158,35 @@ export default function SystemAuditsPage() {
     setAppliedExactFilters(EMPTY_EXACT_FILTERS);
   }
 
-  function exportVisibleLogs() {
-    const rows = filteredLogs.map((log) => ({
-      id: log.id,
-      created_at: log.created_at,
-      actor: actorLabel(log),
-      event_type: log.event_type,
-      resource_type: log.resource_type,
-      resource_id: log.resource_id,
-      payload: payloadSummary(log.payload),
-    }));
-    const csv = [
-      "id,created_at,actor,event_type,resource_type,resource_id,payload",
-      ...rows.map((row) =>
-        [
-          row.id,
-          row.created_at,
-          row.actor,
-          row.event_type,
-          row.resource_type,
-          row.resource_id,
-          row.payload,
-        ]
-          .map(csvCell)
-          .join(","),
-      ),
-    ].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "pharmaide-audit-trail.csv";
-    link.click();
-    URL.revokeObjectURL(url);
+  async function exportFilteredLogs() {
+    setIsExporting(true);
+    setExportErrorRequestId(null);
+    try {
+      const csv = await exportAuditLogEntries({
+        limit: 1000,
+        ...requestFilters(appliedExactFilters),
+      });
+      downloadCsv(csv, "pharmaide-audit-trail.csv");
+    } catch (err) {
+      setExportErrorRequestId(auditRequestId(err));
+    } finally {
+      setIsExporting(false);
+    }
   }
 
   return (
     <div className="h-full overflow-y-auto p-8">
       <div className="flex flex-col gap-6">
         <Header
-          onExport={exportVisibleLogs}
-          exportDisabled={filteredLogs.length === 0}
+          onExport={() => void exportFilteredLogs()}
+          exportDisabled={state.kind !== "ok" || isExporting}
+          isExporting={isExporting}
         />
+        {exportErrorRequestId && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+            Could not export audit trail. Reference ID: {exportErrorRequestId}.
+          </div>
+        )}
 
         <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
           <div className="p-4 border-b border-slate-100 flex flex-col gap-3 bg-slate-50/50 xl:flex-row xl:items-center xl:justify-between">
@@ -416,9 +409,11 @@ function ExactFilterInput({
 function Header({
   onExport,
   exportDisabled,
+  isExporting,
 }: {
   onExport: () => void;
   exportDisabled: boolean;
+  isExporting: boolean;
 }) {
   return (
     <div className="flex items-center justify-between gap-4">
@@ -441,8 +436,8 @@ function Header({
         disabled={exportDisabled}
         className="px-4 py-2 bg-[#5548E8] text-white rounded-xl font-semibold hover:bg-[#463AD4] transition-colors flex items-center gap-2 cursor-pointer disabled:cursor-not-allowed disabled:bg-slate-300"
       >
-        <Download size={16} />
-        Export Audit Trail
+        {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+        {isExporting ? "Exporting..." : "Export Audit Trail"}
       </button>
     </div>
   );
@@ -642,6 +637,12 @@ function formatTimestamp(value: string): string {
   }).format(new Date(value));
 }
 
-function csvCell(value: string): string {
-  return `"${value.replaceAll('"', '""')}"`;
+function downloadCsv(csv: string, filename: string): void {
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
 }
