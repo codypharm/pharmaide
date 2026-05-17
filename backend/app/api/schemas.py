@@ -36,6 +36,7 @@ ConversationMessageStatus = Literal[
     "approved",
     "rejected",
     "queued",
+    "cancelled",
     "sent",
     "failed",
 ]

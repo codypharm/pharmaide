@@ -334,10 +334,25 @@ describe("TreatmentDetailPage", () => {
 
   it("lets the pharmacist discontinue a medication on an active treatment", async () => {
     const activeTreatment = { ...SAMPLE.treatment, status: "active" };
-    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue({
-      ...SAMPLE,
-      treatment: activeTreatment,
-    });
+    vi.spyOn(treatmentsApi, "getTreatment")
+      .mockResolvedValueOnce({
+        ...SAMPLE,
+        treatment: activeTreatment,
+      })
+      .mockResolvedValueOnce({
+        ...SAMPLE,
+        treatment: {
+          ...activeTreatment,
+          status: "terminated",
+          automation_mode: "paused",
+        },
+        medications: [
+          {
+            ...SAMPLE.medications[0],
+            discontinued_at: "2026-05-17T18:45:00Z",
+          },
+        ],
+      });
     const discontinue = vi.spyOn(treatmentsApi, "discontinueMedication").mockResolvedValue({
       ...SAMPLE.medications[0],
       discontinued_at: "2026-05-17T18:45:00Z",
@@ -352,7 +367,7 @@ describe("TreatmentDetailPage", () => {
 
     expect(discontinue).toHaveBeenCalledWith(SAMPLE.treatment.id, SAMPLE.medications[0].id);
     expect(await screen.findByText("Discontinued")).toBeTruthy();
-    expect(screen.getByText("Pending")).toBeTruthy();
+    expect(screen.getByText("Terminated")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^discontinue$/i })).toBeNull();
   });
 

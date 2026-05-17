@@ -37,7 +37,6 @@ import {
   type DDIWarning,
   type KBCitation,
   type MedicationGrounding,
-  type MedicationView,
   type PatientCheckInReportType,
   type PatientCheckInView,
   type ReminderSlot,
@@ -171,22 +170,8 @@ export default function TreatmentDetailPage() {
     });
   };
 
-  const handleMedicationDiscontinued = (medication: MedicationView) => {
-    if (state.kind !== "ok") return;
-    setState({
-      kind: "ok",
-      data: {
-        ...state.data,
-        treatment: {
-          ...state.data.treatment,
-          status: "pending",
-          automation_mode: "paused",
-        },
-        medications: state.data.medications.map((item) =>
-          item.id === medication.id ? medication : item,
-        ),
-      },
-    });
+  const handleTreatmentDetailReloaded = (detail: TreatmentDetail) => {
+    setState({ kind: "ok", data: detail });
   };
 
   return (
@@ -215,7 +200,7 @@ export default function TreatmentDetailPage() {
                 />
                 <MedicationsCard
                   data={state.data}
-                  onMedicationDiscontinued={handleMedicationDiscontinued}
+                  onTreatmentDetailReloaded={handleTreatmentDetailReloaded}
                 />
                 <PatientUpdatesCard
                   treatmentId={state.data.treatment.id}
@@ -1715,10 +1700,10 @@ type MedicationDiscontinueState =
 
 function MedicationsCard({
   data,
-  onMedicationDiscontinued,
+  onTreatmentDetailReloaded,
 }: {
   data: TreatmentDetail;
-  onMedicationDiscontinued: (medication: MedicationView) => void;
+  onTreatmentDetailReloaded: (detail: TreatmentDetail) => void;
 }) {
   const [discontinueState, setDiscontinueState] = useState<MedicationDiscontinueState>({
     kind: "idle",
@@ -1728,8 +1713,9 @@ function MedicationsCard({
   async function handleDiscontinue(medicationId: string): Promise<void> {
     setDiscontinueState({ kind: "saving", medicationId });
     try {
-      const medication = await discontinueMedication(data.treatment.id, medicationId);
-      onMedicationDiscontinued(medication);
+      await discontinueMedication(data.treatment.id, medicationId);
+      const detail = await getTreatment(data.treatment.id);
+      onTreatmentDetailReloaded(detail);
       setDiscontinueState({ kind: "idle" });
     } catch (err) {
       setDiscontinueState({

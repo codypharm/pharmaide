@@ -443,9 +443,18 @@ async def discontinue_medication(
 
     if not already_discontinued:
         medication.discontinued_at = datetime.now(UTC)
-        treatment.status = "pending"
+        active_medication_count = await _count_active_medications(session, treatment_id)
+        treatment.status = "terminated" if active_medication_count == 0 else "pending"
         treatment.automation_mode = "paused"
         superseded_count = await _supersede_existing_analyses(session, treatment_id)
+        cancelled_message_count = await _cancel_queued_reminders(session, treatment_id)
+        patient_notification = _build_medication_discontinued_message(
+            treatment_id=treatment_id,
+            medication=medication,
+            active_medication_count=active_medication_count,
+        )
+        session.add(patient_notification)
+        await session.flush()
         _audit_medication_discontinued(
             session,
             medication=medication,
@@ -453,6 +462,9 @@ async def discontinue_medication(
             old_status=old_status,
             old_automation_mode=old_automation_mode,
             superseded_count=superseded_count,
+            active_medication_count=active_medication_count,
+            cancelled_message_count=cancelled_message_count,
+            patient_notification=patient_notification,
         )
         log.info(
             "treatment_medication_discontinued",
@@ -463,6 +475,9 @@ async def discontinue_medication(
             old_automation_mode=old_automation_mode,
             new_automation_mode=treatment.automation_mode,
             superseded_analysis_count=superseded_count,
+            active_medication_count=active_medication_count,
+            cancelled_queued_message_count=cancelled_message_count,
+            patient_notification_message_id=str(patient_notification.id),
         )
 
     await session.flush()
@@ -514,6 +529,61 @@ async def _supersede_existing_analyses(session: AsyncSession, treatment_id: UUID
     return len(analyses)
 
 
+async def _count_active_medications(session: AsyncSession, treatment_id: UUID) -> int:
+    result = await session.execute(
+        select(Medication.id).where(
+            Medication.treatment_id == treatment_id,
+            Medication.discontinued_at.is_(None),
+        )
+    )
+    return len(list(result.scalars()))
+
+
+async def _cancel_queued_reminders(session: AsyncSession, treatment_id: UUID) -> int:
+    result = await session.execute(
+        select(ConversationMessage).where(
+            ConversationMessage.treatment_id == treatment_id,
+            ConversationMessage.direction == "outbound",
+            ConversationMessage.sender_type == "assistant",
+            ConversationMessage.channel == "whatsapp",
+            ConversationMessage.status == "queued",
+            ConversationMessage.body.like("Reminder:%"),
+        )
+    )
+    messages = list(result.scalars())
+    for message in messages:
+        message.status = "cancelled"
+    return len(messages)
+
+
+def _build_medication_discontinued_message(
+    *,
+    treatment_id: UUID,
+    medication: Medication,
+    active_medication_count: int,
+) -> ConversationMessage:
+    if active_medication_count == 0:
+        body = (
+            "Your pharmacist has updated your treatment plan. There are no active medications "
+            "left for this monitoring cycle. Please follow your pharmacist's latest instructions."
+        )
+    else:
+        body = (
+            "Your pharmacist has updated your treatment plan. "
+            f"Please stop taking {medication.name} "
+            "unless your pharmacist has told you otherwise. Reminders are paused while your "
+            "pharmacist reviews the updated plan."
+        )
+    return ConversationMessage(
+        treatment_id=treatment_id,
+        direction="outbound",
+        sender_type="assistant",
+        channel="whatsapp",
+        status="queued",
+        body=body,
+    )
+
+
 def _audit_medication_discontinued(
     session: AsyncSession,
     *,
@@ -522,6 +592,9 @@ def _audit_medication_discontinued(
     old_status: str,
     old_automation_mode: str,
     superseded_count: int,
+    active_medication_count: int,
+    cancelled_message_count: int,
+    patient_notification: ConversationMessage,
 ) -> None:
     session.add(
         AuditLogEntry(
@@ -537,6 +610,9 @@ def _audit_medication_discontinued(
                 "old_automation_mode": old_automation_mode,
                 "new_automation_mode": treatment.automation_mode,
                 "superseded_analysis_count": superseded_count,
+                "active_medication_count": active_medication_count,
+                "cancelled_queued_message_count": cancelled_message_count,
+                "patient_notification_message_id": str(patient_notification.id),
                 "already_discontinued": False,
             },
         )

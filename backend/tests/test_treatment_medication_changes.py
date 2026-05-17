@@ -7,7 +7,13 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import AuditLogEntry, Medication, Treatment, TreatmentAnalysis
+from app.db.models import (
+    AuditLogEntry,
+    ConversationMessage,
+    Medication,
+    Treatment,
+    TreatmentAnalysis,
+)
 from app.services import task_runner
 
 
@@ -18,11 +24,11 @@ def disable_analysis_schedule(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.usefixtures("postgres_container")
-async def test_discontinue_medication_pauses_cycle_marks_analysis_stale_and_audits(
+async def test_discontinue_one_medication_pauses_cycle_notifies_patient_and_audits(
     app_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    treatment_id = await _create_treatment(app_client, mrn="MED-CHANGE-001")
+    treatment_id = await _create_treatment(app_client, mrn="MED-CHANGE-001", medication_count=2)
     medication = await _first_medication(db_session, treatment_id)
     analysis = TreatmentAnalysis(
         treatment_id=treatment_id,
@@ -53,6 +59,15 @@ async def test_discontinue_medication_pauses_cycle_marks_analysis_stale_and_audi
     assert treatment.automation_mode == "paused"
     assert analysis.status == "superseded"
 
+    patient_update = await _patient_update_message(db_session, treatment_id)
+    assert patient_update is not None
+    assert patient_update.status == "queued"
+    assert patient_update.body == (
+        "Your pharmacist has updated your treatment plan. Please stop taking Lisinopril "
+        "unless your pharmacist has told you otherwise. Reminders are paused while your "
+        "pharmacist reviews the updated plan."
+    )
+
     audit = await db_session.scalar(
         select(AuditLogEntry).where(
             AuditLogEntry.event_type == "treatment_medication_discontinued",
@@ -69,9 +84,66 @@ async def test_discontinue_medication_pauses_cycle_marks_analysis_stale_and_audi
         "old_automation_mode": "active",
         "new_automation_mode": "paused",
         "superseded_analysis_count": 2,
+        "active_medication_count": 1,
+        "cancelled_queued_message_count": 0,
+        "patient_notification_message_id": str(patient_update.id),
         "already_discontinued": False,
     }
     assert "lisinopril" not in str(audit.payload).lower()
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_discontinue_last_medication_terminates_cycle_and_cancels_queued_reminders(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    treatment_id = await _create_treatment(app_client, mrn="MED-CHANGE-LAST")
+    medication = await _first_medication(db_session, treatment_id)
+    queued_reminder = ConversationMessage(
+        treatment_id=treatment_id,
+        direction="outbound",
+        sender_type="assistant",
+        channel="whatsapp",
+        status="queued",
+        body="Reminder: it is time for Lisinopril.",
+    )
+    db_session.add(queued_reminder)
+    treatment = await db_session.get(Treatment, treatment_id)
+    assert treatment is not None
+    treatment.status = "active"
+    treatment.automation_mode = "active"
+    await db_session.flush()
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/medications/{medication.id}/discontinue"
+    )
+
+    assert response.status_code == 200, response.text
+    await db_session.refresh(treatment)
+    await db_session.refresh(queued_reminder)
+    assert treatment.status == "terminated"
+    assert treatment.automation_mode == "paused"
+    assert queued_reminder.status == "cancelled"
+
+    patient_update = await _patient_update_message(db_session, treatment_id)
+    assert patient_update is not None
+    assert patient_update.status == "queued"
+    assert patient_update.body == (
+        "Your pharmacist has updated your treatment plan. There are no active medications "
+        "left for this monitoring cycle. Please follow your pharmacist's latest instructions."
+    )
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.event_type == "treatment_medication_discontinued",
+            AuditLogEntry.resource_id == medication.id,
+        )
+    )
+    assert audit is not None
+    assert audit.payload["new_treatment_status"] == "terminated"
+    assert audit.payload["active_medication_count"] == 0
+    assert audit.payload["cancelled_queued_message_count"] == 1
+    assert audit.payload["patient_notification_message_id"] == str(patient_update.id)
 
 
 @pytest.mark.usefixtures("postgres_container")
@@ -91,7 +163,32 @@ async def test_discontinue_medication_returns_404_for_wrong_treatment(
     assert response.json() == {"detail": {"error": "medication_not_found"}}
 
 
-async def _create_treatment(app_client: AsyncClient, *, mrn: str) -> UUID:
+async def _create_treatment(
+    app_client: AsyncClient,
+    *,
+    mrn: str,
+    medication_count: int = 1,
+) -> UUID:
+    medications = [
+        {
+            "name": "Lisinopril",
+            "dosage": "10 mg",
+            "frequency": "Once Daily (QD)",
+            "duration": "30 days",
+            "objective": None,
+        }
+    ]
+    if medication_count > 1:
+        medications.append(
+            {
+                "name": "Amlodipine",
+                "dosage": "5 mg",
+                "frequency": "Once Daily (QD)",
+                "duration": "30 days",
+                "objective": None,
+            }
+        )
+
     response = await app_client.post(
         "/treatments",
         json={
@@ -105,15 +202,7 @@ async def _create_treatment(app_client: AsyncClient, *, mrn: str) -> UUID:
                 "clinical_objective": "Monitor adherence",
                 "treatment_start_at": "2026-05-16T08:00:00Z",
             },
-            "medications": [
-                {
-                    "name": "Lisinopril",
-                    "dosage": "10 mg",
-                    "frequency": "Once Daily (QD)",
-                    "duration": "30 days",
-                    "objective": None,
-                }
-            ],
+            "medications": medications,
             "ingestion_method": "structured",
         },
     )
@@ -127,3 +216,19 @@ async def _first_medication(db_session: AsyncSession, treatment_id: UUID) -> Med
     )
     assert medication is not None
     return medication
+
+
+async def _patient_update_message(
+    db_session: AsyncSession,
+    treatment_id: UUID,
+) -> ConversationMessage | None:
+    return await db_session.scalar(
+        select(ConversationMessage).where(
+            ConversationMessage.treatment_id == treatment_id,
+            ConversationMessage.direction == "outbound",
+            ConversationMessage.sender_type == "assistant",
+            ConversationMessage.channel == "whatsapp",
+            ConversationMessage.status == "queued",
+            ConversationMessage.body.like("Your pharmacist has updated your treatment plan.%"),
+        )
+    )

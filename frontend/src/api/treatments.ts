@@ -216,6 +216,7 @@ export type ConversationMessageStatus =
   | "approved"
   | "rejected"
   | "queued"
+  | "cancelled"
   | "sent"
   | "failed";
 
