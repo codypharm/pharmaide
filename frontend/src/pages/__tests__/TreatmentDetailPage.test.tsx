@@ -397,6 +397,68 @@ describe("TreatmentDetailPage", () => {
     expect(screen.queryByRole("button", { name: /^start cycle$/i })).toBeNull();
   });
 
+  it("shows that analysis must be rerun after a medication change pauses monitoring", async () => {
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue({
+      ...SAMPLE,
+      treatment: {
+        ...SAMPLE.treatment,
+        status: "pending",
+        automation_mode: "paused",
+      },
+      medications: [
+        {
+          ...SAMPLE.medications[0],
+          discontinued_at: "2026-05-17T18:45:00Z",
+        },
+        {
+          ...SAMPLE.medications[0],
+          id: "77777777-7777-7777-7777-777777777777",
+          name: "Amlodipine",
+          ordinal: 1,
+        },
+      ],
+    });
+
+    renderAt(SAMPLE.treatment.id);
+
+    await screen.findByText("Eleanor Vance");
+    expect(screen.getByText(/treatment plan changed/i)).toBeTruthy();
+    expect(screen.getByText(/rerun analysis before monitoring can resume/i)).toBeTruthy();
+  });
+
+  it("clears the medication-change warning after newer analysis is completed", async () => {
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue({
+      ...SAMPLE,
+      treatment: {
+        ...SAMPLE.treatment,
+        status: "pending",
+        automation_mode: "paused",
+      },
+      medications: [
+        {
+          ...SAMPLE.medications[0],
+          discontinued_at: "2026-05-17T18:45:00Z",
+        },
+        {
+          ...SAMPLE.medications[0],
+          id: "77777777-7777-7777-7777-777777777777",
+          name: "Amlodipine",
+          ordinal: 1,
+        },
+      ],
+    });
+    vi.spyOn(treatmentsApi, "getAnalysis").mockResolvedValue({
+      ...COMPLETED_ANALYSIS,
+      completed_at: "2026-05-18T09:00:00Z",
+    });
+
+    renderAt(SAMPLE.treatment.id);
+
+    await screen.findByText("Eleanor Vance");
+    expect(screen.queryByText(/treatment plan changed/i)).toBeNull();
+    expect(await screen.findByRole("button", { name: /start cycle/i })).toBeEnabled();
+  });
+
   it("loads the completion report only after the pharmacist opens it", async () => {
     vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue({
       ...SAMPLE,

@@ -59,7 +59,7 @@ type FetchState =
 
 type ActivationAnalysisState =
   | { kind: "loading" }
-  | { kind: "ok"; ready: boolean }
+  | { kind: "ok"; ready: boolean; completedAt: string | null }
   | { kind: "error"; requestId: string | null };
 
 function formatCreatedAt(iso: string): string {
@@ -114,9 +114,11 @@ export default function TreatmentDetailPage() {
     getAnalysis(id)
       .then((analysis) => {
         if (cancelled) return;
+        const completedAnalysis = completedAnalysisForCycle(analysis);
         setActivationAnalysis({
           kind: "ok",
-          ready: analysisReadyForCycle(analysis),
+          ready: Boolean(completedAnalysis),
+          completedAt: completedAnalysis?.completed_at ?? null,
         });
       })
       .catch((err) => {
@@ -143,7 +145,7 @@ export default function TreatmentDetailPage() {
       setStartCycleState({ kind: "idle" });
     } catch (err) {
       if (err instanceof ConflictError && err.errorCode === "analysis_not_completed") {
-        setActivationAnalysis({ kind: "ok", ready: false });
+        setActivationAnalysis({ kind: "ok", ready: false, completedAt: null });
         setStartCycleState({ kind: "idle" });
         return;
       }
@@ -1372,7 +1374,9 @@ function TreatmentCard({
   const isTerminated = t.status === "terminated";
   const isStarting = startCycleState.kind === "starting";
   const analysisReady = activationAnalysis.kind === "ok" && activationAnalysis.ready;
-  const canStart = isPending && !isStarting && analysisReady;
+  const planChangeNeedsAnalysis =
+    isPending && treatmentPlanChangedAfterAnalysis(data, activationAnalysis);
+  const canStart = isPending && !isStarting && analysisReady && !planChangeNeedsAnalysis;
   const [terminateState, setTerminateState] = useState<
     | { kind: "idle" }
     | { kind: "confirming" }
@@ -1398,6 +1402,7 @@ function TreatmentCard({
 
   return (
     <Section title="Treatment" icon={<ClipboardList size={16} />}>
+      {planChangeNeedsAnalysis && <TreatmentPlanChangedNotice />}
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
         <div className="grid flex-1 grid-cols-2 gap-6 md:grid-cols-3">
           <StatusField status={t.status} />
@@ -1438,6 +1443,13 @@ function TreatmentCard({
                 Complete analysis before starting cycle.
               </p>
             )}
+            {activationAnalysis.kind === "ok" &&
+              activationAnalysis.ready &&
+              planChangeNeedsAnalysis && (
+                <p className="max-w-64 text-xs font-semibold text-amber-700">
+                  Rerun analysis before starting cycle.
+                </p>
+              )}
             {activationAnalysis.kind === "error" && (
               <p className="max-w-64 text-xs font-semibold text-red-700">
                 Could not verify analysis status. Reference ID:{" "}
@@ -1514,6 +1526,20 @@ function TreatmentCard({
         </div>
       )}
     </Section>
+  );
+}
+
+function TreatmentPlanChangedNotice() {
+  return (
+    <div className="mb-5 flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-900">
+      <AlertCircle size={18} className="mt-0.5 shrink-0" />
+      <div>
+        <p className="text-sm font-bold">Treatment plan changed</p>
+        <p className="mt-1 text-sm font-semibold">
+          Rerun analysis before monitoring can resume.
+        </p>
+      </div>
+    </div>
   );
 }
 
@@ -1688,8 +1714,36 @@ function pluralize(count: number, label: string): string {
 }
 
 function analysisReadyForCycle(analysis: TreatmentAnalysisRow | null): boolean {
-  const completed = analysis?.status === "completed" ? analysis : analysis?.last_completed;
+  const completed = completedAnalysisForCycle(analysis);
   return completed?.status === "completed" && completed.result !== null;
+}
+
+function completedAnalysisForCycle(
+  analysis: TreatmentAnalysisRow | null,
+): TreatmentAnalysisRow | null {
+  const completed = analysis?.status === "completed" ? analysis : analysis?.last_completed;
+  return completed?.status === "completed" && completed.result !== null ? completed : null;
+}
+
+function treatmentPlanChangedAfterAnalysis(
+  data: TreatmentDetail,
+  activationAnalysis: ActivationAnalysisState,
+): boolean {
+  if (activationAnalysis.kind !== "ok") return false;
+  const latestDiscontinuedAt = latestMedicationDiscontinuedAt(data);
+  if (!latestDiscontinuedAt) return false;
+  if (!activationAnalysis.completedAt) return true;
+  return latestDiscontinuedAt.getTime() > new Date(activationAnalysis.completedAt).getTime();
+}
+
+function latestMedicationDiscontinuedAt(data: TreatmentDetail): Date | null {
+  const timestamps = data.medications
+    .map((medication) =>
+      medication.discontinued_at ? new Date(medication.discontinued_at).getTime() : null,
+    )
+    .filter((timestamp): timestamp is number => timestamp !== null && !Number.isNaN(timestamp));
+  if (timestamps.length === 0) return null;
+  return new Date(Math.max(...timestamps));
 }
 
 type MedicationDiscontinueState =
