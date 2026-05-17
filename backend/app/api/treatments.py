@@ -32,6 +32,7 @@ from app.api.schemas import (
     CreateTreatmentRequest,
     CreateTreatmentResponse,
     MedicationCreate,
+    MedicationUpdate,
     MedicationView,
     PatientCheckInCreate,
     PatientCheckInList,
@@ -104,6 +105,7 @@ from app.services.patient_reply_drafts import (
 )
 from app.services.treatments import (
     AnalysisNotCompleted,
+    MedicationAlreadyDiscontinued,
     MRNConflict,
     PatientNotFound,
     TreatmentAlreadyCompleted,
@@ -112,6 +114,7 @@ from app.services.treatments import (
     archive_treatment,
     create_treatment,
     discontinue_medication,
+    edit_medication,
     get_treatment,
     list_treatments,
     start_treatment_cycle,
@@ -313,6 +316,36 @@ async def post_treatment_medication(
         )
     except TreatmentCommandNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
+    except TreatmentAlreadyCompleted as exc:
+        raise HTTPException(status_code=409, detail={"error": "treatment_not_editable"}) from exc
+
+
+@router.post(
+    "/treatments/{treatment_id}/medications/{medication_id}/edit",
+    response_model=MedicationView,
+)
+async def post_treatment_medication_edit(
+    treatment_id: UUID,
+    medication_id: UUID,
+    body: MedicationUpdate,
+    session: SessionDep,
+) -> MedicationView:
+    try:
+        return await edit_medication(
+            session,
+            treatment_id=treatment_id,
+            medication_id=medication_id,
+            medication_update=body,
+        )
+    except TreatmentCommandNotFound as exc:
+        raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
+    except TreatmentMedicationNotFound as exc:
+        raise HTTPException(status_code=404, detail={"error": "medication_not_found"}) from exc
+    except MedicationAlreadyDiscontinued as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "medication_discontinued"},
+        ) from exc
     except TreatmentAlreadyCompleted as exc:
         raise HTTPException(status_code=409, detail={"error": "treatment_not_editable"}) from exc
 

@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { Fragment, type FormEvent, useEffect, useState } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import {
   Archive,
@@ -32,6 +32,7 @@ import {
   terminateTreatment,
   triggerAnalysis,
   updateTreatmentClinicalObjective,
+  updateMedicationInTreatment,
   type AdherenceEventStatus,
   type AdherenceEventView,
   type AnalysisResult,
@@ -2041,6 +2042,12 @@ type MedicationAddState =
   | { kind: "saving" }
   | { kind: "error"; requestId: string | null };
 
+type MedicationEditState =
+  | { kind: "idle" }
+  | { kind: "editing"; medicationId: string; form: MedicationForm }
+  | { kind: "saving"; medicationId: string; form: MedicationForm }
+  | { kind: "error"; medicationId: string; requestId: string | null };
+
 type MedicationForm = {
   name: string;
   dosage: string;
@@ -2084,9 +2091,15 @@ function MedicationsCard({
   const [addState, setAddState] = useState<MedicationAddState>({
     kind: "closed",
   });
+  const [editState, setEditState] = useState<MedicationEditState>({
+    kind: "idle",
+  });
   const [form, setForm] = useState<MedicationForm>(EMPTY_MEDICATION_FORM);
   const canDiscontinue =
     data.treatment.status === "active" || data.treatment.status === "pending";
+  const canEditMedication =
+    data.treatment.status !== "completed" &&
+    data.treatment.status !== "terminated";
   const canAddMedication =
     data.treatment.status !== "completed" &&
     data.treatment.status !== "terminated";
@@ -2106,6 +2119,35 @@ function MedicationsCard({
       setDiscontinueState({ kind: "idle" });
     } catch (err) {
       setDiscontinueState({
+        kind: "error",
+        medicationId,
+        requestId: err instanceof ApiError ? err.requestId : null,
+      });
+    }
+  }
+
+  async function handleEditMedication(
+    event: FormEvent<HTMLFormElement>,
+    medicationId: string,
+  ): Promise<void> {
+    event.preventDefault();
+    if (editState.kind !== "editing" || editState.medicationId !== medicationId) {
+      return;
+    }
+    const editForm = editState.form;
+    setEditState({ kind: "saving", medicationId, form: editForm });
+    try {
+      await updateMedicationInTreatment(data.treatment.id, medicationId, {
+        name: editForm.name.trim(),
+        dosage: editForm.dosage.trim(),
+        frequency: editForm.frequency.trim(),
+        duration: editForm.duration.trim(),
+      });
+      const detail = await getTreatment(data.treatment.id);
+      onTreatmentDetailReloaded(detail);
+      setEditState({ kind: "idle" });
+    } catch (err) {
+      setEditState({
         kind: "error",
         medicationId,
         requestId: err instanceof ApiError ? err.requestId : null,
@@ -2143,6 +2185,25 @@ function MedicationsCard({
   const updateForm = (field: keyof MedicationForm, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
   };
+
+  const updateEditForm = (field: keyof MedicationForm, value: string) => {
+    setEditState((current) => {
+      if (current.kind !== "editing") return current;
+      return { ...current, form: { ...current.form, [field]: value } };
+    });
+  };
+
+  const editForm =
+    editState.kind === "editing" || editState.kind === "saving"
+      ? editState.form
+      : null;
+  const canSaveEdit =
+    editForm !== null &&
+    editForm.name.trim() !== "" &&
+    editForm.dosage.trim() !== "" &&
+    editForm.frequency.trim() !== "" &&
+    editForm.duration.trim() !== "" &&
+    editState.kind !== "saving";
 
   return (
     <Section title="Medications" icon={<Pill size={16} />}>
@@ -2264,81 +2325,198 @@ function MedicationsCard({
                 discontinueState.medicationId === m.id
                   ? discontinueState.requestId
                   : null;
+              const isEditing =
+                (editState.kind === "editing" || editState.kind === "saving") &&
+                editState.medicationId === m.id;
+              const medicationEditForm = isEditing ? editState.form : null;
+              const editError =
+                editState.kind === "error" && editState.medicationId === m.id
+                  ? editState.requestId
+                  : null;
 
               return (
-                <tr key={m.id} className={i % 2 === 1 ? "bg-slate-50" : ""}>
-                  <td className="py-2 pr-4 text-slate-500 tabular-nums">
-                    {m.ordinal + 1}
-                  </td>
-                  <td className="py-2 pr-4 text-slate-900 font-medium">
-                    {m.name}
-                  </td>
-                  <td className="py-2 pr-4 text-slate-700 tabular-nums">
-                    {m.dosage}
-                  </td>
-                  <td className="py-2 pr-4 text-slate-700">{m.frequency}</td>
-                  <td className="py-2 pr-4 text-slate-700 tabular-nums">
-                    {m.duration}
-                  </td>
-                  <td className="py-2 pr-4 text-slate-500">
-                    {m.objective ?? "—"}
-                  </td>
-                  <td className="py-2 pr-4">
-                    {isDiscontinued ? (
-                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-600">
-                        Discontinued
-                      </span>
-                    ) : (
-                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
-                        Active
-                      </span>
-                    )}
-                    {errorForMedication && (
-                      <p className="mt-1 text-xs font-semibold text-red-700">
-                        Could not discontinue. Reference ID:{" "}
-                        {errorForMedication}
-                      </p>
-                    )}
-                  </td>
-                  <td className="py-2 pl-4 text-right">
-                    {canDiscontinue &&
-                      !isDiscontinued &&
-                      (isConfirming ? (
-                        <div className="flex justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => void handleDiscontinue(m.id)}
-                            className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-red-800 cursor-pointer"
-                          >
-                            Confirm
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setDiscontinueState({ kind: "idle" })
-                            }
-                            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50 cursor-pointer"
-                          >
-                            Keep
-                          </button>
-                        </div>
+                <Fragment key={m.id}>
+                  <tr className={i % 2 === 1 ? "bg-slate-50" : ""}>
+                    <td className="py-2 pr-4 text-slate-500 tabular-nums">
+                      {m.ordinal + 1}
+                    </td>
+                    <td className="py-2 pr-4 text-slate-900 font-medium">
+                      {m.name}
+                    </td>
+                    <td className="py-2 pr-4 text-slate-700 tabular-nums">
+                      {m.dosage}
+                    </td>
+                    <td className="py-2 pr-4 text-slate-700">{m.frequency}</td>
+                    <td className="py-2 pr-4 text-slate-700 tabular-nums">
+                      {m.duration}
+                    </td>
+                    <td className="py-2 pr-4 text-slate-500">
+                      {m.objective ?? "—"}
+                    </td>
+                    <td className="py-2 pr-4">
+                      {isDiscontinued ? (
+                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                          Discontinued
+                        </span>
                       ) : (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setDiscontinueState({
-                              kind: "confirming",
-                              medicationId: m.id,
-                            })
+                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                          Active
+                        </span>
+                      )}
+                      {errorForMedication && (
+                        <p className="mt-1 text-xs font-semibold text-red-700">
+                          Could not discontinue. Reference ID:{" "}
+                          {errorForMedication}
+                        </p>
+                      )}
+                      {editError && (
+                        <p className="mt-1 text-xs font-semibold text-red-700">
+                          Could not save changes. Reference ID:{" "}
+                          {editError}
+                        </p>
+                      )}
+                    </td>
+                    <td className="py-2 pl-4 text-right">
+                      {!isDiscontinued && (
+                        <div className="flex justify-end gap-2">
+                          {canEditMedication && !isConfirming && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setEditState({
+                                  kind: "editing",
+                                  medicationId: m.id,
+                                  form: {
+                                    name: m.name,
+                                    dosage: m.dosage,
+                                    frequency: m.frequency,
+                                    duration: m.duration,
+                                  },
+                                })
+                              }
+                              disabled={isEditing}
+                              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-colors hover:border-[#5548E8] hover:text-[#463AD4] disabled:cursor-wait disabled:text-slate-400 cursor-pointer"
+                            >
+                              Edit
+                            </button>
+                          )}
+                          {canDiscontinue &&
+                            (isConfirming ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleDiscontinue(m.id)}
+                                  className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-red-800 cursor-pointer"
+                                >
+                                  Confirm
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setDiscontinueState({ kind: "idle" })
+                                  }
+                                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50 cursor-pointer"
+                                >
+                                  Keep
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setDiscontinueState({
+                                    kind: "confirming",
+                                    medicationId: m.id,
+                                  })
+                                }
+                                disabled={isSaving}
+                                className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-700 transition-colors hover:border-red-700 hover:bg-red-700 hover:text-white disabled:cursor-wait disabled:text-red-300 cursor-pointer"
+                              >
+                                {isSaving ? "Discontinuing" : "Discontinue"}
+                              </button>
+                            ))}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                  {medicationEditForm && (
+                    <tr>
+                      <td colSpan={8} className="border-t border-slate-100 p-0">
+                        <form
+                          onSubmit={(event) =>
+                            void handleEditMedication(event, m.id)
                           }
-                          disabled={isSaving}
-                          className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-700 transition-colors hover:border-red-700 hover:bg-red-700 hover:text-white disabled:cursor-wait disabled:text-red-300 cursor-pointer"
+                          className="rounded-b-lg border border-t-0 border-slate-200 bg-slate-50 p-4"
                         >
-                          {isSaving ? "Discontinuing" : "Discontinue"}
-                        </button>
-                      ))}
-                  </td>
-                </tr>
+                          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                            <MedicationFormField
+                              id={`edit-medication-name-${m.id}`}
+                              label="Medication Name"
+                              value={medicationEditForm.name}
+                              onChange={(value) => updateEditForm("name", value)}
+                              required
+                            />
+                            <MedicationFormField
+                              id={`edit-medication-dosage-${m.id}`}
+                              label="Dosage Strength"
+                              value={medicationEditForm.dosage}
+                              onChange={(value) =>
+                                updateEditForm("dosage", value)
+                              }
+                              placeholder="e.g. 500mg"
+                              required
+                            />
+                            <MedicationFormField
+                              id={`edit-medication-frequency-${m.id}`}
+                              label="Frequency"
+                              value={medicationEditForm.frequency}
+                              onChange={(value) =>
+                                updateEditForm("frequency", value)
+                              }
+                              list="frequency-suggestions"
+                              placeholder="e.g. Twice Daily (BID), Every 8 Hours, PRN"
+                              required
+                            />
+                            <MedicationFormField
+                              id={`edit-medication-duration-${m.id}`}
+                              label="Duration"
+                              value={medicationEditForm.duration}
+                              onChange={(value) =>
+                                updateEditForm("duration", value)
+                              }
+                              placeholder="e.g. 10 days"
+                              required
+                            />
+                          </div>
+                          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <p className="text-xs font-semibold text-slate-500">
+                              Saving changes pauses monitoring until analysis is rerun.
+                            </p>
+                            <div className="flex justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setEditState({ kind: "idle" })}
+                                disabled={editState.kind === "saving"}
+                                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-wait disabled:text-slate-400"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="submit"
+                                disabled={!canSaveEdit}
+                                className="rounded-lg bg-[#5548E8] px-3 py-2 text-sm font-bold text-white transition-colors hover:bg-[#463AD4] disabled:cursor-wait disabled:bg-slate-400"
+                              >
+                                {editState.kind === "saving"
+                                  ? "Saving"
+                                  : "Save Changes"}
+                              </button>
+                            </div>
+                          </div>
+                        </form>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               );
             })}
           </tbody>

@@ -20,6 +20,7 @@ from app.api.schemas import (
     CreateTreatmentRequest,
     CreateTreatmentResponse,
     MedicationCreate,
+    MedicationUpdate,
     MedicationView,
     PatientView,
     TreatmentDetail,
@@ -75,6 +76,10 @@ class TreatmentAlreadyCompleted(Exception):
 
 class MedicationNotFound(Exception):
     """Raised when a medication command references the wrong treatment."""
+
+
+class MedicationAlreadyDiscontinued(Exception):
+    """Raised when an edit targets a medication that is no longer active."""
 
 
 async def create_treatment(
@@ -566,6 +571,73 @@ async def add_medication_to_treatment(
     return MedicationView.model_validate(new_medication)
 
 
+async def edit_medication(
+    session: AsyncSession,
+    *,
+    treatment_id: UUID,
+    medication_id: UUID,
+    medication_update: MedicationUpdate,
+) -> MedicationView:
+    """Edit active medication instructions and require fresh pharmacist review."""
+    treatment = await session.get(Treatment, treatment_id)
+    if treatment is None:
+        raise TreatmentNotFound()
+    if treatment.status in {"completed", "terminated"}:
+        raise TreatmentAlreadyCompleted()
+
+    medication = await _get_treatment_medication(session, treatment_id, medication_id)
+    if medication.discontinued_at is not None:
+        raise MedicationAlreadyDiscontinued()
+
+    changed_fields = _apply_medication_update(medication, medication_update)
+    if not changed_fields:
+        return MedicationView.model_validate(medication)
+
+    old_status = treatment.status
+    old_automation_mode = treatment.automation_mode
+    treatment.status = "pending"
+    treatment.automation_mode = "paused"
+    superseded_count = await _supersede_existing_analyses(session, treatment.id)
+    cancelled_message_count = await _cancel_queued_reminders(session, treatment.id)
+    active_medication_count = await _count_active_medications(session, treatment.id)
+    patient_notification = None
+    if old_status == "active":
+        patient_notification = _build_medication_edited_message(treatment_id=treatment.id)
+        session.add(patient_notification)
+    await session.flush()
+    _audit_medication_edited(
+        session,
+        medication=medication,
+        treatment=treatment,
+        old_status=old_status,
+        old_automation_mode=old_automation_mode,
+        superseded_count=superseded_count,
+        active_medication_count=active_medication_count,
+        cancelled_message_count=cancelled_message_count,
+        patient_notification=patient_notification,
+        changed_fields=changed_fields,
+    )
+    log.info(
+        "treatment_medication_edited",
+        treatment_id=str(treatment.id),
+        medication_id=str(medication.id),
+        changed_fields=changed_fields,
+        old_status=old_status,
+        new_status=treatment.status,
+        old_automation_mode=old_automation_mode,
+        new_automation_mode=treatment.automation_mode,
+        superseded_analysis_count=superseded_count,
+        active_medication_count=active_medication_count,
+        cancelled_queued_message_count=cancelled_message_count,
+        patient_notification_message_id=(
+            str(patient_notification.id) if patient_notification is not None else None
+        ),
+    )
+
+    await session.flush()
+    return MedicationView.model_validate(medication)
+
+
 async def _latest_completed_analysis(
     session: AsyncSession, treatment_id: UUID
 ) -> TreatmentAnalysis | None:
@@ -595,6 +667,20 @@ async def _get_treatment_medication(
     if medication is None:
         raise MedicationNotFound()
     return medication
+
+
+def _apply_medication_update(
+    medication: Medication,
+    medication_update: MedicationUpdate,
+) -> list[str]:
+    changed_fields: list[str] = []
+    for field in ("name", "dosage", "frequency", "duration"):
+        new_value = getattr(medication_update, field)
+        if getattr(medication, field) != new_value:
+            setattr(medication, field, new_value)
+            changed_fields.append(field)
+    # Sort to keep audit payloads deterministic even if field order changes.
+    return sorted(changed_fields)
 
 
 async def _next_medication_ordinal(session: AsyncSession, treatment_id: UUID) -> int:
@@ -694,6 +780,22 @@ def _build_medication_added_message(
     )
 
 
+def _build_medication_edited_message(*, treatment_id: UUID) -> ConversationMessage:
+    return ConversationMessage(
+        treatment_id=treatment_id,
+        direction="outbound",
+        sender_type="assistant",
+        channel="whatsapp",
+        status="queued",
+        body=(
+            "Your pharmacist has updated your treatment plan. "
+            "One medication instruction was changed. "
+            "Please follow your pharmacist's latest direct instructions. "
+            "Reminders are paused while your pharmacist reviews the updated plan."
+        ),
+    )
+
+
 def _audit_medication_added(
     session: AsyncSession,
     *,
@@ -726,6 +828,45 @@ def _audit_medication_added(
                 "patient_notification_message_id": (
                     str(patient_notification.id) if patient_notification is not None else None
                 ),
+            },
+        )
+    )
+
+
+def _audit_medication_edited(
+    session: AsyncSession,
+    *,
+    medication: Medication,
+    treatment: Treatment,
+    old_status: str,
+    old_automation_mode: str,
+    superseded_count: int,
+    active_medication_count: int,
+    cancelled_message_count: int,
+    patient_notification: ConversationMessage | None,
+    changed_fields: list[str],
+) -> None:
+    session.add(
+        AuditLogEntry(
+            event_type="treatment_medication_edited",
+            resource_type="medication",
+            resource_id=medication.id,
+            # Changed field names are enough for traceability; actual medication
+            # text stays in the medication row and out of the audit payload.
+            payload={
+                "treatment_id": str(treatment.id),
+                "medication_id": str(medication.id),
+                "old_treatment_status": old_status,
+                "new_treatment_status": treatment.status,
+                "old_automation_mode": old_automation_mode,
+                "new_automation_mode": treatment.automation_mode,
+                "superseded_analysis_count": superseded_count,
+                "active_medication_count": active_medication_count,
+                "cancelled_queued_message_count": cancelled_message_count,
+                "patient_notification_message_id": (
+                    str(patient_notification.id) if patient_notification is not None else None
+                ),
+                "changed_fields": changed_fields,
             },
         )
     )

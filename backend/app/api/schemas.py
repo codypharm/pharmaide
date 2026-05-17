@@ -86,6 +86,13 @@ class MedicationCreate(BaseModel):
     objective: str | None = Field(default=None, max_length=500)
 
 
+class MedicationUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    dosage: str = Field(min_length=1, max_length=50)
+    frequency: str = Field(min_length=1, max_length=50)
+    duration: str = Field(min_length=1, max_length=50)
+
+
 class TreatmentCreate(BaseModel):
     clinical_objective: str | None = Field(default=None, max_length=1000)
     treatment_start_at: datetime | None = None

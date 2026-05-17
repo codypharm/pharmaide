@@ -479,6 +479,63 @@ describe("TreatmentDetailPage", () => {
     expect(screen.getByRole("button", { name: /start cycle/i })).toBeDisabled();
   });
 
+  it("lets the pharmacist edit a medication and pauses cycle start for analysis rerun", async () => {
+    const activeTreatment = { ...SAMPLE.treatment, status: "active" };
+    const editedMedication = {
+      ...SAMPLE.medications[0],
+      dosage: "20 mg",
+      frequency: "Twice Daily (BID)",
+      duration: "14 days",
+    };
+    vi.spyOn(treatmentsApi, "getTreatment")
+      .mockResolvedValueOnce({
+        ...SAMPLE,
+        treatment: activeTreatment,
+      })
+      .mockResolvedValueOnce({
+        ...SAMPLE,
+        treatment: {
+          ...activeTreatment,
+          status: "pending",
+          automation_mode: "paused",
+        },
+        medications: [editedMedication],
+      });
+    const updateMedication = vi
+      .spyOn(treatmentsApi, "updateMedicationInTreatment")
+      .mockResolvedValue(editedMedication);
+    vi.spyOn(treatmentsApi, "getAnalysis").mockResolvedValue(COMPLETED_ANALYSIS);
+    const user = userEvent.setup();
+
+    renderAt(SAMPLE.treatment.id);
+
+    await screen.findByText("Eleanor Vance");
+    await user.click(screen.getByRole("button", { name: /^edit$/i }));
+    await user.clear(screen.getByLabelText(/^dosage strength$/i));
+    await user.type(screen.getByLabelText(/^dosage strength$/i), "20 mg");
+    const frequencyInput = screen.getByLabelText(/^frequency$/i);
+    expect(frequencyInput).toHaveAttribute("list", "frequency-suggestions");
+    await user.clear(frequencyInput);
+    await user.type(frequencyInput, "Twice Daily (BID)");
+    await user.clear(screen.getByLabelText(/^duration$/i));
+    await user.type(screen.getByLabelText(/^duration$/i), "14 days");
+    await user.click(screen.getByRole("button", { name: /^save changes$/i }));
+
+    expect(updateMedication).toHaveBeenCalledWith(
+      SAMPLE.treatment.id,
+      SAMPLE.medications[0].id,
+      {
+        name: "Lisinopril",
+        dosage: "20 mg",
+        frequency: "Twice Daily (BID)",
+        duration: "14 days",
+      },
+    );
+    expect(await screen.findByText("20 mg")).toBeTruthy();
+    expect(screen.getByText(/treatment plan changed/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /start cycle/i })).toBeDisabled();
+  });
+
   it("lets the pharmacist update the treatment objective", async () => {
     vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(SAMPLE);
     const updateObjective = vi

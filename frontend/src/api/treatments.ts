@@ -372,6 +372,17 @@ export function addMedicationToTreatment(
   );
 }
 
+export function updateMedicationInTreatment(
+  treatmentId: string,
+  medicationId: string,
+  payload: Omit<MedicationCreate, "objective">,
+): Promise<MedicationView> {
+  return postJson<Omit<MedicationCreate, "objective">, MedicationView>(
+    `/treatments/${treatmentId}/medications/${medicationId}/edit`,
+    payload,
+  );
+}
+
 export function discontinueMedication(
   treatmentId: string,
   medicationId: string,
