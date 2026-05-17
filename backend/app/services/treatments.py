@@ -72,6 +72,10 @@ class TreatmentAlreadyCompleted(Exception):
     """Raised when a terminal command would rewrite a completed course."""
 
 
+class MedicationNotFound(Exception):
+    """Raised when a medication command references the wrong treatment."""
+
+
 async def create_treatment(
     session: AsyncSession, request: CreateTreatmentRequest
 ) -> CreateTreatmentResponse:
@@ -420,6 +424,51 @@ async def terminate_treatment(session: AsyncSession, treatment_id: UUID) -> Trea
     return TreatmentView.model_validate(treatment)
 
 
+async def discontinue_medication(
+    session: AsyncSession,
+    *,
+    treatment_id: UUID,
+    medication_id: UUID,
+) -> MedicationView:
+    """Discontinue one medication and require fresh analysis before monitoring resumes."""
+    medication = await _get_treatment_medication(session, treatment_id, medication_id)
+    treatment = await session.get(Treatment, treatment_id)
+    if treatment is None:
+        raise TreatmentNotFound()
+
+    already_discontinued = medication.discontinued_at is not None
+    old_status = treatment.status
+    old_automation_mode = treatment.automation_mode
+    superseded_count = 0
+
+    if not already_discontinued:
+        medication.discontinued_at = datetime.now(UTC)
+        treatment.status = "pending"
+        treatment.automation_mode = "paused"
+        superseded_count = await _supersede_existing_analyses(session, treatment_id)
+        _audit_medication_discontinued(
+            session,
+            medication=medication,
+            treatment=treatment,
+            old_status=old_status,
+            old_automation_mode=old_automation_mode,
+            superseded_count=superseded_count,
+        )
+        log.info(
+            "treatment_medication_discontinued",
+            treatment_id=str(treatment_id),
+            medication_id=str(medication_id),
+            old_status=old_status,
+            new_status=treatment.status,
+            old_automation_mode=old_automation_mode,
+            new_automation_mode=treatment.automation_mode,
+            superseded_analysis_count=superseded_count,
+        )
+
+    await session.flush()
+    return MedicationView.model_validate(medication)
+
+
 async def _latest_completed_analysis(
     session: AsyncSession, treatment_id: UUID
 ) -> TreatmentAnalysis | None:
@@ -432,6 +481,66 @@ async def _latest_completed_analysis(
         .order_by(TreatmentAnalysis.created_at.desc())
     )
     return next((analysis for analysis in result.scalars() if analysis.result is not None), None)
+
+
+async def _get_treatment_medication(
+    session: AsyncSession,
+    treatment_id: UUID,
+    medication_id: UUID,
+) -> Medication:
+    result = await session.execute(
+        select(Medication).where(
+            Medication.id == medication_id,
+            Medication.treatment_id == treatment_id,
+        )
+    )
+    medication = result.scalar_one_or_none()
+    if medication is None:
+        raise MedicationNotFound()
+    return medication
+
+
+async def _supersede_existing_analyses(session: AsyncSession, treatment_id: UUID) -> int:
+    result = await session.execute(
+        select(TreatmentAnalysis).where(
+            TreatmentAnalysis.treatment_id == treatment_id,
+            TreatmentAnalysis.status.in_(("pending", "running", "completed", "failed")),
+        )
+    )
+    analyses = list(result.scalars())
+    for analysis in analyses:
+        analysis.status = "superseded"
+        analysis.completed_at = func.clock_timestamp()
+    return len(analyses)
+
+
+def _audit_medication_discontinued(
+    session: AsyncSession,
+    *,
+    medication: Medication,
+    treatment: Treatment,
+    old_status: str,
+    old_automation_mode: str,
+    superseded_count: int,
+) -> None:
+    session.add(
+        AuditLogEntry(
+            event_type="treatment_medication_discontinued",
+            resource_type="medication",
+            resource_id=medication.id,
+            # Medication names, doses, and objectives stay out of audit payloads.
+            payload={
+                "treatment_id": str(treatment.id),
+                "medication_id": str(medication.id),
+                "old_treatment_status": old_status,
+                "new_treatment_status": treatment.status,
+                "old_automation_mode": old_automation_mode,
+                "new_automation_mode": treatment.automation_mode,
+                "superseded_analysis_count": superseded_count,
+                "already_discontinued": False,
+            },
+        )
+    )
 
 
 async def update_clinical_objective(

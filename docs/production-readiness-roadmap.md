@@ -16,7 +16,7 @@ Keep each item as a small, reviewable slice.
 ## Product Completion
 
 - Real WhatsApp scheduled check-ins and adherence capture.
-- Existing-treatment medication changes: add, edit, discontinue/remove medications, audit each change, and mark analysis/schedule stale for pharmacist rerun before monitoring continues.
+- Existing-treatment medication changes: add/edit medication workflow and pharmacist UI for stale analysis/schedule rerun after regimen changes.
 - Buffered-message worker integration: connect the internal processing seam to Cloud Tasks/Pub/Sub once deployment infrastructure is available.
 - Buffered-message operator visibility: expose processing/retry state only where pharmacists need it, without showing queue internals in routine chat UI.
 - Silence/non-response handling for missed check-ins.

@@ -66,6 +66,7 @@ async def test_get_returns_full_lineage_after_create(app_client: AsyncClient) ->
     assert len(detail["medications"]) == 1
     assert detail["medications"][0]["name"] == "Lisinopril"
     assert detail["medications"][0]["ordinal"] == 0
+    assert detail["medications"][0]["discontinued_at"] is None
 
 
 @pytest.mark.usefixtures("postgres_container")

@@ -410,6 +410,7 @@ class MedicationView(BaseModel):
     frequency: str
     duration: str
     objective: str | None
+    discontinued_at: datetime | None
     ordinal: int
 
     model_config = {"from_attributes": True}

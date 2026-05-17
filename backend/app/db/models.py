@@ -138,6 +138,7 @@ class Medication(Base):
     frequency: Mapped[str] = mapped_column(Text, nullable=False)
     duration: Mapped[str] = mapped_column(Text, nullable=False)
     objective: Mapped[str | None] = mapped_column(Text)
+    discontinued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Preserves the pharmacist's input order so the regimen displays the
     # way it was entered, regardless of insert ordering.
     ordinal: Mapped[int] = mapped_column(Integer, nullable=False)

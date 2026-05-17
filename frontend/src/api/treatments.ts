@@ -76,6 +76,7 @@ export type MedicationView = {
   frequency: string;
   duration: string;
   objective: string | null;
+  discontinued_at?: string | null;
   ordinal: number;
 };
 
@@ -356,6 +357,16 @@ export function archiveTreatment(treatmentId: string): Promise<TreatmentView> {
 export function terminateTreatment(treatmentId: string): Promise<TreatmentView> {
   return postJson<undefined, TreatmentView>(
     `/treatments/${treatmentId}/terminate`,
+    undefined,
+  );
+}
+
+export function discontinueMedication(
+  treatmentId: string,
+  medicationId: string,
+): Promise<MedicationView> {
+  return postJson<undefined, MedicationView>(
+    `/treatments/${treatmentId}/medications/${medicationId}/discontinue`,
     undefined,
   );
 }

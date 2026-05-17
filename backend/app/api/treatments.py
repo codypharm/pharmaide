@@ -31,6 +31,7 @@ from app.api.schemas import (
     ConversationTurnView,
     CreateTreatmentRequest,
     CreateTreatmentResponse,
+    MedicationView,
     PatientCheckInCreate,
     PatientCheckInList,
     PatientCheckInView,
@@ -108,6 +109,7 @@ from app.services.treatments import (
     TreatmentNotCompleted,
     archive_treatment,
     create_treatment,
+    discontinue_medication,
     get_treatment,
     list_treatments,
     start_treatment_cycle,
@@ -115,6 +117,9 @@ from app.services.treatments import (
     treatment_exists,
     update_chat_response_mode,
     update_clinical_objective,
+)
+from app.services.treatments import (
+    MedicationNotFound as TreatmentMedicationNotFound,
 )
 from app.services.treatments import (
     TreatmentNotFound as TreatmentCommandNotFound,
@@ -286,6 +291,27 @@ async def post_treatment_terminate(
             status_code=409,
             detail={"error": "treatment_already_completed"},
         ) from exc
+
+
+@router.post(
+    "/treatments/{treatment_id}/medications/{medication_id}/discontinue",
+    response_model=MedicationView,
+)
+async def post_treatment_medication_discontinue(
+    treatment_id: UUID,
+    medication_id: UUID,
+    session: SessionDep,
+) -> MedicationView:
+    try:
+        return await discontinue_medication(
+            session,
+            treatment_id=treatment_id,
+            medication_id=medication_id,
+        )
+    except TreatmentCommandNotFound as exc:
+        raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
+    except TreatmentMedicationNotFound as exc:
+        raise HTTPException(status_code=404, detail={"error": "medication_not_found"}) from exc
 
 
 @router.post(

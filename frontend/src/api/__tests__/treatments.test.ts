@@ -4,6 +4,7 @@ import {
   createTreatment,
   createAdherenceEvent,
   createPatientCheckIn,
+  discontinueMedication,
   draftPatientReply,
   getAnalysis,
   getCompletionReport,
@@ -650,6 +651,30 @@ describe("terminateTreatment", () => {
     expect(calledUrl).toMatch(/\/treatments\/t1\/terminate$/);
     expect(result.status).toBe("terminated");
     expect(result.automation_mode).toBe("paused");
+  });
+});
+
+describe("discontinueMedication", () => {
+  it("marks a treatment medication discontinued", async () => {
+    const spy = mockFetch({
+      status: 200,
+      body: {
+        id: "m1",
+        name: "Lisinopril",
+        dosage: "10 mg",
+        frequency: "Once Daily (QD)",
+        duration: "30 days",
+        objective: null,
+        discontinued_at: "2026-05-17T18:45:00Z",
+        ordinal: 0,
+      },
+    });
+
+    const result = await discontinueMedication("t1", "m1");
+
+    const calledUrl = spy.mock.calls[0]?.[0] as string;
+    expect(calledUrl).toMatch(/\/treatments\/t1\/medications\/m1\/discontinue$/);
+    expect(result.discontinued_at).toBe("2026-05-17T18:45:00Z");
   });
 });
 
