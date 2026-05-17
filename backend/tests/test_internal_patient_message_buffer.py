@@ -15,7 +15,7 @@ from app.agents.safety_schemas import (
     RefereeResult,
     SafetyReview,
 )
-from app.db.models import ConversationMessage
+from app.db.models import AuditLogEntry, ConversationMessage
 from app.services import task_runner
 from app.services.patient_message_buffer import buffer_patient_message
 
@@ -64,6 +64,19 @@ async def test_process_buffered_patient_turn_creates_one_assistant_reply_without
     ]
     assert all(message.processed_at is not None for message in messages[:2])
     assert "I took it\nbut I vomited" not in [message.body for message in messages]
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.event_type == "patient_message_buffer_worker_run"
+        )
+    )
+    assert audit is not None
+    assert audit.payload == {
+        "treatment_id": str(treatment_id),
+        "processed_count": 2,
+        "assistant_message_id": payload["assistant_message_id"],
+        "assistant_status": "held_for_review",
+    }
+    assert "vomited" not in str(audit.payload).lower()
 
 
 @pytest.mark.usefixtures("postgres_container")
@@ -121,7 +134,7 @@ async def test_process_buffered_patient_turn_keeps_messages_retryable_when_reply
         raise RuntimeError("draft failed")
 
     monkeypatch.setattr(
-        "app.api.internal.draft_patient_reply_for_treatment",
+        "app.services.patient_message_worker.draft_patient_reply_for_treatment",
         fail_draft_patient_reply_for_treatment,
     )
 
@@ -184,7 +197,7 @@ def _patch_generated_reply(monkeypatch: pytest.MonkeyPatch) -> None:
         )
 
     monkeypatch.setattr(
-        "app.api.internal.draft_patient_reply_for_treatment",
+        "app.services.patient_message_worker.draft_patient_reply_for_treatment",
         fake_draft_patient_reply_for_treatment,
     )
 
