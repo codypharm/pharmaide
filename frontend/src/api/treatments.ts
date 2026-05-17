@@ -366,12 +366,16 @@ export type TreatmentList = {
 export type ListTreatmentsParams = {
   limit?: number;
   offset?: number;
+  status?: "pending" | "active" | "completed";
+  archived?: boolean;
 };
 
 export function listTreatments(params: ListTreatmentsParams = {}): Promise<TreatmentList> {
   const query = new URLSearchParams();
   if (params.limit !== undefined) query.set("limit", String(params.limit));
   if (params.offset !== undefined) query.set("offset", String(params.offset));
+  if (params.status !== undefined) query.set("status", params.status);
+  if (params.archived !== undefined) query.set("archived", String(params.archived));
   const qs = query.toString();
   return getJson<TreatmentList>(qs ? `/treatments?${qs}` : "/treatments");
 }

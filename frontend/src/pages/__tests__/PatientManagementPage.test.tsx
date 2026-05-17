@@ -415,7 +415,15 @@ describe("PatientManagementPage", () => {
 
   it("separates completed treatments and links them to the report view", async () => {
     const user = userEvent.setup();
-    vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue(TREATMENTS_WITH_COMPLETED);
+    const completedOnly = { items: [TREATMENTS_WITH_COMPLETED.items[1]] };
+    const archivedOnly = { items: [TREATMENTS_WITH_COMPLETED.items[2]] };
+    const listTreatments = vi
+      .spyOn(treatmentsApi, "listTreatments")
+      .mockImplementation(async (params = {}) => {
+        if (params.archived === true) return archivedOnly;
+        if (params.status === "completed") return completedOnly;
+        return TREATMENTS;
+      });
     vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(DETAIL);
     vi.spyOn(treatmentsApi, "listConversationMessages").mockResolvedValue(MESSAGES);
     vi.spyOn(triageApi, "listTriageItems").mockResolvedValue({ items: [] });
@@ -425,6 +433,7 @@ describe("PatientManagementPage", () => {
     const directory = screen.getByRole("complementary", { name: /patient directory/i });
     await within(directory).findByText("Eleanor Vance");
     expect(within(directory).queryByText("Marcus Chen")).toBeNull();
+    expect(listTreatments).toHaveBeenCalledWith({ limit: 50, offset: 0, archived: false });
 
     await user.click(screen.getByRole("tab", { name: /completed/i }));
 
@@ -436,6 +445,12 @@ describe("PatientManagementPage", () => {
       "href",
       "/dashboard/treatments/44444444-4444-4444-4444-444444444444",
     );
+    expect(listTreatments).toHaveBeenCalledWith({
+      limit: 50,
+      offset: 0,
+      status: "completed",
+      archived: false,
+    });
 
     await user.click(screen.getByRole("tab", { name: /archived/i }));
 
@@ -446,6 +461,7 @@ describe("PatientManagementPage", () => {
       "href",
       "/dashboard/treatments/55555555-5555-5555-5555-555555555555",
     );
+    expect(listTreatments).toHaveBeenCalledWith({ limit: 50, offset: 0, archived: true });
   });
 
   it("lets the pharmacist update the treatment objective", async () => {

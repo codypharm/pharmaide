@@ -54,6 +54,15 @@ describe("listTreatments", () => {
     expect(calledUrl).toContain("offset=50");
   });
 
+  it("passes status and archived filters through as query params", async () => {
+    const spy = mockFetch({ status: 200, body: { items: [] } });
+    await listTreatments({ status: "completed", archived: false });
+
+    const calledUrl = spy.mock.calls[0]?.[0] as string;
+    expect(calledUrl).toContain("status=completed");
+    expect(calledUrl).toContain("archived=false");
+  });
+
   it("returns the parsed items array on success", async () => {
     mockFetch({
       status: 200,

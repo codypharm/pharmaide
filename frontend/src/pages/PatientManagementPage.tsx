@@ -159,6 +159,16 @@ function emptyDirectoryMessage(filter: DirectoryFilter): string {
   return "No active monitoring treatments";
 }
 
+function directoryFilterParams(filter: DirectoryFilter) {
+  if (filter === "archived") {
+    return { limit: PAGE_SIZE, offset: 0, archived: true };
+  }
+  if (filter === "completed") {
+    return { limit: PAGE_SIZE, offset: 0, status: "completed" as const, archived: false };
+  }
+  return { limit: PAGE_SIZE, offset: 0, archived: false };
+}
+
 function groupTreatmentsByPatient(items: TreatmentListItem[]): PatientTreatmentGroup[] {
   const groups = new Map<string, PatientTreatmentGroup>();
   for (const item of items) {
@@ -198,11 +208,16 @@ export default function PatientManagementPage() {
 
   useEffect(() => {
     let cancelled = false;
-    listTreatments({ limit: PAGE_SIZE, offset: 0 })
+    setTreatmentState({ kind: "loading" });
+    listTreatments(directoryFilterParams(directoryFilter))
       .then((res) => {
         if (cancelled) return;
         setTreatmentState({ kind: "ok", items: res.items });
-        setSelectedTreatmentId((current) => current ?? res.items[0]?.treatment.id ?? null);
+        setSelectedTreatmentId((current) =>
+          res.items.some((item) => item.treatment.id === current)
+            ? current
+            : res.items[0]?.treatment.id ?? null,
+        );
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -214,7 +229,7 @@ export default function PatientManagementPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [directoryFilter]);
 
   useEffect(() => {
     let cancelled = false;
@@ -574,19 +589,19 @@ export default function PatientManagementPage() {
           >
             <DirectoryFilterTab
               label="Active"
-              count={activeTreatmentCount}
+              count={directoryFilter === "active" ? activeTreatmentCount : undefined}
               selected={directoryFilter === "active"}
               onClick={() => setDirectoryFilter("active")}
             />
             <DirectoryFilterTab
               label="Completed"
-              count={completedTreatmentCount}
+              count={directoryFilter === "completed" ? completedTreatmentCount : undefined}
               selected={directoryFilter === "completed"}
               onClick={() => setDirectoryFilter("completed")}
             />
             <DirectoryFilterTab
               label="Archived"
-              count={archivedTreatmentCount}
+              count={directoryFilter === "archived" ? archivedTreatmentCount : undefined}
               selected={directoryFilter === "archived"}
               onClick={() => setDirectoryFilter("archived")}
             />
@@ -598,7 +613,6 @@ export default function PatientManagementPage() {
           {treatmentState.kind === "error" && (
             <DirectoryError requestId={treatmentState.requestId} />
           )}
-          {treatmentState.kind === "ok" && treatments.length === 0 && <DirectoryEmpty />}
           {treatmentState.kind === "ok" && treatments.length > 0 && (
             <div className="divide-y divide-slate-100">
               {groupedTreatments.map((group) => (
@@ -624,6 +638,9 @@ export default function PatientManagementPage() {
                 </div>
               )}
             </div>
+          )}
+          {treatmentState.kind === "ok" && treatments.length === 0 && (
+            <DirectoryFilterEmpty filter={directoryFilter} />
           )}
         </div>
       </aside>
@@ -680,7 +697,7 @@ function DirectoryFilterTab({
   onClick,
 }: {
   label: string;
-  count: number;
+  count?: number;
   selected: boolean;
   onClick: () => void;
 }) {
@@ -697,9 +714,11 @@ function DirectoryFilterTab({
       }`}
     >
       {label}
-      <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-black tabular-nums text-slate-500">
-        {count}
-      </span>
+      {count !== undefined && (
+        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-black tabular-nums text-slate-500">
+          {count}
+        </span>
+      )}
     </button>
   );
 }
@@ -789,14 +808,14 @@ function DirectoryError({ requestId }: { requestId: string | null }) {
   );
 }
 
-function DirectoryEmpty() {
+function DirectoryFilterEmpty({ filter }: { filter: DirectoryFilter }) {
   return (
     <div className="p-8 text-sm text-slate-500">
       <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
         No data available
       </p>
-      <p className="mt-2 font-bold text-slate-900">No treatments registered</p>
-      <p className="mt-1">Create a treatment before patient monitoring can start.</p>
+      <p className="mt-2 font-bold text-slate-900">{emptyDirectoryMessage(filter)}</p>
+      <p className="mt-1">Switch tabs or create a treatment to continue monitoring.</p>
     </div>
   );
 }
