@@ -63,6 +63,7 @@ const extractedFieldClass = "border-[#5548E8] bg-[#F0EFFF]";
 const lowConfidenceFieldClass = "border-amber-500 bg-amber-50/40";
 const LOW_CONFIDENCE_THRESHOLD = 0.7;
 const LOW_CONFIDENCE_TITLE = "AI confidence low - verify";
+const PATIENT_SEARCH_DEBOUNCE_MS = 300;
 
 export default function NewTreatmentPage() {
   const navigate = useNavigate();
@@ -133,6 +134,40 @@ export default function NewTreatmentPage() {
     return () => clearInterval(timer);
   }, [refreshPendingTreatments]);
 
+  useEffect(() => {
+    const query = patientSearchQuery.trim();
+    if (!query) {
+      setPatientSearchState({ status: "idle" });
+      return;
+    }
+
+    let cancelled = false;
+    // Debounce keeps fast typing from flooding patient lookup while still
+    // making the search feel live to the pharmacist.
+    const timer = setTimeout(() => {
+      setPatientSearchState({ status: "loading" });
+      void searchPatients({ query, limit: 8, offset: 0 })
+        .then((result) => {
+          if (!cancelled) {
+            setPatientSearchState({ status: "success", items: result.items });
+          }
+        })
+        .catch((err) => {
+          if (!cancelled) {
+            setPatientSearchState({
+              status: "error",
+              requestId: err instanceof ApiError ? err.requestId : null,
+            });
+          }
+        });
+    }, PATIENT_SEARCH_DEBOUNCE_MS);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [patientSearchQuery]);
+
   const resetDraft = () => {
     setMethod("structured");
     setIngestionSource("structured");
@@ -194,25 +229,6 @@ export default function NewTreatmentPage() {
     if (event.key === "Enter" || event.key === ",") {
       event.preventDefault();
       addPatientAllergy();
-    }
-  };
-
-  const handlePatientSearch = async () => {
-    const query = patientSearchQuery.trim();
-    if (!query) {
-      setPatientSearchState({ status: "idle" });
-      return;
-    }
-
-    setPatientSearchState({ status: "loading" });
-    try {
-      const result = await searchPatients({ query, limit: 8, offset: 0 });
-      setPatientSearchState({ status: "success", items: result.items });
-    } catch (err) {
-      setPatientSearchState({
-        status: "error",
-        requestId: err instanceof ApiError ? err.requestId : null,
-      });
     }
   };
 
@@ -555,7 +571,7 @@ export default function NewTreatmentPage() {
                 </p>
               </div>
 
-              <div className="flex flex-col gap-3">
+              <div className="relative flex flex-col gap-3">
                 <label htmlFor="patient-search" className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                   Find Existing Patient
                 </label>
@@ -565,32 +581,35 @@ export default function NewTreatmentPage() {
                     <input
                       id="patient-search"
                       value={patientSearchQuery}
-                      onChange={(event) => setPatientSearchQuery(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.preventDefault();
-                          void handlePatientSearch();
-                        }
+                      onChange={(event) => {
+                        setPatientSearchQuery(event.target.value);
+                        setPatientSearchState(
+                          event.target.value.trim() ? { status: "loading" } : { status: "idle" },
+                        );
                       }}
                       placeholder="Search by name, MRN, phone, or patient ID"
-                      className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-11 pr-4 text-sm outline-none focus:border-[#5548E8] focus:ring-2 focus:ring-[#D9D5FB]"
+                      className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-11 pr-10 text-sm outline-none focus:border-[#5548E8] focus:ring-2 focus:ring-[#D9D5FB]"
                     />
+                    {patientSearchState.status === "loading" && (
+                      <Loader2
+                        size={16}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 animate-spin text-slate-400"
+                        aria-label="Searching patients"
+                      />
+                    )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => void handlePatientSearch()}
-                    disabled={!patientSearchQuery.trim() || patientSearchState.status === "loading"}
-                    className="rounded-xl bg-slate-900 px-5 py-3 text-[11px] font-bold uppercase tracking-widest text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
-                  >
-                    {patientSearchState.status === "loading" ? "Searching..." : "Search"}
-                  </button>
                 </div>
                 {patientSearchState.status === "success" && (
-                  <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+                  <div
+                    role="listbox"
+                    aria-label="Patient search results"
+                    className="absolute left-0 right-0 top-[calc(100%+0.25rem)] z-30 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white"
+                  >
                     {patientSearchState.items.length > 0 ? (
                       patientSearchState.items.map((patient) => (
                         <button
                           key={patient.id}
+                          role="option"
                           type="button"
                           onClick={() => selectExistingPatient(patient)}
                           className="flex w-full items-center justify-between gap-4 border-b border-slate-100 px-4 py-3 text-left last:border-b-0 hover:bg-slate-50 cursor-pointer"

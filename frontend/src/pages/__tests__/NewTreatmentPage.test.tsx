@@ -468,8 +468,8 @@ describe("NewTreatmentPage", () => {
 
     renderPage();
     await user.type(screen.getByLabelText(/find existing patient/i), "Eleanor");
-    await user.click(screen.getByRole("button", { name: /^search$/i }));
-    await user.click(await screen.findByRole("button", { name: /use patient/i }));
+    expect(await screen.findByRole("listbox", { name: /patient search results/i })).toBeInTheDocument();
+    await user.click(await screen.findByRole("option", { name: /eleanor vance/i }));
     await user.type(screen.getByPlaceholderText(/e.g. amoxicillin/i), "Lisinopril");
     await user.type(screen.getByPlaceholderText(/e.g. 500mg/i), "10 mg");
     await user.type(screen.getByPlaceholderText(/twice daily/i), "Once Daily (QD)");
