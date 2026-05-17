@@ -103,6 +103,8 @@ from app.services.patient_reply_drafts import (
 from app.services.treatments import (
     AnalysisNotCompleted,
     MRNConflict,
+    TreatmentNotCompleted,
+    archive_treatment,
     create_treatment,
     get_treatment,
     list_treatments,
@@ -236,6 +238,22 @@ async def post_treatment_start_cycle(
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
     except AnalysisNotCompleted as exc:
         raise HTTPException(status_code=409, detail={"error": "analysis_not_completed"}) from exc
+
+
+@router.post(
+    "/treatments/{treatment_id}/archive",
+    response_model=TreatmentView,
+)
+async def post_treatment_archive(
+    treatment_id: UUID,
+    session: SessionDep,
+) -> TreatmentView:
+    try:
+        return await archive_treatment(session, treatment_id)
+    except TreatmentCommandNotFound as exc:
+        raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
+    except TreatmentNotCompleted as exc:
+        raise HTTPException(status_code=409, detail={"error": "treatment_not_completed"}) from exc
 
 
 @router.post(

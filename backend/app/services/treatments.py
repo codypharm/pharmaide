@@ -5,6 +5,7 @@ Owns the single transaction that creates patient + treatment + medications
 flow exercise this function directly via db_session.
 """
 
+from datetime import UTC, datetime
 from uuid import UUID
 
 import phonenumbers
@@ -50,6 +51,10 @@ class TreatmentNotFound(Exception):
 
 class AnalysisNotCompleted(Exception):
     """Raised when monitoring is requested before clinical analysis is ready."""
+
+
+class TreatmentNotCompleted(Exception):
+    """Raised when a completion-only command targets an unfinished treatment."""
 
 
 async def create_treatment(
@@ -242,6 +247,39 @@ async def start_treatment_cycle(session: AsyncSession, treatment_id: UUID) -> Tr
             analysis_id=str(analysis.id),
             onboarding_delivery="not_configured",
         )
+
+    await session.flush()
+    return TreatmentView.model_validate(treatment)
+
+
+async def archive_treatment(session: AsyncSession, treatment_id: UUID) -> TreatmentView:
+    """Move a completed treatment out of active work queues."""
+    treatment = await session.get(Treatment, treatment_id)
+    if treatment is None:
+        raise TreatmentNotFound()
+    if treatment.status != "completed":
+        raise TreatmentNotCompleted()
+    if treatment.archived_at is not None:
+        return TreatmentView.model_validate(treatment)
+
+    treatment.archived_at = datetime.now(UTC)
+    session.add(
+        AuditLogEntry(
+            event_type="treatment_archived",
+            resource_type="treatment",
+            resource_id=treatment.id,
+            # Archive audit records workflow state only, not patient or drug text.
+            payload={
+                "status": treatment.status,
+                "already_archived": False,
+            },
+        )
+    )
+    log.info(
+        "treatment_archived",
+        treatment_id=str(treatment.id),
+        status=treatment.status,
+    )
 
     await session.flush()
     return TreatmentView.model_validate(treatment)

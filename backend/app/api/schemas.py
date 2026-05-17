@@ -366,6 +366,7 @@ class TreatmentView(BaseModel):
     automation_mode: AutomationMode
     clinical_objective: str | None
     treatment_start_at: datetime | None
+    archived_at: datetime | None
     created_at: datetime
 
     model_config = {"from_attributes": True}
