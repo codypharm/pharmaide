@@ -255,6 +255,21 @@ describe("TreatmentDetailPage", () => {
     expect(screen.getByText(/complete analysis before starting cycle/i)).toBeTruthy();
   });
 
+  it("shows completed treatments without offering cycle start", async () => {
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue({
+      ...SAMPLE,
+      treatment: { ...SAMPLE.treatment, status: "completed" },
+    });
+    vi.spyOn(treatmentsApi, "getAnalysis").mockResolvedValue(COMPLETED_ANALYSIS);
+
+    renderAt(SAMPLE.treatment.id);
+
+    await screen.findByText("Eleanor Vance");
+    expect(screen.getByText("Completed")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /course completed/i })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /^start cycle$/i })).toBeNull();
+  });
+
   it("shows a 'not found' empty state when the treatment is missing", async () => {
     vi.spyOn(treatmentsApi, "getTreatment").mockRejectedValue(
       new NotFoundError("req_x", { detail: { error: "treatment_not_found" } }, "treatment_not_found"),

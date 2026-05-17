@@ -274,7 +274,6 @@ function IngestionsTable({
 }
 
 function StatusPill({ status }: { status: string }) {
-  // Status palette stays light until Sprint 3 introduces lifecycle changes.
   const tone =
     status === "pending"
       ? "bg-amber-50 text-amber-800 border-amber-200"
@@ -285,7 +284,22 @@ function StatusPill({ status }: { status: string }) {
           : "bg-slate-50 text-slate-700 border-slate-200";
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] font-bold uppercase tracking-wider ${tone}`}>
-      {status}
+      {treatmentStatusLabel(status)}
     </span>
   );
+}
+
+function treatmentStatusLabel(status: string): string {
+  switch (status) {
+    case "pending":
+      return "Pending";
+    case "active":
+      return "Active";
+    case "completed":
+      return "Completed";
+    case "terminated":
+      return "Terminated";
+    default:
+      return status;
+  }
 }

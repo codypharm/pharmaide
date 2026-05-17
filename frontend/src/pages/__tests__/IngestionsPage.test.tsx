@@ -65,6 +65,19 @@ describe("IngestionsPage", () => {
     expect(screen.getAllByText("MRN-001").length).toBeGreaterThan(0);
   });
 
+  it("shows completed treatments with a readable completed status", async () => {
+    const completed = row("complete");
+    completed.treatment.status = "completed";
+    vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue({
+      items: [completed],
+    } satisfies TreatmentList);
+
+    renderPage();
+
+    expect(await screen.findByText("Patient complete")).toBeTruthy();
+    expect(screen.getByText("Completed")).toBeTruthy();
+  });
+
   it("opens treatment detail when the row is clicked", async () => {
     vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue({
       items: [row("001")],

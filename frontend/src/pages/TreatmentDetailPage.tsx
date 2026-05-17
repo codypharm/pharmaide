@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import {
   ArrowLeft,
+  CheckCircle2,
   ClipboardList,
   Pill,
   User,
@@ -1232,6 +1233,50 @@ function Field({
   );
 }
 
+function StatusField({ status }: { status: string }) {
+  return (
+    <div>
+      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+        Status
+      </div>
+      <TreatmentStatusPill status={status} />
+    </div>
+  );
+}
+
+function TreatmentStatusPill({ status }: { status: string }) {
+  const tone =
+    status === "pending"
+      ? "bg-amber-50 text-amber-800 border-amber-200"
+      : status === "active"
+        ? "bg-[#F0EFFF] text-[#463AD4] border-[#D9D5FB]"
+        : status === "completed"
+          ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+          : "bg-slate-50 text-slate-700 border-slate-200";
+  return (
+    <span
+      className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider ${tone}`}
+    >
+      {treatmentStatusLabel(status)}
+    </span>
+  );
+}
+
+function treatmentStatusLabel(status: string): string {
+  switch (status) {
+    case "pending":
+      return "Pending";
+    case "active":
+      return "Active";
+    case "completed":
+      return "Completed";
+    case "terminated":
+      return "Terminated";
+    default:
+      return status;
+  }
+}
+
 function PatientCard({
   data,
   isPrivacyMode,
@@ -1285,14 +1330,16 @@ function TreatmentCard({
 }) {
   const t = data.treatment;
   const isActive = t.status === "active";
+  const isCompleted = t.status === "completed";
+  const isPending = t.status === "pending";
   const isStarting = startCycleState.kind === "starting";
   const analysisReady = activationAnalysis.kind === "ok" && activationAnalysis.ready;
-  const canStart = !isActive && !isStarting && analysisReady;
+  const canStart = isPending && !isStarting && analysisReady;
   return (
     <Section title="Treatment" icon={<ClipboardList size={16} />}>
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
         <div className="grid flex-1 grid-cols-2 gap-6 md:grid-cols-3">
-          <Field label="Status" value={t.status} />
+          <StatusField status={t.status} />
           <Field
             label="Treatment Starts"
             value={t.treatment_start_at ? formatCreatedAt(t.treatment_start_at) : "Not set"}
@@ -1306,7 +1353,7 @@ function TreatmentCard({
             onClick={onStartCycle}
             disabled={!canStart}
             className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition-colors ${
-              isActive
+              isActive || isCompleted
                 ? "cursor-not-allowed border border-emerald-200 bg-emerald-50 text-emerald-700"
                 : "cursor-pointer bg-[#5548E8] text-white hover:bg-[#463AD4] disabled:cursor-wait disabled:bg-slate-400"
             }`}
@@ -1315,6 +1362,11 @@ function TreatmentCard({
               <>
                 <Loader2 size={15} className="animate-spin" />
                 Starting
+              </>
+            ) : isCompleted ? (
+              <>
+                <CheckCircle2 size={15} />
+                Course completed
               </>
             ) : isActive ? (
               <>
@@ -1328,17 +1380,17 @@ function TreatmentCard({
               </>
             )}
           </button>
-          {!isActive && activationAnalysis.kind === "loading" && (
+          {isPending && activationAnalysis.kind === "loading" && (
             <p className="max-w-64 text-xs font-semibold text-slate-500">
               Checking analysis status before cycle start.
             </p>
           )}
-          {!isActive && activationAnalysis.kind === "ok" && !activationAnalysis.ready && (
+          {isPending && activationAnalysis.kind === "ok" && !activationAnalysis.ready && (
             <p className="max-w-64 text-xs font-semibold text-amber-700">
               Complete analysis before starting cycle.
             </p>
           )}
-          {!isActive && activationAnalysis.kind === "error" && (
+          {isPending && activationAnalysis.kind === "error" && (
             <p className="max-w-64 text-xs font-semibold text-red-700">
               Could not verify analysis status. Reference ID:{" "}
               {activationAnalysis.requestId ?? "unknown"}
