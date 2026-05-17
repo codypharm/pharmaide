@@ -97,6 +97,29 @@ const TREATMENTS_WITH_COMPLETED: TreatmentList = {
       medication_count: 1,
       first_medication_name: "Amoxicillin",
     },
+    {
+      patient: {
+        id: "patient-3",
+        name: "Priya Shah",
+        dob: "1981-09-18",
+        mrn: "PHA-PS18",
+        phone: "+18005550118",
+        allergies: [],
+      },
+      treatment: {
+        id: "55555555-5555-5555-5555-555555555555",
+        patient_id: "patient-3",
+        status: "completed",
+        chat_response_mode: "ai_active",
+        automation_mode: "active",
+        clinical_objective: "Monitor pain resolution",
+        treatment_start_at: "2026-04-20T08:30:00Z",
+        archived_at: "2026-05-20T12:00:00Z",
+        created_at: "2026-04-20T09:00:00Z",
+      },
+      medication_count: 1,
+      first_medication_name: "Ibuprofen",
+    },
   ],
 };
 
@@ -408,9 +431,20 @@ describe("PatientManagementPage", () => {
     expect(await within(directory).findByText("Marcus Chen")).toBeTruthy();
     expect(within(directory).getByText("Amoxicillin")).toBeTruthy();
     expect(within(directory).queryByText("Eleanor Vance")).toBeNull();
+    expect(within(directory).queryByText("Priya Shah")).toBeNull();
     expect(within(directory).getByRole("link", { name: /view report/i })).toHaveAttribute(
       "href",
       "/dashboard/treatments/44444444-4444-4444-4444-444444444444",
+    );
+
+    await user.click(screen.getByRole("tab", { name: /archived/i }));
+
+    expect(await within(directory).findByText("Priya Shah")).toBeTruthy();
+    expect(within(directory).getByText("Ibuprofen")).toBeTruthy();
+    expect(within(directory).queryByText("Marcus Chen")).toBeNull();
+    expect(within(directory).getByRole("link", { name: /view report/i })).toHaveAttribute(
+      "href",
+      "/dashboard/treatments/55555555-5555-5555-5555-555555555555",
     );
   });
 

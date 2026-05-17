@@ -81,7 +81,7 @@ type PatientTreatmentGroup = {
   items: TreatmentListItem[];
 };
 
-type DirectoryFilter = "active" | "completed";
+type DirectoryFilter = "active" | "completed" | "archived";
 
 const PAGE_SIZE = 50;
 const CONVERSATION_REFRESH_INTERVAL_MS = 10_000;
@@ -144,6 +144,19 @@ function patientAge(dob: string): string {
 
 function statusLabel(status: string): string {
   return status.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function matchesDirectoryFilter(item: TreatmentListItem, filter: DirectoryFilter): boolean {
+  const isArchived = Boolean(item.treatment.archived_at);
+  if (filter === "archived") return isArchived;
+  if (filter === "completed") return item.treatment.status === "completed" && !isArchived;
+  return item.treatment.status !== "completed" && !isArchived;
+}
+
+function emptyDirectoryMessage(filter: DirectoryFilter): string {
+  if (filter === "archived") return "No archived treatments";
+  if (filter === "completed") return "No completed treatments";
+  return "No active monitoring treatments";
 }
 
 function groupTreatmentsByPatient(items: TreatmentListItem[]): PatientTreatmentGroup[] {
@@ -319,11 +332,7 @@ export default function PatientManagementPage() {
           );
         });
 
-    return searchFiltered.filter((item) =>
-      directoryFilter === "completed"
-        ? item.treatment.status === "completed"
-        : item.treatment.status !== "completed",
-    );
+    return searchFiltered.filter((item) => matchesDirectoryFilter(item, directoryFilter));
   }, [directoryFilter, searchQuery, treatments]);
 
   const groupedTreatments = useMemo(
@@ -331,10 +340,13 @@ export default function PatientManagementPage() {
     [filteredTreatments],
   );
   const activeTreatmentCount = treatments.filter(
-    (item) => item.treatment.status !== "completed",
+    (item) => matchesDirectoryFilter(item, "active"),
   ).length;
   const completedTreatmentCount = treatments.filter(
-    (item) => item.treatment.status === "completed",
+    (item) => matchesDirectoryFilter(item, "completed"),
+  ).length;
+  const archivedTreatmentCount = treatments.filter((item) =>
+    matchesDirectoryFilter(item, "archived"),
   ).length;
 
   useEffect(() => {
@@ -572,6 +584,12 @@ export default function PatientManagementPage() {
               selected={directoryFilter === "completed"}
               onClick={() => setDirectoryFilter("completed")}
             />
+            <DirectoryFilterTab
+              label="Archived"
+              count={archivedTreatmentCount}
+              selected={directoryFilter === "archived"}
+              onClick={() => setDirectoryFilter("archived")}
+            />
           </div>
         </div>
 
@@ -601,9 +619,7 @@ export default function PatientManagementPage() {
                 <div className="p-12 text-center">
                   <Search size={32} className="text-slate-200 mx-auto mb-4" />
                   <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">
-                    {directoryFilter === "completed"
-                      ? "No completed treatments"
-                      : "No active monitoring treatments"}
+                    {emptyDirectoryMessage(directoryFilter)}
                   </p>
                 </div>
               )}
