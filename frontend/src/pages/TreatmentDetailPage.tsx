@@ -20,6 +20,7 @@ import { ApiError, ConflictError, NotFoundError } from "../api/client";
 import {
   archiveTreatment,
   createPatientCheckIn,
+  discontinueMedication,
   getCompletionReport,
   getAnalysis,
   getTreatment,
@@ -36,6 +37,7 @@ import {
   type DDIWarning,
   type KBCitation,
   type MedicationGrounding,
+  type MedicationView,
   type PatientCheckInReportType,
   type PatientCheckInView,
   type ReminderSlot,
@@ -169,6 +171,24 @@ export default function TreatmentDetailPage() {
     });
   };
 
+  const handleMedicationDiscontinued = (medication: MedicationView) => {
+    if (state.kind !== "ok") return;
+    setState({
+      kind: "ok",
+      data: {
+        ...state.data,
+        treatment: {
+          ...state.data.treatment,
+          status: "pending",
+          automation_mode: "paused",
+        },
+        medications: state.data.medications.map((item) =>
+          item.id === medication.id ? medication : item,
+        ),
+      },
+    });
+  };
+
   return (
     <div className="h-full overflow-y-auto p-8">
       <div className="flex flex-col gap-6">
@@ -193,7 +213,10 @@ export default function TreatmentDetailPage() {
                   treatment={state.data.treatment}
                   onArchived={handleTreatmentArchived}
                 />
-                <MedicationsCard data={state.data} />
+                <MedicationsCard
+                  data={state.data}
+                  onMedicationDiscontinued={handleMedicationDiscontinued}
+                />
                 <PatientUpdatesCard
                   treatmentId={state.data.treatment.id}
                   isPrivacyMode={isPrivacyMode}
@@ -1684,7 +1707,39 @@ function analysisReadyForCycle(analysis: TreatmentAnalysisRow | null): boolean {
   return completed?.status === "completed" && completed.result !== null;
 }
 
-function MedicationsCard({ data }: { data: TreatmentDetail }) {
+type MedicationDiscontinueState =
+  | { kind: "idle" }
+  | { kind: "confirming"; medicationId: string }
+  | { kind: "saving"; medicationId: string }
+  | { kind: "error"; medicationId: string; requestId: string | null };
+
+function MedicationsCard({
+  data,
+  onMedicationDiscontinued,
+}: {
+  data: TreatmentDetail;
+  onMedicationDiscontinued: (medication: MedicationView) => void;
+}) {
+  const [discontinueState, setDiscontinueState] = useState<MedicationDiscontinueState>({
+    kind: "idle",
+  });
+  const canDiscontinue = data.treatment.status === "active";
+
+  async function handleDiscontinue(medicationId: string): Promise<void> {
+    setDiscontinueState({ kind: "saving", medicationId });
+    try {
+      const medication = await discontinueMedication(data.treatment.id, medicationId);
+      onMedicationDiscontinued(medication);
+      setDiscontinueState({ kind: "idle" });
+    } catch (err) {
+      setDiscontinueState({
+        kind: "error",
+        medicationId,
+        requestId: err instanceof ApiError ? err.requestId : null,
+      });
+    }
+  }
+
   return (
     <Section title="Medications" icon={<Pill size={16} />}>
       <div className="overflow-x-auto">
@@ -1697,29 +1752,92 @@ function MedicationsCard({ data }: { data: TreatmentDetail }) {
               <th className="text-left py-2 pr-4">Frequency</th>
               <th className="text-left py-2 pr-4">Duration</th>
               <th className="text-left py-2 pr-4">Objective</th>
+              <th className="text-left py-2 pr-4">Status</th>
+              <th className="text-right py-2 pl-4">Action</th>
             </tr>
           </thead>
           <tbody>
-            {data.medications.map((m, i) => (
-              <tr key={m.id} className={i % 2 === 1 ? "bg-slate-50" : ""}>
-                <td className="py-2 pr-4 text-slate-500 tabular-nums">
-                  {m.ordinal + 1}
-                </td>
-                <td className="py-2 pr-4 text-slate-900 font-medium">
-                  {m.name}
-                </td>
-                <td className="py-2 pr-4 text-slate-700 tabular-nums">
-                  {m.dosage}
-                </td>
-                <td className="py-2 pr-4 text-slate-700">{m.frequency}</td>
-                <td className="py-2 pr-4 text-slate-700 tabular-nums">
-                  {m.duration}
-                </td>
-                <td className="py-2 pr-4 text-slate-500">
-                  {m.objective ?? "—"}
-                </td>
-              </tr>
-            ))}
+            {data.medications.map((m, i) => {
+              const isDiscontinued = Boolean(m.discontinued_at);
+              const isConfirming =
+                discontinueState.kind === "confirming" && discontinueState.medicationId === m.id;
+              const isSaving =
+                discontinueState.kind === "saving" && discontinueState.medicationId === m.id;
+              const errorForMedication =
+                discontinueState.kind === "error" && discontinueState.medicationId === m.id
+                  ? discontinueState.requestId
+                  : null;
+
+              return (
+                <tr key={m.id} className={i % 2 === 1 ? "bg-slate-50" : ""}>
+                  <td className="py-2 pr-4 text-slate-500 tabular-nums">
+                    {m.ordinal + 1}
+                  </td>
+                  <td className="py-2 pr-4 text-slate-900 font-medium">
+                    {m.name}
+                  </td>
+                  <td className="py-2 pr-4 text-slate-700 tabular-nums">
+                    {m.dosage}
+                  </td>
+                  <td className="py-2 pr-4 text-slate-700">{m.frequency}</td>
+                  <td className="py-2 pr-4 text-slate-700 tabular-nums">
+                    {m.duration}
+                  </td>
+                  <td className="py-2 pr-4 text-slate-500">
+                    {m.objective ?? "—"}
+                  </td>
+                  <td className="py-2 pr-4">
+                    {isDiscontinued ? (
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                        Discontinued
+                      </span>
+                    ) : (
+                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                        Active
+                      </span>
+                    )}
+                    {errorForMedication && (
+                      <p className="mt-1 text-xs font-semibold text-red-700">
+                        Could not discontinue. Reference ID: {errorForMedication}
+                      </p>
+                    )}
+                  </td>
+                  <td className="py-2 pl-4 text-right">
+                    {canDiscontinue && !isDiscontinued && (
+                      isConfirming ? (
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void handleDiscontinue(m.id)}
+                            className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-red-800 cursor-pointer"
+                          >
+                            Confirm
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDiscontinueState({ kind: "idle" })}
+                            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50 cursor-pointer"
+                          >
+                            Keep
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDiscontinueState({ kind: "confirming", medicationId: m.id })
+                          }
+                          disabled={isSaving}
+                          className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-700 transition-colors hover:border-red-700 hover:bg-red-700 hover:text-white disabled:cursor-wait disabled:text-red-300 cursor-pointer"
+                        >
+                          {isSaving ? "Discontinuing" : "Discontinue"}
+                        </button>
+                      )
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

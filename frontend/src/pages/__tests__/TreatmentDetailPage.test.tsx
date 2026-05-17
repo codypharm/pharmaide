@@ -277,7 +277,8 @@ describe("TreatmentDetailPage", () => {
     await user.click(screen.getByRole("button", { name: /start cycle/i }));
 
     expect(startCycle).toHaveBeenCalledWith(SAMPLE.treatment.id);
-    expect(await screen.findByText("Active")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /stop monitoring/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /start cycle/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /cycle active/i })).toBeNull();
   });
 
@@ -329,6 +330,30 @@ describe("TreatmentDetailPage", () => {
 
     await screen.findByText("Eleanor Vance");
     expect(screen.queryByRole("button", { name: /stop monitoring/i })).toBeNull();
+  });
+
+  it("lets the pharmacist discontinue a medication on an active treatment", async () => {
+    const activeTreatment = { ...SAMPLE.treatment, status: "active" };
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue({
+      ...SAMPLE,
+      treatment: activeTreatment,
+    });
+    const discontinue = vi.spyOn(treatmentsApi, "discontinueMedication").mockResolvedValue({
+      ...SAMPLE.medications[0],
+      discontinued_at: "2026-05-17T18:45:00Z",
+    });
+    const user = userEvent.setup();
+
+    renderAt(SAMPLE.treatment.id);
+
+    await screen.findByText("Eleanor Vance");
+    await user.click(screen.getByRole("button", { name: /^discontinue$/i }));
+    await user.click(screen.getByRole("button", { name: /^confirm$/i }));
+
+    expect(discontinue).toHaveBeenCalledWith(SAMPLE.treatment.id, SAMPLE.medications[0].id);
+    expect(await screen.findByText("Discontinued")).toBeTruthy();
+    expect(screen.getByText("Pending")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^discontinue$/i })).toBeNull();
   });
 
   it("disables cycle start until analysis is completed", async () => {
