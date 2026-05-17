@@ -55,7 +55,9 @@ export default function LandingPage() {
               <ShieldCheck size={19} />
             </span>
             <span>
-              <span className="block text-sm font-black tracking-tight">PharmaAide</span>
+              <span className="block text-sm font-black tracking-tight">
+                PharmaAide
+              </span>
               <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
                 Clinical operations
               </span>
@@ -89,15 +91,16 @@ export default function LandingPage() {
         <section className="border-b border-slate-200 bg-white">
           <div className="mx-auto grid max-w-7xl gap-10 px-6 py-16 md:py-20 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
             <div>
-              <p className="mb-4 inline-flex rounded-full border border-[#D9D5FB] bg-[#F0EFFF] px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-[#463AD4]">
+              <p className="mb-4 inline-flex rounded-full  px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-[#463AD4]">
                 Pharmacist-in-the-loop medication support
               </p>
               <h1 className="max-w-3xl text-4xl font-black leading-tight tracking-tight text-slate-950 md:text-6xl">
                 PharmaAide keeps patient conversations clinically supervised.
               </h1>
               <p className="mt-6 max-w-2xl text-base leading-7 text-slate-700">
-                A medication follow-up workspace where AI drafts, pharmacists review,
-                and every patient-facing response stays inside a safety-first workflow.
+                A medication follow-up workspace where AI drafts, pharmacists
+                review, and every patient-facing response stays inside a
+                safety-first workflow.
               </p>
 
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -130,7 +133,10 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section id="capabilities" className="border-y border-slate-200 bg-white">
+        <section
+          id="capabilities"
+          className="border-y border-slate-200 bg-white"
+        >
           <div className="mx-auto max-w-7xl px-6 py-10">
             <div className="max-w-2xl">
               <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
@@ -141,7 +147,8 @@ export default function LandingPage() {
               </h2>
               <p className="mt-3 text-sm leading-6 text-slate-600">
                 Designed for pharmacists who need patient messaging, clinical
-                review, and medication follow-up in the same controlled workflow.
+                review, and medication follow-up in the same controlled
+                workflow.
               </p>
             </div>
 
@@ -153,7 +160,10 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section id="safety" className="mx-auto grid max-w-7xl gap-6 px-6 py-10 lg:grid-cols-2">
+        <section
+          id="safety"
+          className="mx-auto grid max-w-7xl gap-6 px-6 py-10 lg:grid-cols-2"
+        >
           <InfoPanel
             icon={<ShieldCheck size={20} />}
             title="Safety stays before delivery"
@@ -188,11 +198,16 @@ export default function LandingPage() {
             </div>
             <ol className="mt-6 grid gap-3 md:grid-cols-3">
               {workflow.map((step, index) => (
-                <li key={step} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <li
+                  key={step}
+                  className="rounded-lg border border-slate-200 bg-slate-50 p-4"
+                >
                   <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Step {index + 1}
                   </span>
-                  <p className="mt-2 text-sm font-semibold leading-6 text-slate-900">{step}</p>
+                  <p className="mt-2 text-sm font-semibold leading-6 text-slate-900">
+                    {step}
+                  </p>
                 </li>
               ))}
             </ol>
@@ -219,7 +234,9 @@ function CapabilityCard({
       <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#D9D5FB] bg-[#F0EFFF] text-[#5548E8]">
         <Icon size={19} />
       </div>
-      <h3 className="mt-5 text-lg font-black tracking-tight text-slate-950">{item.title}</h3>
+      <h3 className="mt-5 text-lg font-black tracking-tight text-slate-950">
+        {item.title}
+      </h3>
       <p className="mt-3 text-sm leading-6 text-slate-600">{item.text}</p>
     </article>
   );
@@ -239,7 +256,9 @@ function InfoPanel({
       <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#D9D5FB] bg-[#F0EFFF] text-[#5548E8]">
         {icon}
       </div>
-      <h2 className="mt-5 text-xl font-black tracking-tight text-slate-950">{title}</h2>
+      <h2 className="mt-5 text-xl font-black tracking-tight text-slate-950">
+        {title}
+      </h2>
       <p className="mt-3 text-sm leading-6 text-slate-600">{text}</p>
     </article>
   );

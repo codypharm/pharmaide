@@ -21,8 +21,7 @@ export type MedicationCreate = {
   objective: string | null;
 };
 
-export type TreatmentCreatePayload = {
-  patient: PatientCreate;
+type TreatmentCreateBase = {
   treatment: {
     clinical_objective: string | null;
     treatment_start_at: string | null;
@@ -30,6 +29,10 @@ export type TreatmentCreatePayload = {
   medications: MedicationCreate[];
   ingestion_method: IngestionMethod;
 };
+
+export type TreatmentCreatePayload =
+  | (TreatmentCreateBase & { patient: PatientCreate; patient_id?: never })
+  | (TreatmentCreateBase & { patient_id: string; patient?: never });
 
 export type CreateTreatmentResponse = {
   treatment_id: string;

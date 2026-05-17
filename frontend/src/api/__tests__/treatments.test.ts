@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   archiveTreatment,
+  createTreatment,
   createAdherenceEvent,
   createPatientCheckIn,
   draftPatientReply,
@@ -34,6 +35,76 @@ function mockFetch(response: { status: number; body: unknown }) {
 
 afterEach(() => {
   vi.restoreAllMocks();
+});
+
+describe("createTreatment", () => {
+  it("posts a treatment for a new patient", async () => {
+    const spy = mockFetch({
+      status: 201,
+      body: { treatment_id: "t1", patient_id: "p1", analysis_id: "a1" },
+    });
+
+    const result = await createTreatment({
+      patient: {
+        name: "Eleanor Vance",
+        dob: "1955-10-12",
+        mrn: "PAT-001",
+        phone: "+18005550101",
+        allergies: [],
+      },
+      treatment: {
+        clinical_objective: "Monitor symptoms",
+        treatment_start_at: "2026-05-16T08:30:00Z",
+      },
+      medications: [
+        {
+          name: "Lisinopril",
+          dosage: "10 mg",
+          frequency: "Once Daily (QD)",
+          duration: "30 days",
+          objective: null,
+        },
+      ],
+      ingestion_method: "structured",
+    });
+
+    const calledUrl = spy.mock.calls[0]?.[0] as string;
+    const init = spy.mock.calls[0]?.[1] as RequestInit;
+    expect(calledUrl).toMatch(/\/treatments$/);
+    expect(JSON.parse(String(init.body)).patient.mrn).toBe("PAT-001");
+    expect(result.analysis_id).toBe("a1");
+  });
+
+  it("posts a treatment for an existing patient", async () => {
+    const spy = mockFetch({
+      status: 201,
+      body: { treatment_id: "t2", patient_id: "patient-1", analysis_id: "a2" },
+    });
+
+    const result = await createTreatment({
+      patient_id: "patient-1",
+      treatment: {
+        clinical_objective: "Monitor recovery",
+        treatment_start_at: "2026-05-20T08:30:00Z",
+      },
+      medications: [
+        {
+          name: "Amoxicillin",
+          dosage: "500 mg",
+          frequency: "Twice Daily (BID)",
+          duration: "7 days",
+          objective: null,
+        },
+      ],
+      ingestion_method: "structured",
+    });
+
+    const init = spy.mock.calls[0]?.[1] as RequestInit;
+    const body = JSON.parse(String(init.body));
+    expect(body.patient).toBeUndefined();
+    expect(body.patient_id).toBe("patient-1");
+    expect(result.patient_id).toBe("patient-1");
+  });
 });
 
 describe("listTreatments", () => {
