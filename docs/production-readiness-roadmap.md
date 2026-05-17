@@ -16,13 +16,10 @@ Keep each item as a small, reviewable slice.
 ## Product Completion
 
 - Real WhatsApp scheduled check-ins and adherence capture.
-- Treatment lifecycle: pending -> active -> completed or terminated.
-- Start-cycle workflow that activates the schedule and sends the onboarding message.
 - Existing-treatment medication changes: add, edit, discontinue/remove medications, audit each change, and mark analysis/schedule stale for pharmacist rerun before monitoring continues.
 - Buffered-message worker integration: connect the internal processing seam to Cloud Tasks/Pub/Sub once deployment infrastructure is available.
 - Buffered-message operator visibility: expose processing/retry state only where pharmacists need it, without showing queue internals in routine chat UI.
 - Silence/non-response handling for missed check-ins.
-- Adherence page real data and recent-event visibility.
 - Production audit coverage review for remaining clinical, delivery, and infrastructure actions.
 - Licensed DDI provider replacement when Lexicomp, DrugBank, or another approved source is available.
 

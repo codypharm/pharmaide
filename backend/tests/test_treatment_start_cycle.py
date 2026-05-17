@@ -7,7 +7,7 @@ from httpx import AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import AuditLogEntry, Treatment, TreatmentAnalysis
+from app.db.models import AuditLogEntry, ConversationMessage, Treatment, TreatmentAnalysis
 from app.services import task_runner
 
 
@@ -44,6 +44,21 @@ async def test_post_start_cycle_marks_pending_treatment_active_and_audits(
     assert treatment is not None
     assert treatment.status == "active"
 
+    onboarding = await db_session.scalar(
+        select(ConversationMessage).where(
+            ConversationMessage.treatment_id == treatment_id,
+            ConversationMessage.direction == "outbound",
+            ConversationMessage.sender_type == "assistant",
+            ConversationMessage.channel == "whatsapp",
+            ConversationMessage.status == "queued",
+        )
+    )
+    assert onboarding is not None
+    assert onboarding.body == (
+        "Your pharmacist has started monitoring this treatment. "
+        "I will send medication reminders and check in on how you are doing."
+    )
+
     audit = await db_session.scalar(
         select(AuditLogEntry).where(
             AuditLogEntry.resource_id == treatment_id,
@@ -57,7 +72,8 @@ async def test_post_start_cycle_marks_pending_treatment_active_and_audits(
         "old_status": "pending",
         "new_status": "active",
         "analysis_id": audit.payload["analysis_id"],
-        "onboarding_delivery": "not_configured",
+        "onboarding_delivery": "queued",
+        "onboarding_message_id": str(onboarding.id),
     }
 
 

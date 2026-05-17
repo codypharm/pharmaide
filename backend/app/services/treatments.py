@@ -26,7 +26,14 @@ from app.api.schemas import (
     TreatmentListItem,
     TreatmentView,
 )
-from app.db.models import AuditLogEntry, Medication, Patient, Treatment, TreatmentAnalysis
+from app.db.models import (
+    AuditLogEntry,
+    ConversationMessage,
+    Medication,
+    Patient,
+    Treatment,
+    TreatmentAnalysis,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -289,18 +296,22 @@ async def start_treatment_cycle(session: AsyncSession, treatment_id: UUID) -> Tr
             raise AnalysisNotCompleted()
 
         treatment.status = "active"
+        onboarding_message = _build_cycle_onboarding_message(treatment_id=treatment.id)
+        session.add(onboarding_message)
+        await session.flush()
         session.add(
             AuditLogEntry(
                 event_type="treatment_cycle_started",
                 resource_type="treatment",
                 resource_id=treatment.id,
-                # WhatsApp onboarding is intentionally not sent in this slice;
-                # audit the workflow state without patient or medication text.
+                # The patient-facing body may become configurable later. Keep
+                # audit payloads to routing/state metadata only.
                 payload={
                     "old_status": old_status,
                     "new_status": "active",
                     "analysis_id": str(analysis.id),
-                    "onboarding_delivery": "not_configured",
+                    "onboarding_delivery": "queued",
+                    "onboarding_message_id": str(onboarding_message.id),
                 },
             )
         )
@@ -310,11 +321,27 @@ async def start_treatment_cycle(session: AsyncSession, treatment_id: UUID) -> Tr
             old_status=old_status,
             new_status="active",
             analysis_id=str(analysis.id),
-            onboarding_delivery="not_configured",
+            onboarding_delivery="queued",
+            onboarding_message_id=str(onboarding_message.id),
         )
 
     await session.flush()
     return TreatmentView.model_validate(treatment)
+
+
+def _build_cycle_onboarding_message(*, treatment_id: UUID) -> ConversationMessage:
+    """Create the first patient-facing message when monitoring begins."""
+    return ConversationMessage(
+        treatment_id=treatment_id,
+        direction="outbound",
+        sender_type="assistant",
+        channel="whatsapp",
+        status="queued",
+        body=(
+            "Your pharmacist has started monitoring this treatment. "
+            "I will send medication reminders and check in on how you are doing."
+        ),
+    )
 
 
 async def archive_treatment(session: AsyncSession, treatment_id: UUID) -> TreatmentView:
