@@ -8,6 +8,7 @@ import { ApiError, NotFoundError } from "../../api/client";
 import * as treatmentsApi from "../../api/treatments";
 import type {
   AdherenceEventView,
+  CourseCompletionReport,
   PatientCheckInView,
   TreatmentAnalysisRow,
   TreatmentDetail,
@@ -169,6 +170,38 @@ const SAMPLE_ADHERENCE_EVENTS: AdherenceEventView[] = [
   },
 ];
 
+const SAMPLE_COMPLETION_REPORT: CourseCompletionReport = {
+  treatment_id: SAMPLE.treatment.id,
+  patient_id: SAMPLE.patient.id,
+  status: "completed",
+  treatment_start_at: SAMPLE.treatment.treatment_start_at,
+  created_at: SAMPLE.treatment.created_at,
+  medication_count: 1,
+  adherence: {
+    total_count: 3,
+    by_status: {
+      taken: 2,
+      missed: 1,
+    },
+  },
+  patient_updates: {
+    total_count: 2,
+    by_report_type: {
+      not_improving: 1,
+      side_effect: 1,
+    },
+  },
+  triage: {
+    total_count: 1,
+    by_status: {
+      resolved: 1,
+    },
+    by_reason: {
+      side_effect: 1,
+    },
+  },
+};
+
 function renderAt(treatmentId: string, { isPrivacyMode = false }: { isPrivacyMode?: boolean } = {}) {
   // TreatmentDetailPage reads isPrivacyMode via useOutletContext, so it must
   // be rendered as a nested route under a parent that supplies the context.
@@ -187,6 +220,7 @@ beforeEach(() => {
   vi.spyOn(treatmentsApi, "listPatientCheckIns").mockResolvedValue({ items: [] });
   vi.spyOn(treatmentsApi, "listAdherenceEvents").mockResolvedValue({ items: [] });
   vi.spyOn(treatmentsApi, "getAnalysis").mockResolvedValue(null);
+  vi.spyOn(treatmentsApi, "getCompletionReport").mockResolvedValue(SAMPLE_COMPLETION_REPORT);
 });
 
 afterEach(() => {
@@ -219,6 +253,8 @@ describe("TreatmentDetailPage", () => {
     expect(screen.getByText("Monitor for cough")).toBeTruthy();
     expect(screen.getByText("Lisinopril")).toBeTruthy();
     expect(screen.getByText("10 mg")).toBeTruthy();
+    expect(screen.getByText(/report available after course completion/i)).toBeTruthy();
+    expect(treatmentsApi.getCompletionReport).not.toHaveBeenCalled();
     expect(await screen.findByText(/no patient-reported updates recorded/i)).toBeTruthy();
     expect(screen.getByRole("link", { name: /back/i })).toHaveAttribute(
       "href",
@@ -268,6 +304,33 @@ describe("TreatmentDetailPage", () => {
     expect(screen.getByText("Completed")).toBeTruthy();
     expect(screen.getByRole("button", { name: /course completed/i })).toBeDisabled();
     expect(screen.queryByRole("button", { name: /^start cycle$/i })).toBeNull();
+  });
+
+  it("loads the completion report only after the pharmacist opens it", async () => {
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue({
+      ...SAMPLE,
+      treatment: { ...SAMPLE.treatment, status: "completed" },
+    });
+    const getCompletionReport = vi
+      .spyOn(treatmentsApi, "getCompletionReport")
+      .mockResolvedValue(SAMPLE_COMPLETION_REPORT);
+    const user = userEvent.setup();
+
+    renderAt(SAMPLE.treatment.id);
+
+    await screen.findByText("Eleanor Vance");
+    expect(screen.getByText("Course complete")).toBeTruthy();
+    expect(getCompletionReport).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: /view completion report/i }));
+
+    expect(getCompletionReport).toHaveBeenCalledWith(SAMPLE.treatment.id);
+    expect(await screen.findByText("Course Completion Report")).toBeTruthy();
+    expect(screen.getByText("1 medication")).toBeTruthy();
+    expect(screen.getByText("2 taken")).toBeTruthy();
+    expect(screen.getByText("1 missed")).toBeTruthy();
+    expect(screen.getByText("2 patient updates")).toBeTruthy();
+    expect(screen.getByText("1 triage item")).toBeTruthy();
   });
 
   it("shows a 'not found' empty state when the treatment is missing", async () => {

@@ -4,6 +4,7 @@ import {
   createPatientCheckIn,
   draftPatientReply,
   getAnalysis,
+  getCompletionReport,
   listAdherenceEvents,
   listConversationMessages,
   listPatientCheckIns,
@@ -477,6 +478,39 @@ describe("conversation messages", () => {
     );
     expect(init.method).toBe("POST");
     expect(result.status).toBe("queued");
+  });
+});
+
+describe("getCompletionReport", () => {
+  it("loads the completed treatment course report", async () => {
+    const spy = mockFetch({
+      status: 200,
+      body: {
+        treatment_id: "t1",
+        patient_id: "p1",
+        status: "completed",
+        treatment_start_at: "2026-05-16T08:30:00Z",
+        created_at: "2026-05-11T12:00:00Z",
+        medication_count: 2,
+        adherence: { total_count: 3, by_status: { taken: 2, missed: 1 } },
+        patient_updates: {
+          total_count: 1,
+          by_report_type: { side_effect: 1 },
+        },
+        triage: {
+          total_count: 1,
+          by_status: { resolved: 1 },
+          by_reason: { side_effect: 1 },
+        },
+      },
+    });
+
+    const result = await getCompletionReport("t1");
+
+    const calledUrl = spy.mock.calls[0]?.[0] as string;
+    expect(calledUrl).toMatch(/\/treatments\/t1\/completion-report$/);
+    expect(result.status).toBe("completed");
+    expect(result.adherence.by_status.taken).toBe(2);
   });
 });
 

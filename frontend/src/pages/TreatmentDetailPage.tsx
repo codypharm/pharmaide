@@ -18,6 +18,7 @@ import {
 import { ApiError, ConflictError, NotFoundError } from "../api/client";
 import {
   createPatientCheckIn,
+  getCompletionReport,
   getAnalysis,
   getTreatment,
   listAdherenceEvents,
@@ -28,6 +29,7 @@ import {
   type AdherenceEventView,
   type AnalysisResult,
   type ClinicalSafetyReview,
+  type CourseCompletionReport,
   type DDIWarning,
   type KBCitation,
   type MedicationGrounding,
@@ -166,6 +168,7 @@ export default function TreatmentDetailPage() {
                   activationAnalysis={activationAnalysis}
                   onStartCycle={handleStartCycle}
                 />
+                <CompletionReportCard treatment={state.data.treatment} />
                 <MedicationsCard data={state.data} />
                 <PatientUpdatesCard
                   treatmentId={state.data.treatment.id}
@@ -1413,6 +1416,114 @@ function TreatmentCard({
       )}
     </Section>
   );
+}
+
+type CompletionReportState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "ok"; report: CourseCompletionReport }
+  | { kind: "error"; requestId: string | null };
+
+function CompletionReportCard({ treatment }: { treatment: TreatmentDetail["treatment"] }) {
+  const [state, setState] = useState<CompletionReportState>({ kind: "idle" });
+  const isCompleted = treatment.status === "completed";
+
+  async function handleLoadReport(): Promise<void> {
+    if (!isCompleted || state.kind === "loading") return;
+    setState({ kind: "loading" });
+    try {
+      const report = await getCompletionReport(treatment.id);
+      setState({ kind: "ok", report });
+    } catch (err) {
+      setState({
+        kind: "error",
+        requestId: err instanceof ApiError ? err.requestId : null,
+      });
+    }
+  }
+
+  return (
+    <Section title="Completion Report" icon={<ClipboardList size={16} />}>
+      {!isCompleted ? (
+        <p className="text-sm font-semibold text-slate-500">
+          Report available after course completion.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-black text-slate-950">Course complete</p>
+              <p className="mt-1 text-sm leading-6 text-slate-600">
+                The report is count-based and excludes patient message text.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleLoadReport}
+              disabled={state.kind === "loading"}
+              className="inline-flex w-fit items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-900 transition-colors hover:bg-slate-50 disabled:cursor-wait disabled:text-slate-400"
+            >
+              {state.kind === "loading" ? (
+                <>
+                  <Loader2 size={15} className="animate-spin" />
+                  Loading report
+                </>
+              ) : (
+                "View Completion Report"
+              )}
+            </button>
+          </div>
+
+          {state.kind === "error" && (
+            <p className="text-sm font-semibold text-red-700">
+              Could not load completion report. Reference ID: {state.requestId ?? "unknown"}
+            </p>
+          )}
+          {state.kind === "ok" && <CompletionReportSummary report={state.report} />}
+        </div>
+      )}
+    </Section>
+  );
+}
+
+function CompletionReportSummary({ report }: { report: CourseCompletionReport }) {
+  const taken = report.adherence.by_status.taken ?? 0;
+  const missed = report.adherence.by_status.missed ?? 0;
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <h4 className="text-sm font-black text-slate-950">Course Completion Report</h4>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <ReportMetric
+          label="Medications"
+          value={pluralize(report.medication_count, "medication")}
+        />
+        <ReportMetric label="Taken" value={`${taken} taken`} />
+        <ReportMetric label="Missed" value={`${missed} missed`} />
+        <ReportMetric
+          label="Patient Updates"
+          value={pluralize(report.patient_updates.total_count, "patient update")}
+        />
+        <ReportMetric
+          label="Triage"
+          value={pluralize(report.triage.total_count, "triage item")}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ReportMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-3">
+      <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
+      <p className="mt-1 text-sm font-black text-slate-950 tabular-nums">{value}</p>
+    </div>
+  );
+}
+
+function pluralize(count: number, label: string): string {
+  return `${count} ${label}${count === 1 ? "" : "s"}`;
 }
 
 function analysisReadyForCycle(analysis: TreatmentAnalysisRow | null): boolean {

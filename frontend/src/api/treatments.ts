@@ -85,6 +85,40 @@ export function getTreatment(id: string): Promise<TreatmentDetail> {
   return getJson<TreatmentDetail>(`/treatments/${id}`);
 }
 
+// GET /treatments/:id/completion-report — PHI-minimized end-of-course counts.
+
+export type CompletionReportCounts = {
+  total_count: number;
+  by_status: Record<string, number>;
+};
+
+export type PatientUpdateReportCounts = {
+  total_count: number;
+  by_report_type: Record<string, number>;
+};
+
+export type TriageReportCounts = {
+  total_count: number;
+  by_status: Record<string, number>;
+  by_reason: Record<string, number>;
+};
+
+export type CourseCompletionReport = {
+  treatment_id: string;
+  patient_id: string;
+  status: string;
+  treatment_start_at: string | null;
+  created_at: string;
+  medication_count: number;
+  adherence: CompletionReportCounts;
+  patient_updates: PatientUpdateReportCounts;
+  triage: TriageReportCounts;
+};
+
+export function getCompletionReport(treatmentId: string): Promise<CourseCompletionReport> {
+  return getJson<CourseCompletionReport>(`/treatments/${treatmentId}/completion-report`);
+}
+
 // POST/GET /treatments/:id/check-ins — patient-reported clinical status.
 
 export type PatientCheckInReportType =
