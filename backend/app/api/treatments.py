@@ -31,6 +31,7 @@ from app.api.schemas import (
     ConversationTurnView,
     CreateTreatmentRequest,
     CreateTreatmentResponse,
+    MedicationCreate,
     MedicationView,
     PatientCheckInCreate,
     PatientCheckInList,
@@ -107,6 +108,7 @@ from app.services.treatments import (
     PatientNotFound,
     TreatmentAlreadyCompleted,
     TreatmentNotCompleted,
+    add_medication_to_treatment,
     archive_treatment,
     create_treatment,
     discontinue_medication,
@@ -291,6 +293,28 @@ async def post_treatment_terminate(
             status_code=409,
             detail={"error": "treatment_already_completed"},
         ) from exc
+
+
+@router.post(
+    "/treatments/{treatment_id}/medications",
+    status_code=201,
+    response_model=MedicationView,
+)
+async def post_treatment_medication(
+    treatment_id: UUID,
+    body: MedicationCreate,
+    session: SessionDep,
+) -> MedicationView:
+    try:
+        return await add_medication_to_treatment(
+            session,
+            treatment_id=treatment_id,
+            medication=body,
+        )
+    except TreatmentCommandNotFound as exc:
+        raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
+    except TreatmentAlreadyCompleted as exc:
+        raise HTTPException(status_code=409, detail={"error": "treatment_not_editable"}) from exc
 
 
 @router.post(

@@ -24,6 +24,136 @@ def disable_analysis_schedule(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_add_medication_pauses_cycle_notifies_patient_and_audits(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    treatment_id = await _create_treatment(app_client, mrn="MED-CHANGE-ADD")
+    analysis = TreatmentAnalysis(
+        treatment_id=treatment_id,
+        status="completed",
+        result={"clinical_summary": "Ready for monitoring."},
+    )
+    queued_reminder = ConversationMessage(
+        treatment_id=treatment_id,
+        direction="outbound",
+        sender_type="assistant",
+        channel="whatsapp",
+        status="queued",
+        body="Reminder: it is time for Lisinopril.",
+    )
+    db_session.add_all([analysis, queued_reminder])
+    treatment = await db_session.get(Treatment, treatment_id)
+    assert treatment is not None
+    treatment.status = "active"
+    treatment.automation_mode = "active"
+    await db_session.flush()
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/medications",
+        json={
+            "name": "Amlodipine",
+            "dosage": "5 mg",
+            "frequency": "Once Daily (QD)",
+            "duration": "30 days",
+            "objective": None,
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    payload = response.json()
+    medication_id = UUID(payload["id"])
+    assert payload["name"] == "Amlodipine"
+    assert payload["ordinal"] == 1
+    assert payload["discontinued_at"] is None
+
+    medication = await db_session.get(Medication, medication_id)
+    assert medication is not None
+    await db_session.refresh(treatment)
+    await db_session.refresh(analysis)
+    await db_session.refresh(queued_reminder)
+    assert treatment.status == "pending"
+    assert treatment.automation_mode == "paused"
+    assert analysis.status == "superseded"
+    assert queued_reminder.status == "cancelled"
+
+    patient_update = await _patient_update_message(db_session, treatment_id)
+    assert patient_update is not None
+    assert patient_update.status == "queued"
+    assert patient_update.body == (
+        "Your pharmacist has updated your treatment plan. Amlodipine has been added. "
+        "Please follow your pharmacist's direct instructions for this medication. "
+        "Reminders are paused while your pharmacist reviews the updated plan."
+    )
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.event_type == "treatment_medication_added",
+            AuditLogEntry.resource_id == medication_id,
+        )
+    )
+    assert audit is not None
+    assert audit.resource_type == "medication"
+    assert audit.payload == {
+        "treatment_id": str(treatment_id),
+        "medication_id": str(medication_id),
+        "old_treatment_status": "active",
+        "new_treatment_status": "pending",
+        "old_automation_mode": "active",
+        "new_automation_mode": "paused",
+        "superseded_analysis_count": 2,
+        "active_medication_count": 2,
+        "cancelled_queued_message_count": 1,
+        "patient_notification_message_id": str(patient_update.id),
+    }
+    assert "amlodipine" not in str(audit.payload).lower()
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_add_medication_before_cycle_start_does_not_notify_patient(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    treatment_id = await _create_treatment(app_client, mrn="MED-CHANGE-ADD-PENDING")
+    db_session.add(
+        TreatmentAnalysis(
+            treatment_id=treatment_id,
+            status="completed",
+            result={"clinical_summary": "Ready for monitoring."},
+        )
+    )
+    await db_session.flush()
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/medications",
+        json={
+            "name": "Amlodipine",
+            "dosage": "5 mg",
+            "frequency": "Once Daily (QD)",
+            "duration": "30 days",
+            "objective": None,
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    medication_id = UUID(response.json()["id"])
+    treatment = await db_session.get(Treatment, treatment_id)
+    assert treatment is not None
+    assert treatment.status == "pending"
+    assert treatment.automation_mode == "paused"
+    assert await _patient_update_message(db_session, treatment_id) is None
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.event_type == "treatment_medication_added",
+            AuditLogEntry.resource_id == medication_id,
+        )
+    )
+    assert audit is not None
+    assert audit.payload["patient_notification_message_id"] is None
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_discontinue_one_medication_pauses_cycle_notifies_patient_and_audits(
     app_client: AsyncClient,
     db_session: AsyncSession,

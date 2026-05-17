@@ -31,6 +31,9 @@ async def test_post_start_cycle_marks_pending_treatment_active_and_audits(
             result={"clinical_summary": "Reviewed and ready for monitoring."},
         )
     )
+    treatment = await db_session.get(Treatment, treatment_id)
+    assert treatment is not None
+    treatment.automation_mode = "paused"
     await db_session.flush()
 
     response = await app_client.post(f"/treatments/{treatment_id}/start-cycle")
@@ -39,10 +42,11 @@ async def test_post_start_cycle_marks_pending_treatment_active_and_audits(
     payload = response.json()
     assert payload["id"] == str(treatment_id)
     assert payload["status"] == "active"
+    assert payload["automation_mode"] == "active"
 
-    treatment = await db_session.get(Treatment, treatment_id)
-    assert treatment is not None
+    await db_session.refresh(treatment)
     assert treatment.status == "active"
+    assert treatment.automation_mode == "active"
 
     onboarding = await db_session.scalar(
         select(ConversationMessage).where(
@@ -71,6 +75,8 @@ async def test_post_start_cycle_marks_pending_treatment_active_and_audits(
     assert audit.payload == {
         "old_status": "pending",
         "new_status": "active",
+        "old_automation_mode": "paused",
+        "new_automation_mode": "active",
         "analysis_id": audit.payload["analysis_id"],
         "onboarding_delivery": "queued",
         "onboarding_message_id": str(onboarding.id),

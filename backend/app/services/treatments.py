@@ -19,6 +19,7 @@ from app.api.schemas import (
     ChatResponseMode,
     CreateTreatmentRequest,
     CreateTreatmentResponse,
+    MedicationCreate,
     MedicationView,
     PatientView,
     TreatmentDetail,
@@ -299,7 +300,9 @@ async def start_treatment_cycle(session: AsyncSession, treatment_id: UUID) -> Tr
         if analysis is None:
             raise AnalysisNotCompleted()
 
+        old_automation_mode = treatment.automation_mode
         treatment.status = "active"
+        treatment.automation_mode = "active"
         onboarding_message = _build_cycle_onboarding_message(treatment_id=treatment.id)
         session.add(onboarding_message)
         await session.flush()
@@ -313,6 +316,8 @@ async def start_treatment_cycle(session: AsyncSession, treatment_id: UUID) -> Tr
                 payload={
                     "old_status": old_status,
                     "new_status": "active",
+                    "old_automation_mode": old_automation_mode,
+                    "new_automation_mode": treatment.automation_mode,
                     "analysis_id": str(analysis.id),
                     "onboarding_delivery": "queued",
                     "onboarding_message_id": str(onboarding_message.id),
@@ -324,6 +329,8 @@ async def start_treatment_cycle(session: AsyncSession, treatment_id: UUID) -> Tr
             treatment_id=str(treatment.id),
             old_status=old_status,
             new_status="active",
+            old_automation_mode=old_automation_mode,
+            new_automation_mode=treatment.automation_mode,
             analysis_id=str(analysis.id),
             onboarding_delivery="queued",
             onboarding_message_id=str(onboarding_message.id),
@@ -484,6 +491,77 @@ async def discontinue_medication(
     return MedicationView.model_validate(medication)
 
 
+async def add_medication_to_treatment(
+    session: AsyncSession,
+    *,
+    treatment_id: UUID,
+    medication: MedicationCreate,
+) -> MedicationView:
+    """Add a medication and force pharmacist review before monitoring resumes."""
+    treatment = await session.get(Treatment, treatment_id)
+    if treatment is None:
+        raise TreatmentNotFound()
+    if treatment.status in {"completed", "terminated"}:
+        raise TreatmentAlreadyCompleted()
+
+    old_status = treatment.status
+    old_automation_mode = treatment.automation_mode
+    new_medication = Medication(
+        treatment_id=treatment.id,
+        name=medication.name,
+        dosage=medication.dosage,
+        frequency=medication.frequency,
+        duration=medication.duration,
+        objective=medication.objective,
+        ordinal=await _next_medication_ordinal(session, treatment.id),
+    )
+    session.add(new_medication)
+    await session.flush()
+
+    treatment.status = "pending"
+    treatment.automation_mode = "paused"
+    superseded_count = await _supersede_existing_analyses(session, treatment.id)
+    cancelled_message_count = await _cancel_queued_reminders(session, treatment.id)
+    active_medication_count = await _count_active_medications(session, treatment.id)
+    patient_notification = None
+    if old_status == "active":
+        patient_notification = _build_medication_added_message(
+            treatment_id=treatment.id,
+            medication=new_medication,
+        )
+        session.add(patient_notification)
+    await session.flush()
+    _audit_medication_added(
+        session,
+        medication=new_medication,
+        treatment=treatment,
+        old_status=old_status,
+        old_automation_mode=old_automation_mode,
+        superseded_count=superseded_count,
+        active_medication_count=active_medication_count,
+        cancelled_message_count=cancelled_message_count,
+        patient_notification=patient_notification,
+    )
+    log.info(
+        "treatment_medication_added",
+        treatment_id=str(treatment.id),
+        medication_id=str(new_medication.id),
+        old_status=old_status,
+        new_status=treatment.status,
+        old_automation_mode=old_automation_mode,
+        new_automation_mode=treatment.automation_mode,
+        superseded_analysis_count=superseded_count,
+        active_medication_count=active_medication_count,
+        cancelled_queued_message_count=cancelled_message_count,
+        patient_notification_message_id=(
+            str(patient_notification.id) if patient_notification is not None else None
+        ),
+    )
+
+    await session.flush()
+    return MedicationView.model_validate(new_medication)
+
+
 async def _latest_completed_analysis(
     session: AsyncSession, treatment_id: UUID
 ) -> TreatmentAnalysis | None:
@@ -513,6 +591,14 @@ async def _get_treatment_medication(
     if medication is None:
         raise MedicationNotFound()
     return medication
+
+
+async def _next_medication_ordinal(session: AsyncSession, treatment_id: UUID) -> int:
+    result = await session.execute(
+        select(func.max(Medication.ordinal)).where(Medication.treatment_id == treatment_id)
+    )
+    max_ordinal = result.scalar_one()
+    return 0 if max_ordinal is None else int(max_ordinal) + 1
 
 
 async def _supersede_existing_analyses(session: AsyncSession, treatment_id: UUID) -> int:
@@ -581,6 +667,63 @@ def _build_medication_discontinued_message(
         channel="whatsapp",
         status="queued",
         body=body,
+    )
+
+
+def _build_medication_added_message(
+    *,
+    treatment_id: UUID,
+    medication: Medication,
+) -> ConversationMessage:
+    return ConversationMessage(
+        treatment_id=treatment_id,
+        direction="outbound",
+        sender_type="assistant",
+        channel="whatsapp",
+        status="queued",
+        body=(
+            "Your pharmacist has updated your treatment plan. "
+            f"{medication.name} has been added. "
+            "Please follow your pharmacist's direct instructions for this medication. "
+            "Reminders are paused while your pharmacist reviews the updated plan."
+        ),
+    )
+
+
+def _audit_medication_added(
+    session: AsyncSession,
+    *,
+    medication: Medication,
+    treatment: Treatment,
+    old_status: str,
+    old_automation_mode: str,
+    superseded_count: int,
+    active_medication_count: int,
+    cancelled_message_count: int,
+    patient_notification: ConversationMessage | None,
+) -> None:
+    session.add(
+        AuditLogEntry(
+            event_type="treatment_medication_added",
+            resource_type="medication",
+            resource_id=medication.id,
+            # Medication text can contain PHI-like freeform details, so audit
+            # only records workflow metadata and stable IDs.
+            payload={
+                "treatment_id": str(treatment.id),
+                "medication_id": str(medication.id),
+                "old_treatment_status": old_status,
+                "new_treatment_status": treatment.status,
+                "old_automation_mode": old_automation_mode,
+                "new_automation_mode": treatment.automation_mode,
+                "superseded_analysis_count": superseded_count,
+                "active_medication_count": active_medication_count,
+                "cancelled_queued_message_count": cancelled_message_count,
+                "patient_notification_message_id": (
+                    str(patient_notification.id) if patient_notification is not None else None
+                ),
+            },
+        )
     )
 
 
