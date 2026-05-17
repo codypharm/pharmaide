@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import NewTreatmentPage from "../NewTreatmentPage";
 import { ApiError } from "../../api/client";
+import * as patientsApi from "../../api/patients";
 import * as prescriptionsApi from "../../api/prescriptions";
 import { ExtractionError } from "../../api/prescriptions";
 import * as treatmentsApi from "../../api/treatments";
@@ -83,6 +84,7 @@ afterEach(() => {
 beforeEach(() => {
   vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue({ items: [] });
   vi.spyOn(treatmentsApi, "getAnalysis").mockResolvedValue(null);
+  vi.spyOn(patientsApi, "searchPatients").mockResolvedValue({ items: [] });
 });
 
 describe("NewTreatmentPage", () => {
@@ -445,6 +447,45 @@ describe("NewTreatmentPage", () => {
         }),
       );
     });
+  });
+
+  it("attaches a new treatment to a selected existing patient", async () => {
+    const user = userEvent.setup();
+    const existingPatient: treatmentsApi.PatientView = {
+      id: "patient-existing",
+      name: "Eleanor Vance",
+      dob: "1955-10-12",
+      mrn: "PHA-AB12CD34",
+      phone: "+18005551212",
+      allergies: ["Penicillin"],
+    };
+    vi.spyOn(patientsApi, "searchPatients").mockResolvedValue({ items: [existingPatient] });
+    const create = vi.spyOn(treatmentsApi, "createTreatment").mockResolvedValue({
+      treatment_id: "treatment-1",
+      patient_id: existingPatient.id,
+      analysis_id: "analysis-1",
+    });
+
+    renderPage();
+    await user.type(screen.getByLabelText(/find existing patient/i), "Eleanor");
+    await user.click(screen.getByRole("button", { name: /^search$/i }));
+    await user.click(await screen.findByRole("button", { name: /use patient/i }));
+    await user.type(screen.getByPlaceholderText(/e.g. amoxicillin/i), "Lisinopril");
+    await user.type(screen.getByPlaceholderText(/e.g. 500mg/i), "10 mg");
+    await user.type(screen.getByPlaceholderText(/twice daily/i), "Once Daily (QD)");
+    await user.type(screen.getByPlaceholderText(/e.g. 10 days/i), "30 days");
+    await user.type(screen.getByLabelText(/treatment objective/i), "Monitor for cough");
+    await user.click(screen.getByRole("button", { name: /review & approve/i }));
+    await user.click(screen.getByRole("button", { name: /confirm & create/i }));
+
+    await waitFor(() => {
+      expect(create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          patient_id: existingPatient.id,
+        }),
+      );
+    });
+    expect(create.mock.calls[0][0]).not.toHaveProperty("patient");
   });
 
   it("submits the treatment start as a timezone-aware timestamp", async () => {

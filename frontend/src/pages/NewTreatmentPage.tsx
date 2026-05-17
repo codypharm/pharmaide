@@ -4,17 +4,19 @@ import {
   CheckCircle2, AlertCircle, MessageSquare,
   Play, X,
   Upload, Type, ClipboardList, Trash2,
-  Edit3, Loader2, Lock, Sparkles
+  Edit3, Loader2, Sparkles
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { ApiError, ConflictError, ValidationError } from "../api/client";
+import { searchPatients } from "../api/patients";
 import { ExtractionError, extractPrescription, type ExtractedPrescription } from "../api/prescriptions";
 import {
   createTreatment,
   getAnalysis,
   listTreatments,
   startTreatmentCycle,
+  type PatientView,
   type TreatmentAnalysisRow,
   type TreatmentListItem,
 } from "../api/treatments";
@@ -51,6 +53,11 @@ type PendingTreatmentRow = {
 type FieldErrors = Partial<Record<"name" | "dob" | "mrn" | "phone" | "allergies", string>>;
 type ExtractionFieldKey = string;
 type ExtractionErrorState = { message: string; requestId: string | null };
+type PatientSearchState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "success"; items: PatientView[] }
+  | { status: "error"; requestId: string | null };
 
 const extractedFieldClass = "border-[#5548E8] bg-[#F0EFFF]";
 const lowConfidenceFieldClass = "border-amber-500 bg-amber-50/40";
@@ -66,13 +73,14 @@ export default function NewTreatmentPage() {
   const [medications, setMedications] = useState<Medication[]>([
     { id: crypto.randomUUID(), name: "", dosage: "", frequency: "", duration: "" }
   ]);
-  // Sprint 2 always creates a new patient — search-existing flow ships
-  // when GET /patients?search= lands. The search input renders disabled.
   const [patientName, setPatientName] = useState("");
   const [patientDob, setPatientDob] = useState("");
   const [patientMrn, setPatientMrn] = useState("");
   const [patientPhone, setPatientPhone] = useState("");
   const [patientAllergies, setPatientAllergies] = useState<string[]>([]);
+  const [patientSearchQuery, setPatientSearchQuery] = useState("");
+  const [patientSearchState, setPatientSearchState] = useState<PatientSearchState>({ status: "idle" });
+  const [selectedPatient, setSelectedPatient] = useState<PatientView | null>(null);
   const [allergyDraft, setAllergyDraft] = useState("");
   const [clinicalObjective, setClinicalObjective] = useState("");
   const [treatmentStartAt, setTreatmentStartAt] = useState("");
@@ -136,6 +144,9 @@ export default function NewTreatmentPage() {
     setPatientMrn("");
     setPatientPhone("");
     setPatientAllergies([]);
+    setPatientSearchQuery("");
+    setPatientSearchState({ status: "idle" });
+    setSelectedPatient(null);
     setAllergyDraft("");
     setClinicalObjective("");
     setTreatmentStartAt("");
@@ -184,6 +195,47 @@ export default function NewTreatmentPage() {
       event.preventDefault();
       addPatientAllergy();
     }
+  };
+
+  const handlePatientSearch = async () => {
+    const query = patientSearchQuery.trim();
+    if (!query) {
+      setPatientSearchState({ status: "idle" });
+      return;
+    }
+
+    setPatientSearchState({ status: "loading" });
+    try {
+      const result = await searchPatients({ query, limit: 8, offset: 0 });
+      setPatientSearchState({ status: "success", items: result.items });
+    } catch (err) {
+      setPatientSearchState({
+        status: "error",
+        requestId: err instanceof ApiError ? err.requestId : null,
+      });
+    }
+  };
+
+  const selectExistingPatient = (patient: PatientView) => {
+    setSelectedPatient(patient);
+    setPatientName(patient.name);
+    setPatientDob(patient.dob);
+    setPatientMrn(patient.mrn);
+    setPatientPhone(patient.phone);
+    setPatientAllergies(patient.allergies);
+    setAllergyDraft("");
+    setFieldErrors({});
+    setPatientSearchState({ status: "idle" });
+  };
+
+  const clearSelectedPatient = () => {
+    setSelectedPatient(null);
+    setPatientName("");
+    setPatientDob("");
+    setPatientMrn("");
+    setPatientPhone("");
+    setPatientAllergies([]);
+    setAllergyDraft("");
   };
 
   const clearExtractedField = (key: ExtractionFieldKey) => {
@@ -263,6 +315,7 @@ export default function NewTreatmentPage() {
 
   const applyExtractedPrescription = (prescription: ExtractedPrescription) => {
     const medicationDrafts = toMedicationDrafts(prescription);
+    setSelectedPatient(null);
     setPatientName(prescription.patient.name ?? "");
     setPatientDob(prescription.patient.dob ?? "");
     setPatientMrn(prescription.patient.mrn ?? generateMrn());
@@ -301,14 +354,19 @@ export default function NewTreatmentPage() {
     setIsSubmitting(true);
 
     try {
+      const patientPayload = selectedPatient
+        ? { patient_id: selectedPatient.id }
+        : {
+            patient: {
+              name: patientName.trim(),
+              dob: patientDob,
+              mrn: patientMrn.trim(),
+              phone: patientPhone.trim(),
+              allergies: currentPatientAllergies,
+            },
+          };
       const result = await createTreatment({
-        patient: {
-          name: patientName.trim(),
-          dob: patientDob,
-          mrn: patientMrn.trim(),
-          phone: patientPhone.trim(),
-          allergies: currentPatientAllergies,
-        },
+        ...patientPayload,
         treatment: {
           clinical_objective: clinicalObjective.trim() || null,
           treatment_start_at: toTreatmentStartIso(treatmentStartAt),
@@ -497,22 +555,88 @@ export default function NewTreatmentPage() {
                 </p>
               </div>
 
-              {/* Search-existing affordance: visually present, disabled until
-                  GET /patients?search= ships in a follow-up slice. */}
-              <div className="flex flex-col gap-2">
-                <div className="relative opacity-60">
-                  <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    disabled
-                    placeholder="Search existing patients by Name or ID..."
-                    className="w-full pl-12 pr-12 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-base shadow-inner cursor-not-allowed"
-                    aria-describedby="search-disabled-note"
-                  />
-                  <Lock size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" />
+              <div className="flex flex-col gap-3">
+                <label htmlFor="patient-search" className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                  Find Existing Patient
+                </label>
+                <div className="flex gap-2">
+                  <div className="relative min-w-0 flex-1">
+                    <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      id="patient-search"
+                      value={patientSearchQuery}
+                      onChange={(event) => setPatientSearchQuery(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          void handlePatientSearch();
+                        }
+                      }}
+                      placeholder="Search by name, MRN, phone, or patient ID"
+                      className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-11 pr-4 text-sm outline-none focus:border-[#5548E8] focus:ring-2 focus:ring-[#D9D5FB]"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handlePatientSearch()}
+                    disabled={!patientSearchQuery.trim() || patientSearchState.status === "loading"}
+                    className="rounded-xl bg-slate-900 px-5 py-3 text-[11px] font-bold uppercase tracking-widest text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+                  >
+                    {patientSearchState.status === "loading" ? "Searching..." : "Search"}
+                  </button>
                 </div>
-                <p id="search-disabled-note" className="text-[11px] text-slate-500 px-1">
-                  Search not yet available — registering below creates a new patient profile.
-                </p>
+                {patientSearchState.status === "success" && (
+                  <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+                    {patientSearchState.items.length > 0 ? (
+                      patientSearchState.items.map((patient) => (
+                        <button
+                          key={patient.id}
+                          type="button"
+                          onClick={() => selectExistingPatient(patient)}
+                          className="flex w-full items-center justify-between gap-4 border-b border-slate-100 px-4 py-3 text-left last:border-b-0 hover:bg-slate-50 cursor-pointer"
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-bold text-slate-900">{patient.name}</span>
+                            <span className="block truncate text-[11px] font-semibold text-slate-500">
+                              MRN {patient.mrn} · {patient.phone}
+                            </span>
+                          </span>
+                          <span className="shrink-0 text-[10px] font-bold uppercase tracking-widest text-[#5548E8]">
+                            Use Patient
+                          </span>
+                        </button>
+                      ))
+                    ) : (
+                      <p className="px-4 py-3 text-sm font-semibold text-slate-500">
+                        No matching patient found.
+                      </p>
+                    )}
+                  </div>
+                )}
+                {patientSearchState.status === "error" && (
+                  <p className="text-[11px] font-semibold text-red-600">
+                    Could not search patients. Reference ID: {patientSearchState.requestId ?? "unknown"}.
+                  </p>
+                )}
+                {selectedPatient && (
+                  <div className="flex items-center justify-between gap-4 rounded-xl border border-[#D9D5FB] bg-[#F0EFFF] px-4 py-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold text-slate-900">
+                        Using existing patient: {selectedPatient.name}
+                      </p>
+                      <p className="truncate text-[11px] font-semibold text-[#463AD4]">
+                        MRN {selectedPatient.mrn} · {selectedPatient.phone}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={clearSelectedPatient}
+                      className="shrink-0 rounded-lg border border-[#D9D5FB] bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-[#5548E8] hover:bg-slate-50 cursor-pointer"
+                    >
+                      Use New Patient
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
@@ -522,6 +646,7 @@ export default function NewTreatmentPage() {
                 <input
                   id="patient-name"
                   value={patientName}
+                  disabled={selectedPatient !== null}
                   onChange={(e) => {
                     setPatientName(e.target.value);
                     clearExtractedField("patient.name");
@@ -540,6 +665,7 @@ export default function NewTreatmentPage() {
                   id="patient-dob"
                   type="date"
                   value={patientDob}
+                  disabled={selectedPatient !== null}
                   onChange={(e) => {
                     setPatientDob(e.target.value);
                     clearExtractedField("patient.dob");
@@ -557,7 +683,8 @@ export default function NewTreatmentPage() {
                   <button
                     type="button"
                     onClick={() => setPatientMrn(generateMrn())}
-                    className="flex items-center gap-1 text-[10px] font-bold text-[#5548E8] hover:text-[#463AD4] uppercase tracking-wider cursor-pointer"
+                    disabled={selectedPatient !== null}
+                    className="flex items-center gap-1 text-[10px] font-bold text-[#5548E8] hover:text-[#463AD4] uppercase tracking-wider disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
                     title="Mint a new MRN if your institution doesn't issue one"
                   >
                     <Sparkles size={12} />
@@ -567,6 +694,7 @@ export default function NewTreatmentPage() {
                 <input
                   id="patient-mrn"
                   value={patientMrn}
+                  disabled={selectedPatient !== null}
                   onChange={(e) => {
                     setPatientMrn(e.target.value);
                     clearExtractedField("patient.mrn");
@@ -585,6 +713,7 @@ export default function NewTreatmentPage() {
                   id="patient-phone"
                   type="tel"
                   value={patientPhone}
+                  disabled={selectedPatient !== null}
                   onChange={(e) => {
                     setPatientPhone(e.target.value);
                     clearExtractedField("patient.phone");
@@ -603,6 +732,7 @@ export default function NewTreatmentPage() {
                   <input
                     id="allergy-name"
                     value={allergyDraft}
+                    disabled={selectedPatient !== null}
                     onChange={(e) => setAllergyDraft(e.target.value)}
                     onKeyDown={handleAllergyKeyDown}
                     placeholder="e.g. Penicillin"
@@ -611,7 +741,7 @@ export default function NewTreatmentPage() {
                   <button
                     type="button"
                     onClick={addPatientAllergy}
-                    disabled={!allergyDraft.trim()}
+                    disabled={selectedPatient !== null || !allergyDraft.trim()}
                     className="px-4 py-2 bg-slate-900 text-white rounded-xl text-[11px] font-bold uppercase tracking-widest hover:bg-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   >
                     Add Allergy
@@ -628,7 +758,8 @@ export default function NewTreatmentPage() {
                         <button
                           type="button"
                           onClick={() => removePatientAllergy(allergy)}
-                          className="text-red-500 hover:text-red-800 cursor-pointer"
+                          disabled={selectedPatient !== null}
+                          className="text-red-500 hover:text-red-800 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
                           aria-label={`Remove ${allergy}`}
                         >
                           <X size={12} />
