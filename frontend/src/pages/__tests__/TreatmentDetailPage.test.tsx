@@ -307,6 +307,17 @@ describe("TreatmentDetailPage", () => {
     expect(screen.queryByRole("button", { name: /stop monitoring/i })).toBeNull();
   });
 
+  it("does not show stop monitoring before the cycle is active", async () => {
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(SAMPLE);
+    vi.spyOn(treatmentsApi, "getAnalysis").mockResolvedValue(COMPLETED_ANALYSIS);
+
+    renderAt(SAMPLE.treatment.id);
+
+    await screen.findByText("Eleanor Vance");
+    expect(screen.getByRole("button", { name: /start cycle/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /stop monitoring/i })).toBeNull();
+  });
+
   it("does not show the stop monitoring action after course completion", async () => {
     vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue({
       ...SAMPLE,

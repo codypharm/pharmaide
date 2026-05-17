@@ -1371,7 +1371,7 @@ function TreatmentCard({
     | { kind: "saving" }
     | { kind: "error"; requestId: string | null }
   >({ kind: "idle" });
-  const canTerminate = (isPending || isActive) && terminateState.kind !== "saving";
+  const canTerminate = isActive && terminateState.kind !== "saving";
 
   async function handleTerminate(): Promise<void> {
     if (!canTerminate) return;
@@ -1452,7 +1452,7 @@ function TreatmentCard({
           <div className="text-sm text-slate-900">{t.clinical_objective}</div>
         </div>
       )}
-      {(isPending || isActive || terminateState.kind === "error") && (
+      {(isActive || terminateState.kind === "error") && (
         <div className="mt-6 border-t border-slate-100 pt-4">
           <div className="flex flex-col gap-3 rounded-lg border border-red-100 bg-red-50/40 p-4 md:flex-row md:items-center md:justify-between">
             <div>
@@ -1484,7 +1484,7 @@ function TreatmentCard({
                 </button>
               </div>
             ) : (
-              (isPending || isActive) && (
+              isActive && (
                 <button
                   type="button"
                   onClick={() => setTerminateState({ kind: "confirming" })}
