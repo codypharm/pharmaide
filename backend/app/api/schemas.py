@@ -358,6 +358,10 @@ class PatientView(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PatientList(BaseModel):
+    items: list[PatientView]
+
+
 class TreatmentView(BaseModel):
     id: UUID
     patient_id: UUID

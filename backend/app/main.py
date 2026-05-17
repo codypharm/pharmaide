@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from app.api.audits import router as audits_router
 from app.api.internal import router as internal_router
 from app.api.knowledge import router as knowledge_router
+from app.api.patients import router as patients_router
 from app.api.prescriptions import router as prescriptions_router
 from app.api.treatments import router as treatments_router
 from app.api.triage import router as triage_router
@@ -73,6 +74,7 @@ def create_app(settings: Settings) -> FastAPI:
         return {"status": "ok", "version": VERSION}
 
     app.include_router(treatments_router, tags=["treatments"])
+    app.include_router(patients_router, tags=["patients"])
     app.include_router(prescriptions_router, tags=["prescriptions"])
     app.include_router(knowledge_router, tags=["knowledge"])
     app.include_router(triage_router, tags=["triage"])
