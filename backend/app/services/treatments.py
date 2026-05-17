@@ -449,52 +449,55 @@ async def discontinue_medication(
         raise TreatmentNotFound()
 
     already_discontinued = medication.discontinued_at is not None
+    if already_discontinued:
+        return MedicationView.model_validate(medication)
+    if treatment.status in {"completed", "terminated"}:
+        raise TreatmentAlreadyCompleted()
+
     old_status = treatment.status
     old_automation_mode = treatment.automation_mode
-    superseded_count = 0
 
-    if not already_discontinued:
-        medication.discontinued_at = datetime.now(UTC)
-        active_medication_count = await _count_active_medications(session, treatment_id)
-        treatment.status = "terminated" if active_medication_count == 0 else "pending"
-        treatment.automation_mode = "paused"
-        superseded_count = await _supersede_existing_analyses(session, treatment_id)
-        cancelled_message_count = await _cancel_queued_reminders(session, treatment_id)
-        patient_notification = None
-        if old_status == "active":
-            patient_notification = _build_medication_discontinued_message(
-                treatment_id=treatment_id,
-                medication=medication,
-                active_medication_count=active_medication_count,
-            )
-            session.add(patient_notification)
-        await session.flush()
-        _audit_medication_discontinued(
-            session,
+    medication.discontinued_at = datetime.now(UTC)
+    active_medication_count = await _count_active_medications(session, treatment_id)
+    treatment.status = "terminated" if active_medication_count == 0 else "pending"
+    treatment.automation_mode = "paused"
+    superseded_count = await _supersede_existing_analyses(session, treatment_id)
+    cancelled_message_count = await _cancel_queued_reminders(session, treatment_id)
+    patient_notification = None
+    if old_status == "active":
+        patient_notification = _build_medication_discontinued_message(
+            treatment_id=treatment_id,
             medication=medication,
-            treatment=treatment,
-            old_status=old_status,
-            old_automation_mode=old_automation_mode,
-            superseded_count=superseded_count,
             active_medication_count=active_medication_count,
-            cancelled_message_count=cancelled_message_count,
-            patient_notification=patient_notification,
         )
-        log.info(
-            "treatment_medication_discontinued",
-            treatment_id=str(treatment_id),
-            medication_id=str(medication_id),
-            old_status=old_status,
-            new_status=treatment.status,
-            old_automation_mode=old_automation_mode,
-            new_automation_mode=treatment.automation_mode,
-            superseded_analysis_count=superseded_count,
-            active_medication_count=active_medication_count,
-            cancelled_queued_message_count=cancelled_message_count,
-            patient_notification_message_id=(
-                str(patient_notification.id) if patient_notification is not None else None
-            ),
-        )
+        session.add(patient_notification)
+    await session.flush()
+    _audit_medication_discontinued(
+        session,
+        medication=medication,
+        treatment=treatment,
+        old_status=old_status,
+        old_automation_mode=old_automation_mode,
+        superseded_count=superseded_count,
+        active_medication_count=active_medication_count,
+        cancelled_message_count=cancelled_message_count,
+        patient_notification=patient_notification,
+    )
+    log.info(
+        "treatment_medication_discontinued",
+        treatment_id=str(treatment_id),
+        medication_id=str(medication_id),
+        old_status=old_status,
+        new_status=treatment.status,
+        old_automation_mode=old_automation_mode,
+        new_automation_mode=treatment.automation_mode,
+        superseded_analysis_count=superseded_count,
+        active_medication_count=active_medication_count,
+        cancelled_queued_message_count=cancelled_message_count,
+        patient_notification_message_id=(
+            str(patient_notification.id) if patient_notification is not None else None
+        ),
+    )
 
     await session.flush()
     return MedicationView.model_validate(medication)

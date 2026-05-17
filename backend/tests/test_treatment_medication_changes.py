@@ -245,6 +245,149 @@ async def test_edit_active_medication_pauses_cycle_notifies_patient_and_audits(
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_edit_medication_without_changes_does_not_pause_or_audit(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    treatment_id = await _create_treatment(app_client, mrn="MED-CHANGE-EDIT-NOOP")
+    medication = await _first_medication(db_session, treatment_id)
+    analysis = TreatmentAnalysis(
+        treatment_id=treatment_id,
+        status="completed",
+        result={"clinical_summary": "Ready for monitoring."},
+    )
+    db_session.add(analysis)
+    treatment = await db_session.get(Treatment, treatment_id)
+    assert treatment is not None
+    treatment.status = "active"
+    treatment.automation_mode = "active"
+    await db_session.flush()
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/medications/{medication.id}/edit",
+        json={
+            "name": medication.name,
+            "dosage": medication.dosage,
+            "frequency": medication.frequency,
+            "duration": medication.duration,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    await db_session.refresh(treatment)
+    await db_session.refresh(analysis)
+    assert treatment.status == "active"
+    assert treatment.automation_mode == "active"
+    assert analysis.status == "completed"
+    assert await _patient_update_message(db_session, treatment_id) is None
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.event_type == "treatment_medication_edited",
+            AuditLogEntry.resource_id == medication.id,
+        )
+    )
+    assert audit is None
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_edit_discontinued_medication_returns_409(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    treatment_id = await _create_treatment(
+        app_client,
+        mrn="MED-CHANGE-EDIT-DISC",
+        medication_count=2,
+    )
+    medication = await _first_medication(db_session, treatment_id)
+    medication.discontinued_at = None
+    await db_session.flush()
+    await app_client.post(f"/treatments/{treatment_id}/medications/{medication.id}/discontinue")
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/medications/{medication.id}/edit",
+        json={
+            "name": "Lisinopril",
+            "dosage": "20 mg",
+            "frequency": "Twice Daily (BID)",
+            "duration": "14 days",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": {"error": "medication_discontinued"}}
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_edit_medication_returns_404_for_wrong_treatment(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    treatment_id = await _create_treatment(app_client, mrn="MED-CHANGE-EDIT-404")
+    other_treatment_id = await _create_treatment(app_client, mrn="MED-CHANGE-EDIT-OTHER")
+    medication = await _first_medication(db_session, treatment_id)
+
+    response = await app_client.post(
+        f"/treatments/{other_treatment_id}/medications/{medication.id}/edit",
+        json={
+            "name": "Lisinopril",
+            "dosage": "20 mg",
+            "frequency": "Twice Daily (BID)",
+            "duration": "14 days",
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": {"error": "medication_not_found"}}
+
+
+@pytest.mark.usefixtures("postgres_container")
+@pytest.mark.parametrize("status", ["completed", "terminated"])
+async def test_add_edit_and_discontinue_reject_terminal_treatments(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    status: str,
+) -> None:
+    treatment_id = await _create_treatment(app_client, mrn=f"MED-CHANGE-TERM-{status}")
+    medication = await _first_medication(db_session, treatment_id)
+    treatment = await db_session.get(Treatment, treatment_id)
+    assert treatment is not None
+    treatment.status = status
+    treatment.automation_mode = "paused"
+    await db_session.flush()
+
+    add_response = await app_client.post(
+        f"/treatments/{treatment_id}/medications",
+        json={
+            "name": "Amlodipine",
+            "dosage": "5 mg",
+            "frequency": "Once Daily (QD)",
+            "duration": "30 days",
+            "objective": None,
+        },
+    )
+    edit_response = await app_client.post(
+        f"/treatments/{treatment_id}/medications/{medication.id}/edit",
+        json={
+            "name": "Lisinopril",
+            "dosage": "20 mg",
+            "frequency": "Twice Daily (BID)",
+            "duration": "14 days",
+        },
+    )
+    discontinue_response = await app_client.post(
+        f"/treatments/{treatment_id}/medications/{medication.id}/discontinue"
+    )
+
+    assert add_response.status_code == 409
+    assert edit_response.status_code == 409
+    assert discontinue_response.status_code == 409
+    assert add_response.json() == {"detail": {"error": "treatment_not_editable"}}
+    assert edit_response.json() == {"detail": {"error": "treatment_not_editable"}}
+    assert discontinue_response.json() == {"detail": {"error": "treatment_not_editable"}}
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_discontinue_one_medication_pauses_cycle_notifies_patient_and_audits(
     app_client: AsyncClient,
     db_session: AsyncSession,
@@ -428,6 +571,36 @@ async def test_discontinue_medication_returns_404_for_wrong_treatment(
 
     assert response.status_code == 404
     assert response.json() == {"detail": {"error": "medication_not_found"}}
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_discontinue_medication_is_idempotent_after_first_discontinue(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    treatment_id = await _create_treatment(app_client, mrn="MED-CHANGE-DISC-IDEMP")
+    medication = await _first_medication(db_session, treatment_id)
+
+    first_response = await app_client.post(
+        f"/treatments/{treatment_id}/medications/{medication.id}/discontinue"
+    )
+    second_response = await app_client.post(
+        f"/treatments/{treatment_id}/medications/{medication.id}/discontinue"
+    )
+
+    assert first_response.status_code == 200, first_response.text
+    assert second_response.status_code == 200, second_response.text
+    audits = list(
+        (
+            await db_session.execute(
+                select(AuditLogEntry).where(
+                    AuditLogEntry.event_type == "treatment_medication_discontinued",
+                    AuditLogEntry.resource_id == medication.id,
+                )
+            )
+        ).scalars()
+    )
+    assert len(audits) == 1
 
 
 async def _create_treatment(

@@ -369,6 +369,8 @@ async def post_treatment_medication_discontinue(
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
     except TreatmentMedicationNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "medication_not_found"}) from exc
+    except TreatmentAlreadyCompleted as exc:
+        raise HTTPException(status_code=409, detail={"error": "treatment_not_editable"}) from exc
 
 
 @router.post(

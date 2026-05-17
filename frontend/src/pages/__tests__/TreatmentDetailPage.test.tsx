@@ -4,7 +4,7 @@ import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import TreatmentDetailPage from "../TreatmentDetailPage";
-import { ApiError, NotFoundError } from "../../api/client";
+import { ApiError, ConflictError, NotFoundError } from "../../api/client";
 import * as treatmentsApi from "../../api/treatments";
 import type {
   AdherenceEventView,
@@ -534,6 +534,29 @@ describe("TreatmentDetailPage", () => {
     expect(await screen.findByText("20 mg")).toBeTruthy();
     expect(screen.getByText(/treatment plan changed/i)).toBeTruthy();
     expect(screen.getByRole("button", { name: /start cycle/i })).toBeDisabled();
+  });
+
+  it("shows a clear message when editing a discontinued medication from stale UI", async () => {
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(SAMPLE);
+    vi.spyOn(treatmentsApi, "getAnalysis").mockResolvedValue(COMPLETED_ANALYSIS);
+    vi.spyOn(treatmentsApi, "updateMedicationInTreatment").mockRejectedValue(
+      new ConflictError(
+        null,
+        { detail: { error: "medication_discontinued" } },
+        "medication_discontinued",
+      ),
+    );
+    const user = userEvent.setup();
+
+    renderAt(SAMPLE.treatment.id);
+
+    await screen.findByText("Eleanor Vance");
+    await user.click(screen.getByRole("button", { name: /^edit$/i }));
+    await user.clear(screen.getByLabelText(/^dosage strength$/i));
+    await user.type(screen.getByLabelText(/^dosage strength$/i), "20 mg");
+    await user.click(screen.getByRole("button", { name: /^save changes$/i }));
+
+    expect(await screen.findByText("This medication has already been discontinued.")).toBeTruthy();
   });
 
   it("lets the pharmacist update the treatment objective", async () => {

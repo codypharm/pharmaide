@@ -2034,19 +2034,29 @@ type MedicationDiscontinueState =
   | { kind: "idle" }
   | { kind: "confirming"; medicationId: string }
   | { kind: "saving"; medicationId: string }
-  | { kind: "error"; medicationId: string; requestId: string | null };
+  | {
+      kind: "error";
+      medicationId: string;
+      message: string;
+      requestId: string | null;
+    };
 
 type MedicationAddState =
   | { kind: "closed" }
   | { kind: "editing" }
   | { kind: "saving" }
-  | { kind: "error"; requestId: string | null };
+  | { kind: "error"; message: string; requestId: string | null };
 
 type MedicationEditState =
   | { kind: "idle" }
   | { kind: "editing"; medicationId: string; form: MedicationForm }
   | { kind: "saving"; medicationId: string; form: MedicationForm }
-  | { kind: "error"; medicationId: string; requestId: string | null };
+  | {
+      kind: "error";
+      medicationId: string;
+      message: string;
+      requestId: string | null;
+    };
 
 type MedicationForm = {
   name: string;
@@ -2076,6 +2086,18 @@ const FREQUENCY_SUGGESTIONS = [
   "Once Weekly",
   "Once Monthly",
 ];
+
+function medicationActionErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof ConflictError) {
+    if (err.errorCode === "medication_discontinued") {
+      return "This medication has already been discontinued.";
+    }
+    if (err.errorCode === "treatment_not_editable") {
+      return "This treatment can no longer be edited.";
+    }
+  }
+  return fallback;
+}
 
 function MedicationsCard({
   data,
@@ -2121,6 +2143,10 @@ function MedicationsCard({
       setDiscontinueState({
         kind: "error",
         medicationId,
+        message: medicationActionErrorMessage(
+          err,
+          "Could not discontinue medication.",
+        ),
         requestId: err instanceof ApiError ? err.requestId : null,
       });
     }
@@ -2150,6 +2176,7 @@ function MedicationsCard({
       setEditState({
         kind: "error",
         medicationId,
+        message: medicationActionErrorMessage(err, "Could not save changes."),
         requestId: err instanceof ApiError ? err.requestId : null,
       });
     }
@@ -2177,6 +2204,7 @@ function MedicationsCard({
     } catch (err) {
       setAddState({
         kind: "error",
+        message: medicationActionErrorMessage(err, "Could not add medication."),
         requestId: err instanceof ApiError ? err.requestId : null,
       });
     }
@@ -2289,8 +2317,10 @@ function MedicationsCard({
               </div>
               {addState.kind === "error" && (
                 <p className="mt-3 text-xs font-semibold text-red-700">
-                  Could not add medication. Reference ID:{" "}
-                  {addState.requestId ?? "unknown"}
+                  {addState.message}
+                  {addState.requestId
+                    ? ` Reference ID: ${addState.requestId}`
+                    : ""}
                 </p>
               )}
             </form>
@@ -2323,7 +2353,7 @@ function MedicationsCard({
               const errorForMedication =
                 discontinueState.kind === "error" &&
                 discontinueState.medicationId === m.id
-                  ? discontinueState.requestId
+                  ? discontinueState
                   : null;
               const isEditing =
                 (editState.kind === "editing" || editState.kind === "saving") &&
@@ -2331,7 +2361,7 @@ function MedicationsCard({
               const medicationEditForm = isEditing ? editState.form : null;
               const editError =
                 editState.kind === "error" && editState.medicationId === m.id
-                  ? editState.requestId
+                  ? editState
                   : null;
 
               return (
@@ -2365,14 +2395,18 @@ function MedicationsCard({
                       )}
                       {errorForMedication && (
                         <p className="mt-1 text-xs font-semibold text-red-700">
-                          Could not discontinue. Reference ID:{" "}
-                          {errorForMedication}
+                          {errorForMedication.message}
+                          {errorForMedication.requestId
+                            ? ` Reference ID: ${errorForMedication.requestId}`
+                            : ""}
                         </p>
                       )}
                       {editError && (
                         <p className="mt-1 text-xs font-semibold text-red-700">
-                          Could not save changes. Reference ID:{" "}
-                          {editError}
+                          {editError.message}
+                          {editError.requestId
+                            ? ` Reference ID: ${editError.requestId}`
+                            : ""}
                         </p>
                       )}
                     </td>
