@@ -383,6 +383,10 @@ describe("PatientManagementPage", () => {
     expect(screen.getAllByText(/PHA-AB12/).length).toBeGreaterThan(0);
     expect(screen.getByText("2 treatments")).toBeTruthy();
     expect(screen.getByText(/First listed medication: Lisinopril/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: /treatment detail/i })).toHaveAttribute(
+      "href",
+      "/dashboard/treatments/22222222-2222-2222-2222-222222222222",
+    );
     expect(screen.getByText("Lisinopril + 1 more")).toBeTruthy();
     expect(screen.getByText("1 flag")).toBeTruthy();
     expect(screen.getAllByText("Monitor dizziness").length).toBeGreaterThan(0);

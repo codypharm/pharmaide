@@ -956,9 +956,17 @@ function PatientHeader({
           MRN: {item.patient.mrn} | First listed medication: {item.first_medication_name ?? "Not listed"}
         </p>
       </div>
-      <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-600">
-        <Clock size={14} />
-        Created {formatDateTime(item.treatment.created_at)}
+      <div className="flex items-center gap-2">
+        <Link
+          to={`/dashboard/treatments/${item.treatment.id}`}
+          className="inline-flex items-center justify-center rounded-lg border border-[#D9D5FB] bg-[#F0EFFF] px-3 py-2 text-xs font-bold text-[#463AD4] transition-colors hover:border-[#5548E8] hover:bg-[#5548E8] hover:!text-white"
+        >
+          Treatment Detail
+        </Link>
+        <div className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600">
+          <Clock size={14} />
+          Created {formatDateTime(item.treatment.created_at)}
+        </div>
       </div>
     </div>
   );

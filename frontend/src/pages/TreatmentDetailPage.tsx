@@ -79,13 +79,16 @@ export default function TreatmentDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { isPrivacyMode } = useOutletContext<OutletContext>();
   const [state, setState] = useState<FetchState>({ kind: "loading" });
-  const [activeTab, setActiveTab] = useState<"overview" | "reasoning">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "reasoning">(
+    "overview",
+  );
   const [startCycleState, setStartCycleState] = useState<
     { kind: "idle" | "starting" } | { kind: "error"; requestId: string | null }
   >({ kind: "idle" });
-  const [activationAnalysis, setActivationAnalysis] = useState<ActivationAnalysisState>({
-    kind: "loading",
-  });
+  const [activationAnalysis, setActivationAnalysis] =
+    useState<ActivationAnalysisState>({
+      kind: "loading",
+    });
 
   useEffect(() => {
     if (!id) return;
@@ -147,7 +150,10 @@ export default function TreatmentDetailPage() {
       });
       setStartCycleState({ kind: "idle" });
     } catch (err) {
-      if (err instanceof ConflictError && err.errorCode === "analysis_not_completed") {
+      if (
+        err instanceof ConflictError &&
+        err.errorCode === "analysis_not_completed"
+      ) {
         setActivationAnalysis({ kind: "ok", ready: false, completedAt: null });
         setStartCycleState({ kind: "idle" });
         return;
@@ -185,7 +191,10 @@ export default function TreatmentDetailPage() {
 
   const handleTreatmentDetailReloaded = (detail: TreatmentDetail) => {
     setState({ kind: "ok", data: detail });
-    if (detail.treatment.status === "pending" && detail.treatment.automation_mode === "paused") {
+    if (
+      detail.treatment.status === "pending" &&
+      detail.treatment.automation_mode === "paused"
+    ) {
       setActivationAnalysis({ kind: "ok", ready: false, completedAt: null });
     }
   };
@@ -239,7 +248,10 @@ type CheckInState =
   | { kind: "ok"; items: PatientCheckInView[] }
   | { kind: "error"; requestId: string | null };
 
-const REPORT_TYPE_OPTIONS: { value: PatientCheckInReportType; label: string }[] = [
+const REPORT_TYPE_OPTIONS: {
+  value: PatientCheckInReportType;
+  label: string;
+}[] = [
   { value: "not_improving", label: "Not improving" },
   { value: "side_effect", label: "Side effect" },
   { value: "feeling_better", label: "Feeling better" },
@@ -255,7 +267,8 @@ function PatientUpdatesCard({
   isPrivacyMode: boolean;
 }) {
   const [state, setState] = useState<CheckInState>({ kind: "loading" });
-  const [reportType, setReportType] = useState<PatientCheckInReportType>("general_update");
+  const [reportType, setReportType] =
+    useState<PatientCheckInReportType>("general_update");
   const [message, setMessage] = useState("");
   const [observedAt, setObservedAt] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -296,7 +309,9 @@ function PatientUpdatesCard({
         observed_at: toOptionalIso(observedAt),
       });
       setState((current) =>
-        current.kind === "ok" ? { kind: "ok", items: [created, ...current.items] } : current,
+        current.kind === "ok"
+          ? { kind: "ok", items: [created, ...current.items] }
+          : current,
       );
       setMessage("");
       setObservedAt("");
@@ -316,7 +331,10 @@ function PatientUpdatesCard({
   const phi = isPrivacyMode ? "blur-sm select-none" : "";
 
   return (
-    <Section title="Patient-Reported Updates" icon={<MessageSquare size={16} />}>
+    <Section
+      title="Patient-Reported Updates"
+      icon={<MessageSquare size={16} />}
+    >
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div>
           {state.kind === "loading" && (
@@ -342,14 +360,17 @@ function PatientUpdatesCard({
                     No patient-reported updates recorded
                   </p>
                   <p className="mt-1 text-sm text-slate-500">
-                    Use this section when a patient reports symptoms, progress, concerns, or a
-                    missed dose.
+                    Use this section when a patient reports symptoms, progress,
+                    concerns, or a missed dose.
                   </p>
                 </div>
               ) : (
                 <div className="space-y-3">
                   {state.items.map((item) => (
-                    <div key={item.id} className="border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div
+                      key={item.id}
+                      className="border border-slate-200 bg-slate-50 px-4 py-3"
+                    >
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
                           {reportTypeLabel(item.report_type)}
@@ -358,7 +379,9 @@ function PatientUpdatesCard({
                           {formatCreatedAt(item.observed_at ?? item.created_at)}
                         </span>
                       </div>
-                      <p className={`mt-2 text-sm leading-6 text-slate-900 ${phi}`}>
+                      <p
+                        className={`mt-2 text-sm leading-6 text-slate-900 ${phi}`}
+                      >
                         {item.message}
                       </p>
                       <p className="mt-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -393,7 +416,9 @@ function PatientUpdatesCard({
               <select
                 id="patient-update-type"
                 value={reportType}
-                onChange={(event) => setReportType(event.target.value as PatientCheckInReportType)}
+                onChange={(event) =>
+                  setReportType(event.target.value as PatientCheckInReportType)
+                }
                 className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-[#5548E8] focus:outline-none focus:ring-2 focus:ring-[#D9D5FB]"
               >
                 {REPORT_TYPE_OPTIONS.map((option) => (
@@ -439,7 +464,11 @@ function PatientUpdatesCard({
               disabled={isSaving}
               className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-wait disabled:bg-slate-400"
             >
-              {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+              {isSaving ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <Send size={16} />
+              )}
               Save Clinical Update
             </button>
           </div>
@@ -572,7 +601,11 @@ type AdherenceState =
   | { kind: "ok"; items: AdherenceEventView[] }
   | { kind: "error"; items: AdherenceEventView[] };
 
-function ReasoningTab({ treatment }: { treatment: TreatmentDetail["treatment"] }) {
+function ReasoningTab({
+  treatment,
+}: {
+  treatment: TreatmentDetail["treatment"];
+}) {
   const treatmentId = treatment.id;
   const analysis = useAnalysisStatus(treatmentId);
   const [adherenceState, setAdherenceState] = useState<AdherenceState>({
@@ -639,7 +672,9 @@ function ReasoningTab({ treatment }: { treatment: TreatmentDetail["treatment"] }
             <p className="text-sm font-bold text-slate-900">
               No analysis has been run for this treatment.
             </p>
-            {startError && <p className="mt-2 text-sm text-red-700">{startError}</p>}
+            {startError && (
+              <p className="mt-2 text-sm text-red-700">{startError}</p>
+            )}
           </div>
           <button
             type="button"
@@ -647,7 +682,11 @@ function ReasoningTab({ treatment }: { treatment: TreatmentDetail["treatment"] }
             disabled={isStarting}
             className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
           >
-            {isStarting ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
+            {isStarting ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <Play size={16} />
+            )}
             Run Analysis
           </button>
         </div>
@@ -672,7 +711,9 @@ function ReasoningTab({ treatment }: { treatment: TreatmentDetail["treatment"] }
         onConfirmRerun={() => void handleStartAnalysis(true)}
       />
       {startError && <p className="mt-3 text-sm text-red-700">{startError}</p>}
-      {isActiveAnalysis && <ActiveAnalysisNotice status={analysis.data.status} />}
+      {isActiveAnalysis && (
+        <ActiveAnalysisNotice status={analysis.data.status} />
+      )}
       {isShowingLastCompleted && (
         <LastCompletedAnalysisNotice
           latestStatus={analysis.data.status}
@@ -694,9 +735,11 @@ function ReasoningTab({ treatment }: { treatment: TreatmentDetail["treatment"] }
   );
 }
 
-function analysisToDisplay(analysis: TreatmentAnalysisSnapshot & {
-  last_completed?: TreatmentAnalysisSnapshot | null;
-}): TreatmentAnalysisSnapshot {
+function analysisToDisplay(
+  analysis: TreatmentAnalysisSnapshot & {
+    last_completed?: TreatmentAnalysisSnapshot | null;
+  },
+): TreatmentAnalysisSnapshot {
   if (analysis.result) return analysis;
   if (analysis.last_completed?.result) return analysis.last_completed;
   return analysis;
@@ -709,7 +752,8 @@ function ActiveAnalysisNotice({ status }: { status: string }) {
       <div>
         <p className="text-sm font-bold text-slate-900">Analysis in progress</p>
         <p className="mt-1 text-sm text-slate-500">
-          Current status is {status}. This page is polling for the completed reasoning result.
+          Current status is {status}. This page is polling for the completed
+          reasoning result.
         </p>
       </div>
     </div>
@@ -729,7 +773,8 @@ function LastCompletedAnalysisNotice({
       <div>
         <p className="font-bold">Latest analysis attempt could not complete</p>
         <p className="mt-1">
-          {analysisFailureLabel(errorText)}. Showing the most recent completed analysis below.
+          {analysisFailureLabel(errorText)}. Showing the most recent completed
+          analysis below.
         </p>
         <p className="mt-1 text-xs font-semibold uppercase tracking-wider text-amber-800">
           Latest attempt status: {latestStatus}
@@ -848,7 +893,9 @@ function ClinicalSummary({ result }: { result: AnalysisResult }) {
       <SubsectionTitle>Clinical Summary</SubsectionTitle>
       {result.reasoning ? (
         <div className="mt-3 space-y-3">
-          <p className="text-sm leading-6 text-slate-900">{result.reasoning.summary}</p>
+          <p className="text-sm leading-6 text-slate-900">
+            {result.reasoning.summary}
+          </p>
           {result.reasoning.red_flags.length > 0 && (
             <div className="space-y-2">
               <div className="text-[11px] font-bold uppercase tracking-wider text-red-700">
@@ -896,12 +943,16 @@ function SourcesList({ citations }: { citations: KBCitation[] }) {
                   </p>
                 </div>
               </div>
-              <p className="mt-3 text-sm leading-6 text-slate-700">{citation.text}</p>
+              <p className="mt-3 text-sm leading-6 text-slate-700">
+                {citation.text}
+              </p>
             </div>
           ))}
         </div>
       ) : (
-        <EmptyAnalysisText>No uploaded clinical assets were cited.</EmptyAnalysisText>
+        <EmptyAnalysisText>
+          No uploaded clinical assets were cited.
+        </EmptyAnalysisText>
       )}
     </div>
   );
@@ -924,14 +975,26 @@ function ClinicalSafetyReviewPanel({
         </span>
       </div>
       <p className="mt-2 text-xs font-semibold text-slate-500">
-        Interim model review, not a licensed interaction database result. Confidence{" "}
-        {formatRelevance(review.confidence)}.
+        Interim model review, not a licensed interaction database result.
+        Confidence {formatRelevance(review.confidence)}.
       </p>
       <div className="mt-3 grid gap-3 lg:grid-cols-2">
-        <ReviewList title="Possible Interactions" items={review.possible_interactions} />
-        <ReviewList title="Monitoring Concerns" items={review.monitoring_concerns} />
-        <ReviewList title="Counseling Points" items={review.counseling_points} />
-        <ReviewList title="Missing Information" items={review.missing_information} />
+        <ReviewList
+          title="Possible Interactions"
+          items={review.possible_interactions}
+        />
+        <ReviewList
+          title="Monitoring Concerns"
+          items={review.monitoring_concerns}
+        />
+        <ReviewList
+          title="Counseling Points"
+          items={review.counseling_points}
+        />
+        <ReviewList
+          title="Missing Information"
+          items={review.missing_information}
+        />
       </div>
     </div>
   );
@@ -979,7 +1042,9 @@ function GroundingsList({ groundings }: { groundings: MedicationGrounding[] }) {
           ))}
         </div>
       ) : (
-        <EmptyAnalysisText>No medication groundings were produced.</EmptyAnalysisText>
+        <EmptyAnalysisText>
+          No medication groundings were produced.
+        </EmptyAnalysisText>
       )}
     </div>
   );
@@ -1008,7 +1073,9 @@ function InteractionsList({ warnings }: { warnings: DDIWarning[] }) {
           ))}
         </div>
       ) : (
-        <EmptyAnalysisText>No interaction warnings were returned.</EmptyAnalysisText>
+        <EmptyAnalysisText>
+          No interaction warnings were returned.
+        </EmptyAnalysisText>
       )}
     </div>
   );
@@ -1026,7 +1093,10 @@ function SchedulePreview({
   treatmentStartAt: string | null;
 }) {
   const medicationNames = new Map(
-    groundings.map((grounding) => [grounding.medication_id, grounding.medication_name]),
+    groundings.map((grounding) => [
+      grounding.medication_id,
+      grounding.medication_name,
+    ]),
   );
   const adherenceByReminder = latestAdherenceByReminder(adherenceState.items);
 
@@ -1045,7 +1115,10 @@ function SchedulePreview({
       {reminders.length > 0 ? (
         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
           {reminders.map((reminder, index) => {
-            const scheduledFor = scheduledForIso(treatmentStartAt, reminder.offset_from_start);
+            const scheduledFor = scheduledForIso(
+              treatmentStartAt,
+              reminder.offset_from_start,
+            );
             const key = adherenceKey(reminder.medication_id, scheduledFor);
             const event = adherenceByReminder.get(key);
 
@@ -1067,7 +1140,9 @@ function SchedulePreview({
                   {reminder.human_label}
                 </div>
                 <div className="mt-1 flex items-center gap-1 text-xs text-slate-500">
-                  <span>{formatReminderTiming(reminder.offset_from_start)}</span>
+                  <span>
+                    {formatReminderTiming(reminder.offset_from_start)}
+                  </span>
                 </div>
                 {event && (
                   <p className="mt-2 text-xs font-semibold text-slate-500">
@@ -1079,13 +1154,19 @@ function SchedulePreview({
           })}
         </div>
       ) : (
-        <EmptyAnalysisText>No schedule reminders were generated.</EmptyAnalysisText>
+        <EmptyAnalysisText>
+          No schedule reminders were generated.
+        </EmptyAnalysisText>
       )}
     </div>
   );
 }
 
-function AdherenceStatusChip({ event }: { event: AdherenceEventView | undefined }) {
+function AdherenceStatusChip({
+  event,
+}: {
+  event: AdherenceEventView | undefined;
+}) {
   if (!event) {
     return (
       <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
@@ -1135,7 +1216,8 @@ function formatReminderTiming(offset: string): string {
       : null,
     secondsWithinDay % 60 ? `${secondsWithinDay % 60}s` : null,
   ].filter(Boolean);
-  const relativeTime = timeParts.length > 0 ? `+${timeParts.join(" ")}` : "at start";
+  const relativeTime =
+    timeParts.length > 0 ? `+${timeParts.join(" ")}` : "at start";
 
   return `Planned Day ${plannedDay} · ${relativeTime}`;
 }
@@ -1155,7 +1237,10 @@ function durationToSeconds(offset: string): number | null {
   );
 }
 
-function scheduledForIso(treatmentStartAt: string | null, offset: string): string | null {
+function scheduledForIso(
+  treatmentStartAt: string | null,
+  offset: string,
+): string | null {
   if (!treatmentStartAt) return null;
   const start = new Date(treatmentStartAt);
   const offsetSeconds = durationToSeconds(offset);
@@ -1163,17 +1248,25 @@ function scheduledForIso(treatmentStartAt: string | null, offset: string): strin
   return new Date(start.getTime() + offsetSeconds * 1000).toISOString();
 }
 
-function latestAdherenceByReminder(events: AdherenceEventView[]): Map<string, AdherenceEventView> {
+function latestAdherenceByReminder(
+  events: AdherenceEventView[],
+): Map<string, AdherenceEventView> {
   const latest = new Map<string, AdherenceEventView>();
   for (const event of events) {
     // The API returns newest first; keep the first event for each scheduled dose.
-    const key = adherenceKey(event.medication_id, normaliseEventTime(event.scheduled_for));
+    const key = adherenceKey(
+      event.medication_id,
+      normaliseEventTime(event.scheduled_for),
+    );
     if (!latest.has(key)) latest.set(key, event);
   }
   return latest;
 }
 
-function adherenceKey(medicationId: string, scheduledFor: string | null): string {
+function adherenceKey(
+  medicationId: string,
+  scheduledFor: string | null,
+): string {
   return `${medicationId}:${normaliseEventTime(scheduledFor) ?? "unscheduled"}`;
 }
 
@@ -1280,7 +1373,9 @@ function Field({
       <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
         {label}
       </div>
-      <div className={`text-sm text-slate-900 tabular-nums ${valueClassName}`}>{value}</div>
+      <div className={`text-sm text-slate-900 tabular-nums ${valueClassName}`}>
+        {value}
+      </div>
     </div>
   );
 }
@@ -1362,7 +1457,9 @@ function PatientCard({
             ))}
           </div>
         ) : (
-          <p className="text-sm font-semibold text-slate-500">No allergies recorded.</p>
+          <p className="text-sm font-semibold text-slate-500">
+            No allergies recorded.
+          </p>
         )}
       </div>
     </Section>
@@ -1378,7 +1475,9 @@ function TreatmentCard({
   onUpdated,
 }: {
   data: TreatmentDetail;
-  startCycleState: { kind: "idle" | "starting" } | { kind: "error"; requestId: string | null };
+  startCycleState:
+    | { kind: "idle" | "starting" }
+    | { kind: "error"; requestId: string | null };
   activationAnalysis: ActivationAnalysisState;
   onStartCycle: () => void;
   onTerminated: (treatment: TreatmentView) => void;
@@ -1390,10 +1489,12 @@ function TreatmentCard({
   const isPending = t.status === "pending";
   const isTerminated = t.status === "terminated";
   const isStarting = startCycleState.kind === "starting";
-  const analysisReady = activationAnalysis.kind === "ok" && activationAnalysis.ready;
+  const analysisReady =
+    activationAnalysis.kind === "ok" && activationAnalysis.ready;
   const planChangeNeedsAnalysis =
     isPending && treatmentPlanChangedAfterAnalysis(data, activationAnalysis);
-  const canStart = isPending && !isStarting && analysisReady && !planChangeNeedsAnalysis;
+  const canStart =
+    isPending && !isStarting && analysisReady && !planChangeNeedsAnalysis;
   const [terminateState, setTerminateState] = useState<
     | { kind: "idle" }
     | { kind: "confirming" }
@@ -1444,7 +1545,11 @@ function TreatmentCard({
           <StatusField status={t.status} />
           <Field
             label="Treatment Starts"
-            value={t.treatment_start_at ? formatCreatedAt(t.treatment_start_at) : "Not set"}
+            value={
+              t.treatment_start_at
+                ? formatCreatedAt(t.treatment_start_at)
+                : "Not set"
+            }
           />
           <Field label="Created" value={formatCreatedAt(t.created_at)} />
           <Field label="Treatment ID" value={t.id} />
@@ -1494,7 +1599,8 @@ function TreatmentCard({
             )}
             {startCycleState.kind === "error" && (
               <p className="max-w-64 text-xs font-semibold text-red-700">
-                Could not start cycle. Reference ID: {startCycleState.requestId ?? "unknown"}
+                Could not start cycle. Reference ID:{" "}
+                {startCycleState.requestId ?? "unknown"}
               </p>
             )}
           </div>
@@ -1515,13 +1621,17 @@ function TreatmentCard({
         <div className="mt-6 border-t border-slate-100 pt-4">
           <div className="flex flex-col gap-3 rounded-lg border border-red-100 bg-red-50/40 p-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-sm font-bold text-slate-900">Treatment control</p>
+              <p className="text-sm font-bold text-slate-900">
+                Treatment control
+              </p>
               <p className="mt-1 text-xs font-semibold leading-5 text-slate-600">
-                End this monitoring cycle and stop future reminders and check-ins.
+                End this monitoring cycle and stop future reminders and
+                check-ins.
               </p>
               {terminateState.kind === "error" && (
                 <p className="mt-2 text-xs font-semibold text-red-700">
-                  Could not stop monitoring. Reference ID: {terminateState.requestId ?? "unknown"}
+                  Could not stop monitoring. Reference ID:{" "}
+                  {terminateState.requestId ?? "unknown"}
                 </p>
               )}
             </div>
@@ -1612,7 +1722,7 @@ function TreatmentObjectiveEditor({
           type="submit"
           aria-label="Save objective"
           disabled={!isDirty || isSaving}
-          className="inline-flex w-fit shrink-0 cursor-pointer items-center justify-center gap-2 rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-bold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+          className="inline-flex w-fit shrink-0 cursor-pointer items-center justify-center gap-2 self-end rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-bold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
         >
           {isSaving ? (
             <>
@@ -1661,7 +1771,9 @@ function CompletionReportCard({
   onArchived: (treatment: TreatmentView) => void;
 }) {
   const [state, setState] = useState<CompletionReportState>({ kind: "idle" });
-  const [archiveState, setArchiveState] = useState<ArchiveState>({ kind: "idle" });
+  const [archiveState, setArchiveState] = useState<ArchiveState>({
+    kind: "idle",
+  });
   const isCompleted = treatment.status === "completed";
   const archivedAt = treatment.archived_at ?? null;
 
@@ -1704,7 +1816,9 @@ function CompletionReportCard({
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-sm font-black text-slate-950">Course complete</p>
+              <p className="text-sm font-black text-slate-950">
+                Course complete
+              </p>
               <p className="mt-1 text-sm leading-6 text-slate-600">
                 The report is count-based and excludes patient message text.
               </p>
@@ -1756,7 +1870,8 @@ function CompletionReportCard({
 
           {state.kind === "error" && (
             <p className="text-sm font-semibold text-red-700">
-              Could not load completion report. Reference ID: {state.requestId ?? "unknown"}
+              Could not load completion report. Reference ID:{" "}
+              {state.requestId ?? "unknown"}
             </p>
           )}
           {archiveState.kind === "error" && (
@@ -1765,20 +1880,28 @@ function CompletionReportCard({
               {archiveState.requestId ?? "unknown"}
             </p>
           )}
-          {state.kind === "ok" && <CompletionReportSummary report={state.report} />}
+          {state.kind === "ok" && (
+            <CompletionReportSummary report={state.report} />
+          )}
         </div>
       )}
     </Section>
   );
 }
 
-function CompletionReportSummary({ report }: { report: CourseCompletionReport }) {
+function CompletionReportSummary({
+  report,
+}: {
+  report: CourseCompletionReport;
+}) {
   const taken = report.adherence.by_status.taken ?? 0;
   const missed = report.adherence.by_status.missed ?? 0;
 
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-      <h4 className="text-sm font-black text-slate-950">Course Completion Report</h4>
+      <h4 className="text-sm font-black text-slate-950">
+        Course Completion Report
+      </h4>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <ReportMetric
           label="Medications"
@@ -1788,7 +1911,10 @@ function CompletionReportSummary({ report }: { report: CourseCompletionReport })
         <ReportMetric label="Missed" value={`${missed} missed`} />
         <ReportMetric
           label="Patient Updates"
-          value={pluralize(report.patient_updates.total_count, "patient update")}
+          value={pluralize(
+            report.patient_updates.total_count,
+            "patient update",
+          )}
         />
         <ReportMetric
           label="Triage"
@@ -1802,8 +1928,12 @@ function CompletionReportSummary({ report }: { report: CourseCompletionReport })
 function ReportMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3">
-      <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
-      <p className="mt-1 text-sm font-black text-slate-950 tabular-nums">{value}</p>
+      <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+        {label}
+      </p>
+      <p className="mt-1 text-sm font-black text-slate-950 tabular-nums">
+        {value}
+      </p>
     </div>
   );
 }
@@ -1820,8 +1950,11 @@ function analysisReadyForCycle(analysis: TreatmentAnalysisRow | null): boolean {
 function completedAnalysisForCycle(
   analysis: TreatmentAnalysisRow | null,
 ): TreatmentAnalysisRow | null {
-  const completed = analysis?.status === "completed" ? analysis : analysis?.last_completed;
-  return completed?.status === "completed" && completed.result !== null ? completed : null;
+  const completed =
+    analysis?.status === "completed" ? analysis : analysis?.last_completed;
+  return completed?.status === "completed" && completed.result !== null
+    ? completed
+    : null;
 }
 
 function treatmentPlanChangedAfterAnalysis(
@@ -1840,15 +1973,23 @@ function treatmentPlanChangedAfterAnalysis(
   const latestDiscontinuedAt = latestMedicationDiscontinuedAt(data);
   if (!latestDiscontinuedAt) return false;
   if (!activationAnalysis.completedAt) return true;
-  return latestDiscontinuedAt.getTime() > new Date(activationAnalysis.completedAt).getTime();
+  return (
+    latestDiscontinuedAt.getTime() >
+    new Date(activationAnalysis.completedAt).getTime()
+  );
 }
 
 function latestMedicationDiscontinuedAt(data: TreatmentDetail): Date | null {
   const timestamps = data.medications
     .map((medication) =>
-      medication.discontinued_at ? new Date(medication.discontinued_at).getTime() : null,
+      medication.discontinued_at
+        ? new Date(medication.discontinued_at).getTime()
+        : null,
     )
-    .filter((timestamp): timestamp is number => timestamp !== null && !Number.isNaN(timestamp));
+    .filter(
+      (timestamp): timestamp is number =>
+        timestamp !== null && !Number.isNaN(timestamp),
+    );
   if (timestamps.length === 0) return null;
   return new Date(Math.max(...timestamps));
 }
@@ -1936,15 +2077,19 @@ function MedicationsCard({
   data: TreatmentDetail;
   onTreatmentDetailReloaded: (detail: TreatmentDetail) => void;
 }) {
-  const [discontinueState, setDiscontinueState] = useState<MedicationDiscontinueState>({
-    kind: "idle",
+  const [discontinueState, setDiscontinueState] =
+    useState<MedicationDiscontinueState>({
+      kind: "idle",
+    });
+  const [addState, setAddState] = useState<MedicationAddState>({
+    kind: "closed",
   });
-  const [addState, setAddState] = useState<MedicationAddState>({ kind: "closed" });
   const [form, setForm] = useState<MedicationForm>(EMPTY_MEDICATION_FORM);
   const canDiscontinue =
     data.treatment.status === "active" || data.treatment.status === "pending";
   const canAddMedication =
-    data.treatment.status !== "completed" && data.treatment.status !== "terminated";
+    data.treatment.status !== "completed" &&
+    data.treatment.status !== "terminated";
   const canSaveMedication =
     form.name.trim() !== "" &&
     form.dosage.trim() !== "" &&
@@ -1968,7 +2113,9 @@ function MedicationsCard({
     }
   }
 
-  async function handleAddMedication(event: FormEvent<HTMLFormElement>): Promise<void> {
+  async function handleAddMedication(
+    event: FormEvent<HTMLFormElement>,
+  ): Promise<void> {
     event.preventDefault();
     setAddState({ kind: "saving" });
     try {
@@ -2081,7 +2228,8 @@ function MedicationsCard({
               </div>
               {addState.kind === "error" && (
                 <p className="mt-3 text-xs font-semibold text-red-700">
-                  Could not add medication. Reference ID: {addState.requestId ?? "unknown"}
+                  Could not add medication. Reference ID:{" "}
+                  {addState.requestId ?? "unknown"}
                 </p>
               )}
             </form>
@@ -2106,11 +2254,14 @@ function MedicationsCard({
             {data.medications.map((m, i) => {
               const isDiscontinued = Boolean(m.discontinued_at);
               const isConfirming =
-                discontinueState.kind === "confirming" && discontinueState.medicationId === m.id;
+                discontinueState.kind === "confirming" &&
+                discontinueState.medicationId === m.id;
               const isSaving =
-                discontinueState.kind === "saving" && discontinueState.medicationId === m.id;
+                discontinueState.kind === "saving" &&
+                discontinueState.medicationId === m.id;
               const errorForMedication =
-                discontinueState.kind === "error" && discontinueState.medicationId === m.id
+                discontinueState.kind === "error" &&
+                discontinueState.medicationId === m.id
                   ? discontinueState.requestId
                   : null;
 
@@ -2144,13 +2295,15 @@ function MedicationsCard({
                     )}
                     {errorForMedication && (
                       <p className="mt-1 text-xs font-semibold text-red-700">
-                        Could not discontinue. Reference ID: {errorForMedication}
+                        Could not discontinue. Reference ID:{" "}
+                        {errorForMedication}
                       </p>
                     )}
                   </td>
                   <td className="py-2 pl-4 text-right">
-                    {canDiscontinue && !isDiscontinued && (
-                      isConfirming ? (
+                    {canDiscontinue &&
+                      !isDiscontinued &&
+                      (isConfirming ? (
                         <div className="flex justify-end gap-2">
                           <button
                             type="button"
@@ -2161,7 +2314,9 @@ function MedicationsCard({
                           </button>
                           <button
                             type="button"
-                            onClick={() => setDiscontinueState({ kind: "idle" })}
+                            onClick={() =>
+                              setDiscontinueState({ kind: "idle" })
+                            }
                             className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50 cursor-pointer"
                           >
                             Keep
@@ -2171,15 +2326,17 @@ function MedicationsCard({
                         <button
                           type="button"
                           onClick={() =>
-                            setDiscontinueState({ kind: "confirming", medicationId: m.id })
+                            setDiscontinueState({
+                              kind: "confirming",
+                              medicationId: m.id,
+                            })
                           }
                           disabled={isSaving}
                           className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-700 transition-colors hover:border-red-700 hover:bg-red-700 hover:text-white disabled:cursor-wait disabled:text-red-300 cursor-pointer"
                         >
                           {isSaving ? "Discontinuing" : "Discontinue"}
                         </button>
-                      )
-                    )}
+                      ))}
                   </td>
                 </tr>
               );
