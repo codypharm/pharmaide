@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import {
   Archive,
@@ -12,12 +12,14 @@ import {
   Brain,
   MessageSquare,
   Play,
+  Plus,
   Send,
   ShieldCheck,
 } from "lucide-react";
 
 import { ApiError, ConflictError, NotFoundError } from "../api/client";
 import {
+  addMedicationToTreatment,
   archiveTreatment,
   createPatientCheckIn,
   discontinueMedication,
@@ -174,6 +176,9 @@ export default function TreatmentDetailPage() {
 
   const handleTreatmentDetailReloaded = (detail: TreatmentDetail) => {
     setState({ kind: "ok", data: detail });
+    if (detail.treatment.status === "pending" && detail.treatment.automation_mode === "paused") {
+      setActivationAnalysis({ kind: "ok", ready: false, completedAt: null });
+    }
   };
 
   return (
@@ -1729,6 +1734,14 @@ function treatmentPlanChangedAfterAnalysis(
   data: TreatmentDetail,
   activationAnalysis: ActivationAnalysisState,
 ): boolean {
+  if (
+    data.treatment.status === "pending" &&
+    data.treatment.automation_mode === "paused" &&
+    activationAnalysis.kind === "ok" &&
+    !activationAnalysis.ready
+  ) {
+    return true;
+  }
   if (activationAnalysis.kind !== "ok") return false;
   const latestDiscontinuedAt = latestMedicationDiscontinuedAt(data);
   if (!latestDiscontinuedAt) return false;
@@ -1746,11 +1759,62 @@ function latestMedicationDiscontinuedAt(data: TreatmentDetail): Date | null {
   return new Date(Math.max(...timestamps));
 }
 
+function MedicationFormField({
+  id,
+  label,
+  value,
+  onChange,
+  required = false,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+}) {
+  return (
+    <label htmlFor={id} className="block">
+      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+        {label}
+      </span>
+      <input
+        id={id}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        required={required}
+        className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 focus:border-[#5548E8] focus:outline-none focus:ring-2 focus:ring-[#D9D5FB]"
+      />
+    </label>
+  );
+}
+
 type MedicationDiscontinueState =
   | { kind: "idle" }
   | { kind: "confirming"; medicationId: string }
   | { kind: "saving"; medicationId: string }
   | { kind: "error"; medicationId: string; requestId: string | null };
+
+type MedicationAddState =
+  | { kind: "closed" }
+  | { kind: "editing" }
+  | { kind: "saving" }
+  | { kind: "error"; requestId: string | null };
+
+type MedicationForm = {
+  name: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  objective: string;
+};
+
+const EMPTY_MEDICATION_FORM: MedicationForm = {
+  name: "",
+  dosage: "",
+  frequency: "",
+  duration: "",
+  objective: "",
+};
 
 function MedicationsCard({
   data,
@@ -1762,7 +1826,17 @@ function MedicationsCard({
   const [discontinueState, setDiscontinueState] = useState<MedicationDiscontinueState>({
     kind: "idle",
   });
+  const [addState, setAddState] = useState<MedicationAddState>({ kind: "closed" });
+  const [form, setForm] = useState<MedicationForm>(EMPTY_MEDICATION_FORM);
   const canDiscontinue = data.treatment.status === "active";
+  const canAddMedication =
+    data.treatment.status !== "completed" && data.treatment.status !== "terminated";
+  const canSaveMedication =
+    form.name.trim() !== "" &&
+    form.dosage.trim() !== "" &&
+    form.frequency.trim() !== "" &&
+    form.duration.trim() !== "" &&
+    addState.kind !== "saving";
 
   async function handleDiscontinue(medicationId: string): Promise<void> {
     setDiscontinueState({ kind: "saving", medicationId });
@@ -1780,8 +1854,123 @@ function MedicationsCard({
     }
   }
 
+  async function handleAddMedication(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    setAddState({ kind: "saving" });
+    try {
+      await addMedicationToTreatment(data.treatment.id, {
+        name: form.name.trim(),
+        dosage: form.dosage.trim(),
+        frequency: form.frequency.trim(),
+        duration: form.duration.trim(),
+        objective: form.objective.trim() || null,
+      });
+      const detail = await getTreatment(data.treatment.id);
+      onTreatmentDetailReloaded(detail);
+      setForm(EMPTY_MEDICATION_FORM);
+      setAddState({ kind: "closed" });
+    } catch (err) {
+      setAddState({
+        kind: "error",
+        requestId: err instanceof ApiError ? err.requestId : null,
+      });
+    }
+  }
+
+  const updateForm = (field: keyof MedicationForm, value: string) => {
+    setForm((current) => ({ ...current, [field]: value }));
+  };
+
   return (
     <Section title="Medications" icon={<Pill size={16} />}>
+      {canAddMedication && (
+        <div className="mb-4">
+          {addState.kind === "closed" ? (
+            <button
+              type="button"
+              onClick={() => setAddState({ kind: "editing" })}
+              className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-800 transition-colors hover:border-[#5548E8] hover:text-[#463AD4]"
+            >
+              <Plus size={15} />
+              Add Medication
+            </button>
+          ) : (
+            <form
+              onSubmit={(event) => void handleAddMedication(event)}
+              className="rounded-lg border border-slate-200 bg-slate-50 p-4"
+            >
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <MedicationFormField
+                  id="new-medication-name"
+                  label="Medication Name"
+                  value={form.name}
+                  onChange={(value) => updateForm("name", value)}
+                  required
+                />
+                <MedicationFormField
+                  id="new-medication-dosage"
+                  label="Dosage"
+                  value={form.dosage}
+                  onChange={(value) => updateForm("dosage", value)}
+                  required
+                />
+                <MedicationFormField
+                  id="new-medication-frequency"
+                  label="Frequency"
+                  value={form.frequency}
+                  onChange={(value) => updateForm("frequency", value)}
+                  required
+                />
+                <MedicationFormField
+                  id="new-medication-duration"
+                  label="Duration"
+                  value={form.duration}
+                  onChange={(value) => updateForm("duration", value)}
+                  required
+                />
+              </div>
+              <div className="mt-3">
+                <MedicationFormField
+                  id="new-medication-objective"
+                  label="Medication Objective"
+                  value={form.objective}
+                  onChange={(value) => updateForm("objective", value)}
+                />
+              </div>
+              <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs font-semibold text-slate-500">
+                  Saving a medication pauses monitoring until analysis is rerun.
+                </p>
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddState({ kind: "closed" });
+                      setForm(EMPTY_MEDICATION_FORM);
+                    }}
+                    disabled={addState.kind === "saving"}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-wait disabled:text-slate-400"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!canSaveMedication}
+                    className="rounded-lg bg-[#5548E8] px-3 py-2 text-sm font-bold text-white transition-colors hover:bg-[#463AD4] disabled:cursor-wait disabled:bg-slate-400"
+                  >
+                    {addState.kind === "saving" ? "Saving" : "Save Medication"}
+                  </button>
+                </div>
+              </div>
+              {addState.kind === "error" && (
+                <p className="mt-3 text-xs font-semibold text-red-700">
+                  Could not add medication. Reference ID: {addState.requestId ?? "unknown"}
+                </p>
+              )}
+            </form>
+          )}
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>

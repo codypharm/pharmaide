@@ -371,6 +371,58 @@ describe("TreatmentDetailPage", () => {
     expect(screen.queryByRole("button", { name: /^discontinue$/i })).toBeNull();
   });
 
+  it("lets the pharmacist add a medication and pauses cycle start for analysis rerun", async () => {
+    const activeTreatment = { ...SAMPLE.treatment, status: "active" };
+    const addedMedication = {
+      ...SAMPLE.medications[0],
+      id: "88888888-8888-8888-8888-888888888888",
+      name: "Amlodipine",
+      dosage: "5 mg",
+      ordinal: 1,
+    };
+    vi.spyOn(treatmentsApi, "getTreatment")
+      .mockResolvedValueOnce({
+        ...SAMPLE,
+        treatment: activeTreatment,
+      })
+      .mockResolvedValueOnce({
+        ...SAMPLE,
+        treatment: {
+          ...activeTreatment,
+          status: "pending",
+          automation_mode: "paused",
+        },
+        medications: [...SAMPLE.medications, addedMedication],
+      });
+    const addMedication = vi
+      .spyOn(treatmentsApi, "addMedicationToTreatment")
+      .mockResolvedValue(addedMedication);
+    vi.spyOn(treatmentsApi, "getAnalysis").mockResolvedValue(COMPLETED_ANALYSIS);
+    const user = userEvent.setup();
+
+    renderAt(SAMPLE.treatment.id);
+
+    await screen.findByText("Eleanor Vance");
+    await user.click(screen.getByRole("button", { name: /add medication/i }));
+    await user.type(screen.getByLabelText(/^medication name$/i), "Amlodipine");
+    await user.type(screen.getByLabelText(/^dosage$/i), "5 mg");
+    await user.type(screen.getByLabelText(/^frequency$/i), "Once Daily (QD)");
+    await user.type(screen.getByLabelText(/^duration$/i), "30 days");
+    await user.click(screen.getByRole("button", { name: /^save medication$/i }));
+
+    expect(addMedication).toHaveBeenCalledWith(SAMPLE.treatment.id, {
+      name: "Amlodipine",
+      dosage: "5 mg",
+      frequency: "Once Daily (QD)",
+      duration: "30 days",
+      objective: null,
+    });
+    expect(await screen.findByText("Amlodipine")).toBeTruthy();
+    expect(screen.getByText(/treatment plan changed/i)).toBeTruthy();
+    expect(screen.getByText(/rerun analysis before monitoring can resume/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /start cycle/i })).toBeDisabled();
+  });
+
   it("disables cycle start until analysis is completed", async () => {
     vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(SAMPLE);
     vi.spyOn(treatmentsApi, "getAnalysis").mockResolvedValue(RUNNING_ANALYSIS);
