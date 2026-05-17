@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  archiveTreatment,
   createAdherenceEvent,
   createPatientCheckIn,
   draftPatientReply,
@@ -511,6 +512,31 @@ describe("getCompletionReport", () => {
     expect(calledUrl).toMatch(/\/treatments\/t1\/completion-report$/);
     expect(result.status).toBe("completed");
     expect(result.adherence.by_status.taken).toBe(2);
+  });
+});
+
+describe("archiveTreatment", () => {
+  it("archives a completed treatment course", async () => {
+    const spy = mockFetch({
+      status: 200,
+      body: {
+        id: "t1",
+        patient_id: "p1",
+        status: "completed",
+        chat_response_mode: "ai_active",
+        automation_mode: "active",
+        clinical_objective: null,
+        treatment_start_at: "2026-05-16T08:30:00Z",
+        archived_at: "2026-05-20T12:00:00Z",
+        created_at: "2026-05-11T12:00:00Z",
+      },
+    });
+
+    const result = await archiveTreatment("t1");
+
+    const calledUrl = spy.mock.calls[0]?.[0] as string;
+    expect(calledUrl).toMatch(/\/treatments\/t1\/archive$/);
+    expect(result.archived_at).toBe("2026-05-20T12:00:00Z");
   });
 });
 

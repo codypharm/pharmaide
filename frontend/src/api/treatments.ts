@@ -62,6 +62,7 @@ export type TreatmentView = {
   automation_mode: "active" | "paused";
   clinical_objective: string | null;
   treatment_start_at: string | null;
+  archived_at?: string | null;
   created_at: string; // ISO 8601
 };
 
@@ -338,6 +339,13 @@ export function updateTreatmentClinicalObjective(
 export function startTreatmentCycle(treatmentId: string): Promise<TreatmentView> {
   return postJson<undefined, TreatmentView>(
     `/treatments/${treatmentId}/start-cycle`,
+    undefined,
+  );
+}
+
+export function archiveTreatment(treatmentId: string): Promise<TreatmentView> {
+  return postJson<undefined, TreatmentView>(
+    `/treatments/${treatmentId}/archive`,
     undefined,
   );
 }

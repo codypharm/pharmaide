@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import {
+  Archive,
   ArrowLeft,
   CheckCircle2,
   ClipboardList,
@@ -17,6 +18,7 @@ import {
 
 import { ApiError, ConflictError, NotFoundError } from "../api/client";
 import {
+  archiveTreatment,
   createPatientCheckIn,
   getCompletionReport,
   getAnalysis,
@@ -39,6 +41,7 @@ import {
   type TreatmentAnalysisRow,
   type TreatmentAnalysisSnapshot,
   type TreatmentDetail,
+  type TreatmentView,
 } from "../api/treatments";
 import { useAnalysisStatus } from "../hooks/useAnalysisStatus";
 
@@ -149,6 +152,14 @@ export default function TreatmentDetailPage() {
     }
   };
 
+  const handleTreatmentArchived = (treatment: TreatmentView) => {
+    if (state.kind !== "ok") return;
+    setState({
+      kind: "ok",
+      data: { ...state.data, treatment },
+    });
+  };
+
   return (
     <div className="h-full overflow-y-auto p-8">
       <div className="flex flex-col gap-6">
@@ -168,7 +179,10 @@ export default function TreatmentDetailPage() {
                   activationAnalysis={activationAnalysis}
                   onStartCycle={handleStartCycle}
                 />
-                <CompletionReportCard treatment={state.data.treatment} />
+                <CompletionReportCard
+                  treatment={state.data.treatment}
+                  onArchived={handleTreatmentArchived}
+                />
                 <MedicationsCard data={state.data} />
                 <PatientUpdatesCard
                   treatmentId={state.data.treatment.id}
@@ -1424,9 +1438,22 @@ type CompletionReportState =
   | { kind: "ok"; report: CourseCompletionReport }
   | { kind: "error"; requestId: string | null };
 
-function CompletionReportCard({ treatment }: { treatment: TreatmentDetail["treatment"] }) {
+type ArchiveState =
+  | { kind: "idle" }
+  | { kind: "saving" }
+  | { kind: "error"; requestId: string | null };
+
+function CompletionReportCard({
+  treatment,
+  onArchived,
+}: {
+  treatment: TreatmentDetail["treatment"];
+  onArchived: (treatment: TreatmentView) => void;
+}) {
   const [state, setState] = useState<CompletionReportState>({ kind: "idle" });
+  const [archiveState, setArchiveState] = useState<ArchiveState>({ kind: "idle" });
   const isCompleted = treatment.status === "completed";
+  const archivedAt = treatment.archived_at ?? null;
 
   async function handleLoadReport(): Promise<void> {
     if (!isCompleted || state.kind === "loading") return;
@@ -1436,6 +1463,21 @@ function CompletionReportCard({ treatment }: { treatment: TreatmentDetail["treat
       setState({ kind: "ok", report });
     } catch (err) {
       setState({
+        kind: "error",
+        requestId: err instanceof ApiError ? err.requestId : null,
+      });
+    }
+  }
+
+  async function handleArchive(): Promise<void> {
+    if (!isCompleted || archivedAt || archiveState.kind === "saving") return;
+    setArchiveState({ kind: "saving" });
+    try {
+      const archived = await archiveTreatment(treatment.id);
+      onArchived(archived);
+      setArchiveState({ kind: "idle" });
+    } catch (err) {
+      setArchiveState({
         kind: "error",
         requestId: err instanceof ApiError ? err.requestId : null,
       });
@@ -1456,27 +1498,61 @@ function CompletionReportCard({ treatment }: { treatment: TreatmentDetail["treat
               <p className="mt-1 text-sm leading-6 text-slate-600">
                 The report is count-based and excludes patient message text.
               </p>
-            </div>
-            <button
-              type="button"
-              onClick={handleLoadReport}
-              disabled={state.kind === "loading"}
-              className="inline-flex w-fit items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-900 transition-colors hover:bg-slate-50 disabled:cursor-wait disabled:text-slate-400"
-            >
-              {state.kind === "loading" ? (
-                <>
-                  <Loader2 size={15} className="animate-spin" />
-                  Loading report
-                </>
-              ) : (
-                "View Completion Report"
+              {archivedAt && (
+                <p className="mt-2 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold text-slate-600">
+                  <CheckCircle2 size={14} />
+                  Archived {formatCreatedAt(archivedAt)}
+                </p>
               )}
-            </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleLoadReport}
+                disabled={state.kind === "loading"}
+                className="inline-flex w-fit items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-900 transition-colors hover:bg-slate-50 disabled:cursor-wait disabled:text-slate-400"
+              >
+                {state.kind === "loading" ? (
+                  <>
+                    <Loader2 size={15} className="animate-spin" />
+                    Loading report
+                  </>
+                ) : (
+                  "View Completion Report"
+                )}
+              </button>
+              {!archivedAt && (
+                <button
+                  type="button"
+                  onClick={handleArchive}
+                  disabled={archiveState.kind === "saving"}
+                  className="inline-flex w-fit items-center justify-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-4 py-2 text-sm font-bold text-slate-700 transition-colors hover:bg-white disabled:cursor-wait disabled:text-slate-400"
+                >
+                  {archiveState.kind === "saving" ? (
+                    <>
+                      <Loader2 size={15} className="animate-spin" />
+                      Archiving
+                    </>
+                  ) : (
+                    <>
+                      <Archive size={15} />
+                      Archive completed course
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
           </div>
 
           {state.kind === "error" && (
             <p className="text-sm font-semibold text-red-700">
               Could not load completion report. Reference ID: {state.requestId ?? "unknown"}
+            </p>
+          )}
+          {archiveState.kind === "error" && (
+            <p className="text-sm font-semibold text-red-700">
+              Could not archive completed course. Reference ID:{" "}
+              {archiveState.requestId ?? "unknown"}
             </p>
           )}
           {state.kind === "ok" && <CompletionReportSummary report={state.report} />}
