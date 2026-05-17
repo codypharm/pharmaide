@@ -405,8 +405,13 @@ describe("TreatmentDetailPage", () => {
     await screen.findByText("Eleanor Vance");
     await user.click(screen.getByRole("button", { name: /add medication/i }));
     await user.type(screen.getByLabelText(/^medication name$/i), "Amlodipine");
-    await user.type(screen.getByLabelText(/^dosage$/i), "5 mg");
-    await user.type(screen.getByLabelText(/^frequency$/i), "Once Daily (QD)");
+    await user.type(screen.getByLabelText(/^dosage strength$/i), "5 mg");
+    const frequencyInput = screen.getByLabelText(/^frequency$/i);
+    expect(frequencyInput).toHaveAttribute("list", "frequency-suggestions");
+    expect(
+      document.querySelector('datalist#frequency-suggestions option[value="Twice Daily (BID)"]'),
+    ).not.toBeNull();
+    await user.type(frequencyInput, "Once Daily (QD)");
     await user.type(screen.getByLabelText(/^duration$/i), "30 days");
     await user.click(screen.getByRole("button", { name: /^save medication$/i }));
 

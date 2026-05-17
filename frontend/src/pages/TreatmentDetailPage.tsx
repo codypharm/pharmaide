@@ -1764,12 +1764,16 @@ function MedicationFormField({
   label,
   value,
   onChange,
+  list,
+  placeholder,
   required = false,
 }: {
   id: string;
   label: string;
   value: string;
   onChange: (value: string) => void;
+  list?: string;
+  placeholder?: string;
   required?: boolean;
 }) {
   return (
@@ -1779,6 +1783,8 @@ function MedicationFormField({
       </span>
       <input
         id={id}
+        list={list}
+        placeholder={placeholder}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         required={required}
@@ -1805,7 +1811,6 @@ type MedicationForm = {
   dosage: string;
   frequency: string;
   duration: string;
-  objective: string;
 };
 
 const EMPTY_MEDICATION_FORM: MedicationForm = {
@@ -1813,8 +1818,22 @@ const EMPTY_MEDICATION_FORM: MedicationForm = {
   dosage: "",
   frequency: "",
   duration: "",
-  objective: "",
 };
+
+const FREQUENCY_SUGGESTIONS = [
+  "Once Daily (QD)",
+  "Twice Daily (BID)",
+  "Three Times Daily (TID)",
+  "Four Times Daily (QID)",
+  "Every 4 Hours (Q4H)",
+  "Every 6 Hours (Q6H)",
+  "Every 8 Hours (Q8H)",
+  "Every 12 Hours (Q12H)",
+  "At Bedtime (QHS)",
+  "As Needed (PRN)",
+  "Once Weekly",
+  "Once Monthly",
+];
 
 function MedicationsCard({
   data,
@@ -1863,7 +1882,9 @@ function MedicationsCard({
         dosage: form.dosage.trim(),
         frequency: form.frequency.trim(),
         duration: form.duration.trim(),
-        objective: form.objective.trim() || null,
+        // Per-medication objectives are not exposed in this workflow; the
+        // treatment-level clinical objective remains the agent-facing intent.
+        objective: null,
       });
       const detail = await getTreatment(data.treatment.id);
       onTreatmentDetailReloaded(detail);
@@ -1883,6 +1904,11 @@ function MedicationsCard({
 
   return (
     <Section title="Medications" icon={<Pill size={16} />}>
+      <datalist id="frequency-suggestions">
+        {FREQUENCY_SUGGESTIONS.map((suggestion) => (
+          <option key={suggestion} value={suggestion} />
+        ))}
+      </datalist>
       {canAddMedication && (
         <div className="mb-4">
           {addState.kind === "closed" ? (
@@ -1909,9 +1935,10 @@ function MedicationsCard({
                 />
                 <MedicationFormField
                   id="new-medication-dosage"
-                  label="Dosage"
+                  label="Dosage Strength"
                   value={form.dosage}
                   onChange={(value) => updateForm("dosage", value)}
+                  placeholder="e.g. 500mg"
                   required
                 />
                 <MedicationFormField
@@ -1919,6 +1946,8 @@ function MedicationsCard({
                   label="Frequency"
                   value={form.frequency}
                   onChange={(value) => updateForm("frequency", value)}
+                  list="frequency-suggestions"
+                  placeholder="e.g. Twice Daily (BID), Every 8 Hours, PRN"
                   required
                 />
                 <MedicationFormField
@@ -1926,15 +1955,8 @@ function MedicationsCard({
                   label="Duration"
                   value={form.duration}
                   onChange={(value) => updateForm("duration", value)}
+                  placeholder="e.g. 10 days"
                   required
-                />
-              </div>
-              <div className="mt-3">
-                <MedicationFormField
-                  id="new-medication-objective"
-                  label="Medication Objective"
-                  value={form.objective}
-                  onChange={(value) => updateForm("objective", value)}
                 />
               </div>
               <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
