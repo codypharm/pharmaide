@@ -54,6 +54,7 @@ const EVENT_TYPE_OPTIONS: AuditFilterOption[] = [
   { label: "Treatment created", value: "treatment_created" },
   { label: "Patient check-in recorded", value: "patient_check_in_recorded" },
   { label: "Adherence event recorded", value: "adherence_event_recorded" },
+  { label: "Non-response recorded", value: "monitoring_non_response_recorded" },
 ];
 
 const RESOURCE_TYPE_OPTIONS: AuditFilterOption[] = [

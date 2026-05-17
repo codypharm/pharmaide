@@ -28,6 +28,7 @@ from app.db.models import (
 from app.services.adherence_events import create_adherence_event
 from app.services.course_completion import complete_treatment_course_if_finished
 from app.services.schedule_keys import reminder_key_for_slot
+from app.services.triage import create_open_triage_item
 
 log = structlog.get_logger(__name__)
 SYSTEM_RESOURCE_ID = UUID("00000000-0000-0000-0000-000000000000")
@@ -348,10 +349,17 @@ async def _record_non_response_if_needed(
             occurred_at=current_time,
         ),
     )
+    triage_item = await create_open_triage_item(
+        session,
+        treatment_id=treatment_id,
+        conversation_message_id=_queue_marker_message_id(queue_marker),
+        reason="non_responsive",
+    )
     _audit_non_response(
         session,
         treatment_id=treatment_id,
         adherence_event_id=event.id,
+        triage_item_id=triage_item.id,
         reminder_key=reminder_key,
         scheduled_for=scheduled_for,
     )
@@ -359,6 +367,7 @@ async def _record_non_response_if_needed(
         "monitoring_non_response_recorded",
         treatment_id=str(treatment_id),
         adherence_event_id=str(event.id),
+        triage_item_id=str(triage_item.id),
         reminder_key=reminder_key,
     )
     return True
@@ -432,6 +441,7 @@ def _audit_non_response(
     *,
     treatment_id: UUID,
     adherence_event_id: UUID,
+    triage_item_id: UUID,
     reminder_key: str,
     scheduled_for: datetime,
 ) -> None:
@@ -445,6 +455,7 @@ def _audit_non_response(
             payload={
                 "treatment_id": str(treatment_id),
                 "adherence_event_id": str(adherence_event_id),
+                "triage_item_id": str(triage_item_id),
                 "reminder_key": reminder_key,
                 "scheduled_for_present": scheduled_for is not None,
                 "status": "missed",
@@ -452,6 +463,16 @@ def _audit_non_response(
             },
         )
     )
+
+
+def _queue_marker_message_id(queue_marker: AuditLogEntry) -> UUID | None:
+    message_id = queue_marker.payload.get("message_id")
+    if not isinstance(message_id, str):
+        return None
+    try:
+        return UUID(message_id)
+    except ValueError:
+        return None
 
 
 def _audit_due_monitoring_run(
