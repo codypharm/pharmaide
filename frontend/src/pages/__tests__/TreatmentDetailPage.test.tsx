@@ -277,7 +277,47 @@ describe("TreatmentDetailPage", () => {
     await user.click(screen.getByRole("button", { name: /start cycle/i }));
 
     expect(startCycle).toHaveBeenCalledWith(SAMPLE.treatment.id);
-    expect(await screen.findByRole("button", { name: /cycle active/i })).toBeDisabled();
+    expect(await screen.findByText("Active")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /cycle active/i })).toBeNull();
+  });
+
+  it("lets the pharmacist stop monitoring for an active treatment", async () => {
+    const activeTreatment = { ...SAMPLE.treatment, status: "active" };
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue({
+      ...SAMPLE,
+      treatment: activeTreatment,
+    });
+    const terminate = vi.spyOn(treatmentsApi, "terminateTreatment").mockResolvedValue({
+      ...activeTreatment,
+      status: "terminated",
+      automation_mode: "paused",
+    });
+    const user = userEvent.setup();
+
+    renderAt(SAMPLE.treatment.id);
+
+    await screen.findByText("Eleanor Vance");
+    await user.click(screen.getByRole("button", { name: /stop monitoring/i }));
+    expect(screen.getByText(/end this monitoring cycle/i)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /confirm stop/i }));
+
+    expect(terminate).toHaveBeenCalledWith(SAMPLE.treatment.id);
+    expect(await screen.findByText("Terminated")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /monitoring stopped/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /stop monitoring/i })).toBeNull();
+  });
+
+  it("does not show the stop monitoring action after course completion", async () => {
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue({
+      ...SAMPLE,
+      treatment: { ...SAMPLE.treatment, status: "completed" },
+    });
+    vi.spyOn(treatmentsApi, "getAnalysis").mockResolvedValue(COMPLETED_ANALYSIS);
+
+    renderAt(SAMPLE.treatment.id);
+
+    await screen.findByText("Eleanor Vance");
+    expect(screen.queryByRole("button", { name: /stop monitoring/i })).toBeNull();
   });
 
   it("disables cycle start until analysis is completed", async () => {
@@ -302,7 +342,7 @@ describe("TreatmentDetailPage", () => {
 
     await screen.findByText("Eleanor Vance");
     expect(screen.getByText("Completed")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /course completed/i })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /course completed/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /^start cycle$/i })).toBeNull();
   });
 

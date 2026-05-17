@@ -26,6 +26,7 @@ import {
   listAdherenceEvents,
   listPatientCheckIns,
   startTreatmentCycle,
+  terminateTreatment,
   triggerAnalysis,
   type AdherenceEventStatus,
   type AdherenceEventView,
@@ -160,6 +161,14 @@ export default function TreatmentDetailPage() {
     });
   };
 
+  const handleTreatmentTerminated = (treatment: TreatmentView) => {
+    if (state.kind !== "ok") return;
+    setState({
+      kind: "ok",
+      data: { ...state.data, treatment },
+    });
+  };
+
   return (
     <div className="h-full overflow-y-auto p-8">
       <div className="flex flex-col gap-6">
@@ -178,6 +187,7 @@ export default function TreatmentDetailPage() {
                   startCycleState={startCycleState}
                   activationAnalysis={activationAnalysis}
                   onStartCycle={handleStartCycle}
+                  onTerminated={handleTreatmentTerminated}
                 />
                 <CompletionReportCard
                   treatment={state.data.treatment}
@@ -1339,19 +1349,45 @@ function TreatmentCard({
   startCycleState,
   activationAnalysis,
   onStartCycle,
+  onTerminated,
 }: {
   data: TreatmentDetail;
   startCycleState: { kind: "idle" | "starting" } | { kind: "error"; requestId: string | null };
   activationAnalysis: ActivationAnalysisState;
   onStartCycle: () => void;
+  onTerminated: (treatment: TreatmentView) => void;
 }) {
   const t = data.treatment;
   const isActive = t.status === "active";
   const isCompleted = t.status === "completed";
   const isPending = t.status === "pending";
+  const isTerminated = t.status === "terminated";
   const isStarting = startCycleState.kind === "starting";
   const analysisReady = activationAnalysis.kind === "ok" && activationAnalysis.ready;
   const canStart = isPending && !isStarting && analysisReady;
+  const [terminateState, setTerminateState] = useState<
+    | { kind: "idle" }
+    | { kind: "confirming" }
+    | { kind: "saving" }
+    | { kind: "error"; requestId: string | null }
+  >({ kind: "idle" });
+  const canTerminate = (isPending || isActive) && terminateState.kind !== "saving";
+
+  async function handleTerminate(): Promise<void> {
+    if (!canTerminate) return;
+    setTerminateState({ kind: "saving" });
+    try {
+      const treatment = await terminateTreatment(t.id);
+      onTerminated(treatment);
+      setTerminateState({ kind: "idle" });
+    } catch (err) {
+      setTerminateState({
+        kind: "error",
+        requestId: err instanceof ApiError ? err.requestId : null,
+      });
+    }
+  }
+
   return (
     <Section title="Treatment" icon={<ClipboardList size={16} />}>
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
@@ -1364,61 +1400,49 @@ function TreatmentCard({
           <Field label="Created" value={formatCreatedAt(t.created_at)} />
           <Field label="Treatment ID" value={t.id} />
         </div>
-        <div className="flex min-w-48 flex-col items-start gap-2 lg:items-end">
-          <button
-            type="button"
-            onClick={onStartCycle}
-            disabled={!canStart}
-            className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition-colors ${
-              isActive || isCompleted
-                ? "cursor-not-allowed border border-emerald-200 bg-emerald-50 text-emerald-700"
-                : "cursor-pointer bg-[#5548E8] text-white hover:bg-[#463AD4] disabled:cursor-wait disabled:bg-slate-400"
-            }`}
-          >
-            {isStarting ? (
-              <>
-                <Loader2 size={15} className="animate-spin" />
-                Starting
-              </>
-            ) : isCompleted ? (
-              <>
-                <CheckCircle2 size={15} />
-                Course completed
-              </>
-            ) : isActive ? (
-              <>
-                <ShieldCheck size={15} />
-                Cycle active
-              </>
-            ) : (
-              <>
-                <Play size={15} />
-                Start Cycle
-              </>
+        {isPending && (
+          <div className="flex min-w-48 flex-col items-start gap-2 lg:items-end">
+            <button
+              type="button"
+              onClick={onStartCycle}
+              disabled={!canStart}
+              className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-[#5548E8] px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-[#463AD4] disabled:cursor-wait disabled:bg-slate-400"
+            >
+              {isStarting ? (
+                <>
+                  <Loader2 size={15} className="animate-spin" />
+                  Starting
+                </>
+              ) : (
+                <>
+                  <Play size={15} />
+                  Start Cycle
+                </>
+              )}
+            </button>
+            {activationAnalysis.kind === "loading" && (
+              <p className="max-w-64 text-xs font-semibold text-slate-500">
+                Checking analysis status before cycle start.
+              </p>
             )}
-          </button>
-          {isPending && activationAnalysis.kind === "loading" && (
-            <p className="max-w-64 text-xs font-semibold text-slate-500">
-              Checking analysis status before cycle start.
-            </p>
-          )}
-          {isPending && activationAnalysis.kind === "ok" && !activationAnalysis.ready && (
-            <p className="max-w-64 text-xs font-semibold text-amber-700">
-              Complete analysis before starting cycle.
-            </p>
-          )}
-          {isPending && activationAnalysis.kind === "error" && (
-            <p className="max-w-64 text-xs font-semibold text-red-700">
-              Could not verify analysis status. Reference ID:{" "}
-              {activationAnalysis.requestId ?? "unknown"}
-            </p>
-          )}
-          {startCycleState.kind === "error" && (
-            <p className="max-w-64 text-xs font-semibold text-red-700">
-              Could not start cycle. Reference ID: {startCycleState.requestId ?? "unknown"}
-            </p>
-          )}
-        </div>
+            {activationAnalysis.kind === "ok" && !activationAnalysis.ready && (
+              <p className="max-w-64 text-xs font-semibold text-amber-700">
+                Complete analysis before starting cycle.
+              </p>
+            )}
+            {activationAnalysis.kind === "error" && (
+              <p className="max-w-64 text-xs font-semibold text-red-700">
+                Could not verify analysis status. Reference ID:{" "}
+                {activationAnalysis.requestId ?? "unknown"}
+              </p>
+            )}
+            {startCycleState.kind === "error" && (
+              <p className="max-w-64 text-xs font-semibold text-red-700">
+                Could not start cycle. Reference ID: {startCycleState.requestId ?? "unknown"}
+              </p>
+            )}
+          </div>
+        )}
       </div>
       {t.clinical_objective && (
         <div className="mt-6">
@@ -1426,6 +1450,59 @@ function TreatmentCard({
             Clinical Objective
           </div>
           <div className="text-sm text-slate-900">{t.clinical_objective}</div>
+        </div>
+      )}
+      {(isPending || isActive || terminateState.kind === "error") && (
+        <div className="mt-6 border-t border-slate-100 pt-4">
+          <div className="flex flex-col gap-3 rounded-lg border border-red-100 bg-red-50/40 p-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-bold text-slate-900">Treatment control</p>
+              <p className="mt-1 text-xs font-semibold leading-5 text-slate-600">
+                End this monitoring cycle and stop future reminders and check-ins.
+              </p>
+              {terminateState.kind === "error" && (
+                <p className="mt-2 text-xs font-semibold text-red-700">
+                  Could not stop monitoring. Reference ID: {terminateState.requestId ?? "unknown"}
+                </p>
+              )}
+            </div>
+            {terminateState.kind === "confirming" ? (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleTerminate()}
+                  className="rounded-lg bg-red-700 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-red-800 cursor-pointer"
+                >
+                  Confirm stop
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTerminateState({ kind: "idle" })}
+                  className="rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-bold text-red-700 transition-colors hover:bg-red-100 cursor-pointer"
+                >
+                  Keep monitoring
+                </button>
+              </div>
+            ) : (
+              (isPending || isActive) && (
+                <button
+                  type="button"
+                  onClick={() => setTerminateState({ kind: "confirming" })}
+                  disabled={terminateState.kind === "saving"}
+                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-bold text-red-700 transition-colors hover:border-red-700 hover:bg-red-700 hover:text-white disabled:cursor-wait disabled:border-red-100 disabled:text-red-300 disabled:hover:bg-white cursor-pointer"
+                >
+                  {terminateState.kind === "saving" ? (
+                    <>
+                      <Loader2 size={15} className="animate-spin" />
+                      Stopping
+                    </>
+                  ) : (
+                    "Stop monitoring"
+                  )}
+                </button>
+              )
+            )}
+          </div>
         </div>
       )}
     </Section>
