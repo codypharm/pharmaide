@@ -223,6 +223,52 @@ async def test_discontinue_one_medication_pauses_cycle_notifies_patient_and_audi
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_discontinue_pending_medication_does_not_notify_patient(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    treatment_id = await _create_treatment(
+        app_client,
+        mrn="MED-CHANGE-PENDING-DISCONTINUE",
+        medication_count=2,
+    )
+    medication = await _first_medication(db_session, treatment_id)
+    analysis = TreatmentAnalysis(
+        treatment_id=treatment_id,
+        status="completed",
+        result={"clinical_summary": "Ready for monitoring."},
+    )
+    db_session.add(analysis)
+    await db_session.flush()
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/medications/{medication.id}/discontinue"
+    )
+
+    assert response.status_code == 200, response.text
+    await db_session.refresh(medication)
+    treatment = await db_session.get(Treatment, treatment_id)
+    assert treatment is not None
+    await db_session.refresh(analysis)
+    assert medication.discontinued_at is not None
+    assert treatment.status == "pending"
+    assert treatment.automation_mode == "paused"
+    assert analysis.status == "superseded"
+    assert await _patient_update_message(db_session, treatment_id) is None
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.event_type == "treatment_medication_discontinued",
+            AuditLogEntry.resource_id == medication.id,
+        )
+    )
+    assert audit is not None
+    assert audit.payload["old_treatment_status"] == "pending"
+    assert audit.payload["new_treatment_status"] == "pending"
+    assert audit.payload["patient_notification_message_id"] is None
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_discontinue_last_medication_terminates_cycle_and_cancels_queued_reminders(
     app_client: AsyncClient,
     db_session: AsyncSession,

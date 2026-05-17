@@ -455,12 +455,14 @@ async def discontinue_medication(
         treatment.automation_mode = "paused"
         superseded_count = await _supersede_existing_analyses(session, treatment_id)
         cancelled_message_count = await _cancel_queued_reminders(session, treatment_id)
-        patient_notification = _build_medication_discontinued_message(
-            treatment_id=treatment_id,
-            medication=medication,
-            active_medication_count=active_medication_count,
-        )
-        session.add(patient_notification)
+        patient_notification = None
+        if old_status == "active":
+            patient_notification = _build_medication_discontinued_message(
+                treatment_id=treatment_id,
+                medication=medication,
+                active_medication_count=active_medication_count,
+            )
+            session.add(patient_notification)
         await session.flush()
         _audit_medication_discontinued(
             session,
@@ -484,7 +486,9 @@ async def discontinue_medication(
             superseded_analysis_count=superseded_count,
             active_medication_count=active_medication_count,
             cancelled_queued_message_count=cancelled_message_count,
-            patient_notification_message_id=str(patient_notification.id),
+            patient_notification_message_id=(
+                str(patient_notification.id) if patient_notification is not None else None
+            ),
         )
 
     await session.flush()
@@ -737,7 +741,7 @@ def _audit_medication_discontinued(
     superseded_count: int,
     active_medication_count: int,
     cancelled_message_count: int,
-    patient_notification: ConversationMessage,
+    patient_notification: ConversationMessage | None,
 ) -> None:
     session.add(
         AuditLogEntry(
@@ -755,7 +759,9 @@ def _audit_medication_discontinued(
                 "superseded_analysis_count": superseded_count,
                 "active_medication_count": active_medication_count,
                 "cancelled_queued_message_count": cancelled_message_count,
-                "patient_notification_message_id": str(patient_notification.id),
+                "patient_notification_message_id": (
+                    str(patient_notification.id) if patient_notification is not None else None
+                ),
                 "already_discontinued": False,
             },
         )

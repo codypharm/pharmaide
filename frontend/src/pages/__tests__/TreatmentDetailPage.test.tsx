@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -371,6 +371,57 @@ describe("TreatmentDetailPage", () => {
     expect(screen.queryByRole("button", { name: /^discontinue$/i })).toBeNull();
   });
 
+  it("lets the pharmacist discontinue a medication before cycle start", async () => {
+    vi.spyOn(treatmentsApi, "getTreatment")
+      .mockResolvedValueOnce({
+        ...SAMPLE,
+        medications: [
+          SAMPLE.medications[0],
+          {
+            ...SAMPLE.medications[0],
+            id: "77777777-7777-7777-7777-777777777777",
+            name: "Amlodipine",
+            ordinal: 1,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ...SAMPLE,
+        treatment: {
+          ...SAMPLE.treatment,
+          status: "pending",
+          automation_mode: "paused",
+        },
+        medications: [
+          {
+            ...SAMPLE.medications[0],
+            discontinued_at: "2026-05-17T18:45:00Z",
+          },
+          {
+            ...SAMPLE.medications[0],
+            id: "77777777-7777-7777-7777-777777777777",
+            name: "Amlodipine",
+            ordinal: 1,
+          },
+        ],
+      });
+    const discontinue = vi.spyOn(treatmentsApi, "discontinueMedication").mockResolvedValue({
+      ...SAMPLE.medications[0],
+      discontinued_at: "2026-05-17T18:45:00Z",
+    });
+    const user = userEvent.setup();
+
+    renderAt(SAMPLE.treatment.id);
+
+    await screen.findByText("Eleanor Vance");
+    await user.click(screen.getAllByRole("button", { name: /^discontinue$/i })[0]);
+    await user.click(screen.getByRole("button", { name: /^confirm$/i }));
+
+    expect(discontinue).toHaveBeenCalledWith(SAMPLE.treatment.id, SAMPLE.medications[0].id);
+    expect(await screen.findByText("Discontinued")).toBeTruthy();
+    expect(screen.getByText(/treatment plan changed/i)).toBeTruthy();
+  });
+
   it("lets the pharmacist add a medication and pauses cycle start for analysis rerun", async () => {
     const activeTreatment = { ...SAMPLE.treatment, status: "active" };
     const addedMedication = {
@@ -442,8 +493,7 @@ describe("TreatmentDetailPage", () => {
 
     await screen.findByText("Eleanor Vance");
     const objective = screen.getByLabelText(/^treatment objective$/i);
-    await user.clear(objective);
-    await user.type(objective, "Monitor dizziness and cough");
+    fireEvent.change(objective, { target: { value: "Monitor dizziness and cough" } });
     await user.click(screen.getByRole("button", { name: /save objective/i }));
 
     expect(updateObjective).toHaveBeenCalledWith(SAMPLE.treatment.id, {

@@ -1599,7 +1599,7 @@ function TreatmentObjectiveEditor({
       >
         Treatment Objective
       </label>
-      <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-start">
+      <div className="mt-2 flex flex-col gap-2">
         <textarea
           id="treatment-detail-objective"
           value={draft}
@@ -1612,7 +1612,7 @@ function TreatmentObjectiveEditor({
           type="submit"
           aria-label="Save objective"
           disabled={!isDirty || isSaving}
-          className="inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-bold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 sm:self-start"
+          className="inline-flex w-fit shrink-0 cursor-pointer items-center justify-center gap-2 rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-bold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
         >
           {isSaving ? (
             <>
@@ -1941,7 +1941,8 @@ function MedicationsCard({
   });
   const [addState, setAddState] = useState<MedicationAddState>({ kind: "closed" });
   const [form, setForm] = useState<MedicationForm>(EMPTY_MEDICATION_FORM);
-  const canDiscontinue = data.treatment.status === "active";
+  const canDiscontinue =
+    data.treatment.status === "active" || data.treatment.status === "pending";
   const canAddMedication =
     data.treatment.status !== "completed" && data.treatment.status !== "terminated";
   const canSaveMedication =
