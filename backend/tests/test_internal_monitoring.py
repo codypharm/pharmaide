@@ -1,6 +1,7 @@
 """Internal monitoring worker for active treatment schedules."""
 
-from datetime import timedelta
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
@@ -10,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.analysis_schemas import AnalysisResult, ReminderSlot, Schedule
 from app.db.models import (
+    AdherenceEvent,
     AuditLogEntry,
     ConversationMessage,
     Medication,
@@ -190,6 +192,100 @@ async def test_run_due_monitoring_processes_active_automated_treatments_once(
     assert audit_count == 2
 
 
+@pytest.mark.usefixtures("postgres_container")
+async def test_run_treatment_monitoring_marks_aged_unanswered_reminder_missed(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    treatment_id = await _active_treatment_with_analysis(
+        app_client,
+        db_session,
+        mrn="MONITOR-NONRESPONSE-001",
+        analysis_builder=_analysis_result_with_future_reminder,
+    )
+    first = await app_client.post(f"/internal/treatments/{treatment_id}/run-due-monitoring")
+    assert first.status_code == 200, first.text
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(AuditLogEntry.event_type == "monitoring_message_queued")
+    )
+    assert audit is not None
+    audit.created_at = datetime.now(UTC) - timedelta(hours=5)
+    await db_session.flush()
+
+    second = await app_client.post(f"/internal/treatments/{treatment_id}/run-due-monitoring")
+
+    assert second.status_code == 200, second.text
+    event = await db_session.scalar(
+        select(AdherenceEvent).where(
+            AdherenceEvent.treatment_id == treatment_id,
+            AdherenceEvent.status == "missed",
+            AdherenceEvent.source == "system",
+        )
+    )
+    assert event is not None
+    assert event.scheduled_for is not None
+    non_response_audit = await db_session.scalar(
+        select(AuditLogEntry).where(AuditLogEntry.event_type == "monitoring_non_response_recorded")
+    )
+    assert non_response_audit is not None
+    assert non_response_audit.payload["reminder_key"] == audit.payload["reminder_key"]
+    assert "lisinopril" not in str(non_response_audit.payload).lower()
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_run_treatment_monitoring_does_not_mark_missed_after_patient_reply(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    treatment_id = await _active_treatment_with_analysis(
+        app_client,
+        db_session,
+        mrn="MONITOR-NONRESPONSE-002",
+        analysis_builder=_analysis_result_with_future_reminder,
+    )
+    first = await app_client.post(f"/internal/treatments/{treatment_id}/run-due-monitoring")
+    assert first.status_code == 200, first.text
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(AuditLogEntry.event_type == "monitoring_message_queued")
+    )
+    message = await db_session.scalar(select(ConversationMessage))
+    assert audit is not None
+    assert message is not None
+    audit.created_at = datetime.now(UTC) - timedelta(hours=5)
+    db_session.add(
+        AuditLogEntry(
+            event_type="patient_reply_adherence_captured",
+            resource_type="conversation_message",
+            resource_id=message.id,
+            payload={
+                "treatment_id": str(treatment_id),
+                "inbound_message_id": str(message.id),
+                "medication_id": audit.payload["reminder_key"].split(":", maxsplit=1)[0],
+                "status": "taken",
+                "reminder_key": audit.payload["reminder_key"],
+                "reminder_key_present": True,
+            },
+        )
+    )
+    await db_session.flush()
+
+    second = await app_client.post(f"/internal/treatments/{treatment_id}/run-due-monitoring")
+
+    assert second.status_code == 200, second.text
+    missed_count = await db_session.scalar(
+        select(func.count())
+        .select_from(AdherenceEvent)
+        .where(
+            AdherenceEvent.treatment_id == treatment_id,
+            AdherenceEvent.status == "missed",
+            AdherenceEvent.source == "system",
+        )
+    )
+    assert missed_count == 0
+
+
 async def _create_treatment(app_client: AsyncClient, mrn: str) -> UUID:
     response = await app_client.post(
         "/treatments",
@@ -225,14 +321,16 @@ async def _active_treatment_with_analysis(
     db_session: AsyncSession,
     *,
     mrn: str,
+    analysis_builder: Callable[[UUID], dict[str, object]] | None = None,
 ) -> UUID:
     treatment_id = await _create_treatment(app_client, mrn)
     medication_id = await _first_medication_id(db_session, treatment_id)
+    build_analysis = analysis_builder or _analysis_result
     db_session.add(
         TreatmentAnalysis(
             treatment_id=treatment_id,
             status="completed",
-            result=_analysis_result(medication_id),
+            result=build_analysis(medication_id),
         )
     )
     await db_session.flush()
@@ -279,6 +377,30 @@ def _analysis_result(medication_id: UUID) -> dict[str, object]:
                     offset_from_start=timedelta(0),
                     human_label="morning dose",
                 )
+            ]
+        ),
+        reasoning=None,
+        degraded=False,
+        completed_stages=["schedule"],
+    ).model_dump(mode="json")
+
+
+def _analysis_result_with_future_reminder(medication_id: UUID) -> dict[str, object]:
+    return AnalysisResult(
+        groundings=[],
+        ddi_warnings=[],
+        schedule=Schedule(
+            reminders=[
+                ReminderSlot(
+                    medication_id=medication_id,
+                    offset_from_start=timedelta(0),
+                    human_label="morning dose",
+                ),
+                ReminderSlot(
+                    medication_id=medication_id,
+                    offset_from_start=timedelta(days=3650),
+                    human_label="future dose",
+                ),
             ]
         ),
         reasoning=None,
