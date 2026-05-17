@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import { toast } from "sonner";
@@ -68,6 +68,34 @@ const TREATMENTS: TreatmentList = {
       },
       medication_count: 1,
       first_medication_name: "Metformin",
+    },
+  ],
+};
+
+const TREATMENTS_WITH_COMPLETED: TreatmentList = {
+  items: [
+    TREATMENTS.items[0],
+    {
+      patient: {
+        id: "patient-2",
+        name: "Marcus Chen",
+        dob: "1974-04-02",
+        mrn: "PHA-MC77",
+        phone: "+18005559876",
+        allergies: [],
+      },
+      treatment: {
+        id: "44444444-4444-4444-4444-444444444444",
+        patient_id: "patient-2",
+        status: "completed",
+        chat_response_mode: "ai_active",
+        automation_mode: "active",
+        clinical_objective: "Monitor recovery",
+        treatment_start_at: "2026-05-01T08:30:00Z",
+        created_at: "2026-05-01T09:00:00Z",
+      },
+      medication_count: 1,
+      first_medication_name: "Amoxicillin",
     },
   ],
 };
@@ -359,6 +387,30 @@ describe("PatientManagementPage", () => {
     expect(patientMessage.closest("[data-message-side]")).toHaveAttribute(
       "data-message-side",
       "left",
+    );
+  });
+
+  it("separates completed treatments and links them to the report view", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue(TREATMENTS_WITH_COMPLETED);
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(DETAIL);
+    vi.spyOn(treatmentsApi, "listConversationMessages").mockResolvedValue(MESSAGES);
+    vi.spyOn(triageApi, "listTriageItems").mockResolvedValue({ items: [] });
+
+    renderPage();
+
+    const directory = screen.getByRole("complementary", { name: /patient directory/i });
+    await within(directory).findByText("Eleanor Vance");
+    expect(within(directory).queryByText("Marcus Chen")).toBeNull();
+
+    await user.click(screen.getByRole("tab", { name: /completed/i }));
+
+    expect(await within(directory).findByText("Marcus Chen")).toBeTruthy();
+    expect(within(directory).getByText("Amoxicillin")).toBeTruthy();
+    expect(within(directory).queryByText("Eleanor Vance")).toBeNull();
+    expect(within(directory).getByRole("link", { name: /view report/i })).toHaveAttribute(
+      "href",
+      "/dashboard/treatments/44444444-4444-4444-4444-444444444444",
     );
   });
 

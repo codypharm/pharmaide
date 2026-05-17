@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+} from "react";
 import {
   Activity,
   AlertCircle,
@@ -73,6 +80,8 @@ type PatientTreatmentGroup = {
   patientId: string;
   items: TreatmentListItem[];
 };
+
+type DirectoryFilter = "active" | "completed";
 
 const PAGE_SIZE = 50;
 const CONVERSATION_REFRESH_INTERVAL_MS = 10_000;
@@ -162,6 +171,7 @@ export default function PatientManagementPage() {
   });
   const [triageItems, setTriageItems] = useState<TriageItemView[]>([]);
   const [selectedTreatmentId, setSelectedTreatmentId] = useState<string | null>(null);
+  const [directoryFilter, setDirectoryFilter] = useState<DirectoryFilter>("active");
   const [activeProfileTab, setActiveProfileTab] = useState<"patient" | "reasoning">("patient");
   const [searchQuery, setSearchQuery] = useState("");
   const [incomingMessage, setIncomingMessage] = useState("");
@@ -299,20 +309,47 @@ export default function PatientManagementPage() {
   const treatments = treatmentState.kind === "ok" ? treatmentState.items : [];
   const filteredTreatments = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    if (!query) return treatments;
-    return treatments.filter((item) => {
-      return (
-        item.patient.name.toLowerCase().includes(query) ||
-        item.patient.mrn.toLowerCase().includes(query) ||
-        item.treatment.id.toLowerCase().includes(query)
-      );
-    });
-  }, [searchQuery, treatments]);
+    const searchFiltered = !query
+      ? treatments
+      : treatments.filter((item) => {
+          return (
+            item.patient.name.toLowerCase().includes(query) ||
+            item.patient.mrn.toLowerCase().includes(query) ||
+            item.treatment.id.toLowerCase().includes(query)
+          );
+        });
+
+    return searchFiltered.filter((item) =>
+      directoryFilter === "completed"
+        ? item.treatment.status === "completed"
+        : item.treatment.status !== "completed",
+    );
+  }, [directoryFilter, searchQuery, treatments]);
 
   const groupedTreatments = useMemo(
     () => groupTreatmentsByPatient(filteredTreatments),
     [filteredTreatments],
   );
+  const activeTreatmentCount = treatments.filter(
+    (item) => item.treatment.status !== "completed",
+  ).length;
+  const completedTreatmentCount = treatments.filter(
+    (item) => item.treatment.status === "completed",
+  ).length;
+
+  useEffect(() => {
+    if (treatmentState.kind !== "ok") return;
+    if (filteredTreatments.length === 0) {
+      setSelectedTreatmentId(null);
+      return;
+    }
+    if (
+      !selectedTreatmentId ||
+      !filteredTreatments.some((item) => item.treatment.id === selectedTreatmentId)
+    ) {
+      setSelectedTreatmentId(filteredTreatments[0].treatment.id);
+    }
+  }, [filteredTreatments, selectedTreatmentId, treatmentState.kind]);
 
   const selectedTreatment =
     treatments.find((item) => item.treatment.id === selectedTreatmentId) ?? null;
@@ -498,11 +535,16 @@ export default function PatientManagementPage() {
 
   return (
     <div className="flex h-full overflow-hidden bg-slate-50/50">
-      <aside className="w-[420px] border-r border-slate-200 bg-white flex flex-col shrink-0 overflow-hidden">
+      <aside
+        aria-label="Patient Directory"
+        className="w-[420px] border-r border-slate-200 bg-white flex flex-col shrink-0 overflow-hidden"
+      >
         <div className="p-6 border-b border-slate-100 flex flex-col gap-4">
           <div>
             <h2 className="text-xl font-bold text-slate-900 tracking-tight">Patient Directory</h2>
-            <p className="text-sm text-slate-500 mt-1">Treatments with active monitoring context.</p>
+            <p className="text-sm text-slate-500 mt-1">
+              Active monitoring and completed treatment courses.
+            </p>
           </div>
           <div className="relative">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -511,6 +553,24 @@ export default function PatientManagementPage() {
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="Search patients, MRN, or treatment..."
               className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#D9D5FB] focus:border-[#5548E8] transition-all"
+            />
+          </div>
+          <div
+            role="tablist"
+            aria-label="Treatment status filter"
+            className="inline-flex w-fit gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1"
+          >
+            <DirectoryFilterTab
+              label="Active"
+              count={activeTreatmentCount}
+              selected={directoryFilter === "active"}
+              onClick={() => setDirectoryFilter("active")}
+            />
+            <DirectoryFilterTab
+              label="Completed"
+              count={completedTreatmentCount}
+              selected={directoryFilter === "completed"}
+              onClick={() => setDirectoryFilter("completed")}
             />
           </div>
         </div>
@@ -541,7 +601,9 @@ export default function PatientManagementPage() {
                 <div className="p-12 text-center">
                   <Search size={32} className="text-slate-200 mx-auto mb-4" />
                   <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">
-                    No patients found
+                    {directoryFilter === "completed"
+                      ? "No completed treatments"
+                      : "No active monitoring treatments"}
                   </p>
                 </div>
               )}
@@ -592,6 +654,37 @@ export default function PatientManagementPage() {
         )}
       </main>
     </div>
+  );
+}
+
+function DirectoryFilterTab({
+  label,
+  count,
+  selected,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={selected}
+      onClick={onClick}
+      className={`inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-xs font-bold transition-colors ${
+        selected
+          ? "border-slate-300 bg-white text-slate-950"
+          : "border-transparent text-slate-500 hover:bg-white hover:text-slate-800"
+      }`}
+    >
+      {label}
+      <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-black tabular-nums text-slate-500">
+        {count}
+      </span>
+    </button>
   );
 }
 
@@ -710,17 +803,31 @@ function TreatmentRow({
       ? `${item.first_medication_name ?? "Medication"} + ${item.medication_count - 1} more`
       : item.first_medication_name ?? "No medication name";
   const objectiveLabel = item.treatment.clinical_objective ?? "No objective recorded";
+  const isCompleted = item.treatment.status === "completed";
+
+  function handleRowSelect(event: MouseEvent<HTMLElement>) {
+    if ((event.target as HTMLElement).closest("[data-flag-badge]")) {
+      onOpenSafetyReview();
+      return;
+    }
+    if ((event.target as HTMLElement).closest("[data-row-action]")) {
+      return;
+    }
+    onSelect();
+  }
+
+  function handleRowKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    onSelect();
+  }
 
   return (
-    <button
-      type="button"
-      onClick={(event) => {
-        if ((event.target as HTMLElement).closest("[data-flag-badge]")) {
-          onOpenSafetyReview();
-          return;
-        }
-        onSelect();
-      }}
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={handleRowSelect}
+      onKeyDown={handleRowKeyDown}
       className={`mx-4 mt-2 w-[calc(100%-2rem)] rounded-lg border p-3 text-left cursor-pointer transition-all hover:bg-slate-50/80 ${
         isSelected ? "border-[#D9D5FB] bg-[#F0EFFF]" : "border-slate-100 bg-white"
       }`}
@@ -756,7 +863,18 @@ function TreatmentRow({
         <span>Treatment</span>
         <span>{item.medication_count} med{item.medication_count === 1 ? "" : "s"}</span>
       </div>
-    </button>
+      {isCompleted && (
+        <div className="mt-3">
+          <Link
+            data-row-action
+            to={`/dashboard/treatments/${item.treatment.id}`}
+            className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-900 transition-colors hover:bg-slate-50"
+          >
+            View report
+          </Link>
+        </div>
+      )}
+    </div>
   );
 }
 
