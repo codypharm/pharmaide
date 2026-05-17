@@ -361,6 +361,9 @@ export type TreatmentListItem = {
 
 export type TreatmentList = {
   items: TreatmentListItem[];
+  active_count?: number;
+  completed_count?: number;
+  archived_count?: number;
 };
 
 export type ListTreatmentsParams = {

@@ -134,13 +134,21 @@ async def test_list_filters_by_status_and_archived_state(
     archived_response = await app_client.get("/treatments", params={"archived": "true"})
 
     assert completed_response.status_code == 200
-    completed_mrns = {item["patient"]["mrn"] for item in completed_response.json()["items"]}
+    completed_body = completed_response.json()
+    completed_mrns = {item["patient"]["mrn"] for item in completed_body["items"]}
     assert "FILTER-002" in completed_mrns
     assert "FILTER-003" not in completed_mrns
+    assert completed_body["active_count"] == 1
+    assert completed_body["completed_count"] == 1
+    assert completed_body["archived_count"] == 1
 
     assert archived_response.status_code == 200
-    archived_mrns = {item["patient"]["mrn"] for item in archived_response.json()["items"]}
+    archived_body = archived_response.json()
+    archived_mrns = {item["patient"]["mrn"] for item in archived_body["items"]}
     assert archived_mrns == {"FILTER-003"}
+    assert archived_body["active_count"] == 1
+    assert archived_body["completed_count"] == 1
+    assert archived_body["archived_count"] == 1
 
 
 @pytest.mark.usefixtures("postgres_container")
@@ -153,4 +161,9 @@ async def test_list_rejects_limit_above_max(app_client: AsyncClient) -> None:
 async def test_list_returns_empty_items_when_no_treatments(app_client: AsyncClient) -> None:
     response = await app_client.get("/treatments")
     assert response.status_code == 200
-    assert response.json() == {"items": []}
+    assert response.json() == {
+        "items": [],
+        "active_count": 0,
+        "completed_count": 0,
+        "archived_count": 0,
+    }

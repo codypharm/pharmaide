@@ -40,6 +40,7 @@ import {
   type PatientCheckInReportType,
   type PatientCheckInView,
   type TreatmentDetail,
+  type TreatmentList,
   type TreatmentListItem,
   type TreatmentView,
 } from "../api/treatments";
@@ -55,8 +56,14 @@ type OutletContext = {
 
 type TreatmentState =
   | { kind: "loading" }
-  | { kind: "ok"; items: TreatmentListItem[] }
+  | { kind: "ok"; items: TreatmentListItem[]; counts: TreatmentDirectoryCounts }
   | { kind: "error"; requestId: string | null };
+
+type TreatmentDirectoryCounts = {
+  active: number;
+  completed: number;
+  archived: number;
+};
 
 type ConversationState =
   | { kind: "idle" }
@@ -169,6 +176,20 @@ function directoryFilterParams(filter: DirectoryFilter) {
   return { limit: PAGE_SIZE, offset: 0, archived: false };
 }
 
+function countsFromTreatmentList(result: TreatmentList): TreatmentDirectoryCounts {
+  return {
+    active:
+      result.active_count ??
+      result.items.filter((item) => matchesDirectoryFilter(item, "active")).length,
+    completed:
+      result.completed_count ??
+      result.items.filter((item) => matchesDirectoryFilter(item, "completed")).length,
+    archived:
+      result.archived_count ??
+      result.items.filter((item) => matchesDirectoryFilter(item, "archived")).length,
+  };
+}
+
 function groupTreatmentsByPatient(items: TreatmentListItem[]): PatientTreatmentGroup[] {
   const groups = new Map<string, PatientTreatmentGroup>();
   for (const item of items) {
@@ -212,7 +233,7 @@ export default function PatientManagementPage() {
     listTreatments(directoryFilterParams(directoryFilter))
       .then((res) => {
         if (cancelled) return;
-        setTreatmentState({ kind: "ok", items: res.items });
+        setTreatmentState({ kind: "ok", items: res.items, counts: countsFromTreatmentList(res) });
         setSelectedTreatmentId((current) =>
           res.items.some((item) => item.treatment.id === current)
             ? current
@@ -354,15 +375,10 @@ export default function PatientManagementPage() {
     () => groupTreatmentsByPatient(filteredTreatments),
     [filteredTreatments],
   );
-  const activeTreatmentCount = treatments.filter(
-    (item) => matchesDirectoryFilter(item, "active"),
-  ).length;
-  const completedTreatmentCount = treatments.filter(
-    (item) => matchesDirectoryFilter(item, "completed"),
-  ).length;
-  const archivedTreatmentCount = treatments.filter((item) =>
-    matchesDirectoryFilter(item, "archived"),
-  ).length;
+  const treatmentCounts =
+    treatmentState.kind === "ok"
+      ? treatmentState.counts
+      : { active: 0, completed: 0, archived: 0 };
 
   useEffect(() => {
     if (treatmentState.kind !== "ok") return;
@@ -543,6 +559,7 @@ export default function PatientManagementPage() {
         items: current.items.map((item) =>
           item.treatment.id === updated.id ? { ...item, treatment: updated } : item,
         ),
+        counts: current.counts,
       };
     });
     setTreatmentDetailState((current) => {
@@ -589,19 +606,19 @@ export default function PatientManagementPage() {
           >
             <DirectoryFilterTab
               label="Active"
-              count={directoryFilter === "active" ? activeTreatmentCount : undefined}
+              count={treatmentCounts.active}
               selected={directoryFilter === "active"}
               onClick={() => setDirectoryFilter("active")}
             />
             <DirectoryFilterTab
               label="Completed"
-              count={directoryFilter === "completed" ? completedTreatmentCount : undefined}
+              count={treatmentCounts.completed}
               selected={directoryFilter === "completed"}
               onClick={() => setDirectoryFilter("completed")}
             />
             <DirectoryFilterTab
               label="Archived"
-              count={directoryFilter === "archived" ? archivedTreatmentCount : undefined}
+              count={treatmentCounts.archived}
               selected={directoryFilter === "archived"}
               onClick={() => setDirectoryFilter("archived")}
             />
@@ -706,6 +723,7 @@ function DirectoryFilterTab({
       type="button"
       role="tab"
       aria-selected={selected}
+      aria-label={count !== undefined ? `${label} ${count}` : label}
       onClick={onClick}
       className={`inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-xs font-bold transition-colors ${
         selected

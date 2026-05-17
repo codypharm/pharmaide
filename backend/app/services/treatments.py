@@ -10,7 +10,7 @@ from uuid import UUID
 
 import phonenumbers
 import structlog
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -160,6 +160,8 @@ async def list_treatments(
     elif archived is False:
         statement = statement.where(Treatment.archived_at.is_(None))
 
+    active_count, completed_count, archived_count = await _count_treatment_directory(session)
+
     result = await session.execute(
         statement
         .order_by(Treatment.created_at.desc())
@@ -178,7 +180,35 @@ async def list_treatments(
         )
         for t in treatments
     ]
-    return TreatmentList(items=items)
+    return TreatmentList(
+        items=items,
+        active_count=active_count,
+        completed_count=completed_count,
+        archived_count=archived_count,
+    )
+
+
+async def _count_treatment_directory(session: AsyncSession) -> tuple[int, int, int]:
+    """Count operational treatment buckets independently of the current page."""
+    active_count = await _count_treatments(
+        session,
+        Treatment.status != "completed",
+        Treatment.archived_at.is_(None),
+    )
+    completed_count = await _count_treatments(
+        session,
+        Treatment.status == "completed",
+        Treatment.archived_at.is_(None),
+    )
+    archived_count = await _count_treatments(session, Treatment.archived_at.is_not(None))
+    return active_count, completed_count, archived_count
+
+
+async def _count_treatments(session: AsyncSession, *conditions: object) -> int:
+    result = await session.execute(
+        select(func.count(Treatment.id)).select_from(Treatment).where(*conditions)
+    )
+    return int(result.scalar_one())
 
 
 async def update_chat_response_mode(

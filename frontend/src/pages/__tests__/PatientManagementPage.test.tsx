@@ -415,14 +415,16 @@ describe("PatientManagementPage", () => {
 
   it("separates completed treatments and links them to the report view", async () => {
     const user = userEvent.setup();
-    const completedOnly = { items: [TREATMENTS_WITH_COMPLETED.items[1]] };
-    const archivedOnly = { items: [TREATMENTS_WITH_COMPLETED.items[2]] };
+    const counts = { active_count: 2, completed_count: 1, archived_count: 1 };
+    const activeOnly = { ...counts, items: TREATMENTS.items };
+    const completedOnly = { ...counts, items: [TREATMENTS_WITH_COMPLETED.items[1]] };
+    const archivedOnly = { ...counts, items: [TREATMENTS_WITH_COMPLETED.items[2]] };
     const listTreatments = vi
       .spyOn(treatmentsApi, "listTreatments")
       .mockImplementation(async (params = {}) => {
         if (params.archived === true) return archivedOnly;
         if (params.status === "completed") return completedOnly;
-        return TREATMENTS;
+        return activeOnly;
       });
     vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(DETAIL);
     vi.spyOn(treatmentsApi, "listConversationMessages").mockResolvedValue(MESSAGES);
@@ -433,6 +435,9 @@ describe("PatientManagementPage", () => {
     const directory = screen.getByRole("complementary", { name: /patient directory/i });
     await within(directory).findByText("Eleanor Vance");
     expect(within(directory).queryByText("Marcus Chen")).toBeNull();
+    expect(within(directory).getByRole("tab", { name: /active 2/i })).toBeTruthy();
+    expect(within(directory).getByRole("tab", { name: /completed 1/i })).toBeTruthy();
+    expect(within(directory).getByRole("tab", { name: /archived 1/i })).toBeTruthy();
     expect(listTreatments).toHaveBeenCalledWith({ limit: 50, offset: 0, archived: false });
 
     await user.click(screen.getByRole("tab", { name: /completed/i }));

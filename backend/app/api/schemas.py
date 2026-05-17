@@ -422,3 +422,6 @@ class TreatmentListItem(BaseModel):
 
 class TreatmentList(BaseModel):
     items: list[TreatmentListItem]
+    active_count: int
+    completed_count: int
+    archived_count: int

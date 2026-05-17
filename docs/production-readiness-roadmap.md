@@ -19,7 +19,6 @@ Keep each item as a small, reviewable slice.
 - Treatment lifecycle: pending -> active -> completed or terminated.
 - Start-cycle workflow that activates the schedule and sends the onboarding message.
 - Existing-treatment medication changes: add, edit, discontinue/remove medications, audit each change, and mark analysis/schedule stale for pharmacist rerun before monitoring continues.
-- Course completion report and archive flow.
 - Existing-patient search and treatment attachment.
 - Patient message storm buffering and turn aggregation.
 - Buffered-message worker integration: connect the internal processing seam to Cloud Tasks/Pub/Sub once deployment infrastructure is available.

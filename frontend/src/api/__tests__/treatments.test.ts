@@ -67,6 +67,9 @@ describe("listTreatments", () => {
     mockFetch({
       status: 200,
       body: {
+        active_count: 1,
+        completed_count: 0,
+        archived_count: 0,
         items: [
           {
             patient: {
@@ -96,6 +99,9 @@ describe("listTreatments", () => {
 
     const result = await listTreatments();
     expect(result.items).toHaveLength(1);
+    expect(result.active_count).toBe(1);
+    expect(result.completed_count).toBe(0);
+    expect(result.archived_count).toBe(0);
     expect(result.items[0].medication_count).toBe(2);
     expect(result.items[0].first_medication_name).toBe("Lisinopril");
   });
