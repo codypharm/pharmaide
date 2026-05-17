@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models import AdherenceEvent, PatientCheckIn, Treatment, TriageItem
+from app.db.models import AdherenceEvent, AuditLogEntry, PatientCheckIn, Treatment, TriageItem
 
 
 class TreatmentNotFound(Exception):
@@ -99,6 +99,27 @@ async def build_course_completion_report(
             by_status=_count_by(triage_items, "status"),
             by_reason=_count_by(triage_items, "reason"),
         ),
+    )
+
+
+def audit_course_completion_report_viewed(
+    session: AsyncSession,
+    report: CourseCompletionReport,
+) -> None:
+    """Record report access with aggregate counts only, never patient text."""
+    session.add(
+        AuditLogEntry(
+            event_type="completion_report_viewed",
+            resource_type="treatment",
+            resource_id=report.treatment_id,
+            payload={
+                "report_status": report.status,
+                "medication_count": report.medication_count,
+                "adherence_total_count": report.adherence.total_count,
+                "patient_update_total_count": report.patient_updates.total_count,
+                "triage_total_count": report.triage.total_count,
+            },
+        )
     )
 
 

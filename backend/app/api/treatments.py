@@ -80,6 +80,7 @@ from app.services.conversation_messages import (
 )
 from app.services.course_completion_report import (
     CourseCompletionReport,
+    audit_course_completion_report_viewed,
     build_course_completion_report,
 )
 from app.services.course_completion_report import (
@@ -197,6 +198,7 @@ async def get_treatment_completion_report(
     # only exposes finalized course reports after completion.
     if report.status != "completed":
         raise HTTPException(status_code=409, detail={"error": "treatment_not_completed"})
+    audit_course_completion_report_viewed(session, report)
     return report
 
 

@@ -5,10 +5,12 @@ from uuid import uuid4
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
     AdherenceEvent,
+    AuditLogEntry,
     Medication,
     Patient,
     PatientCheckIn,
@@ -67,15 +69,34 @@ async def test_completion_report_returns_sanitized_counts_for_completed_treatmen
     }
     assert "dizzy" not in response.text.lower()
 
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.resource_id == treatment.id,
+            AuditLogEntry.event_type == "completion_report_viewed",
+        )
+    )
+    assert audit is not None
+    assert audit.resource_type == "treatment"
+    assert audit.payload == {
+        "report_status": "completed",
+        "medication_count": 1,
+        "adherence_total_count": 1,
+        "patient_update_total_count": 1,
+        "triage_total_count": 1,
+    }
+    assert "dizzy" not in str(audit.payload).lower()
+
 
 @pytest.mark.usefixtures("postgres_container")
 async def test_completion_report_returns_404_for_unknown_treatment(
     app_client: AsyncClient,
+    db_session: AsyncSession,
 ) -> None:
     response = await app_client.get(f"/treatments/{uuid4()}/completion-report")
 
     assert response.status_code == 404
     assert response.json() == {"detail": {"error": "treatment_not_found"}}
+    assert await _audit_count(db_session) == 0
 
 
 @pytest.mark.usefixtures("postgres_container")
@@ -89,6 +110,18 @@ async def test_completion_report_returns_409_before_course_completion(
 
     assert response.status_code == 409
     assert response.json() == {"detail": {"error": "treatment_not_completed"}}
+    assert await _audit_count(db_session) == 0
+
+
+async def _audit_count(session: AsyncSession) -> int:
+    return (
+        await session.scalar(
+            select(func.count())
+            .select_from(AuditLogEntry)
+            .where(AuditLogEntry.event_type == "completion_report_viewed")
+        )
+        or 0
+    )
 
 
 async def _persist_treatment(
