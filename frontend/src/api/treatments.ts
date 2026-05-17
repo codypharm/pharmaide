@@ -362,6 +362,16 @@ export function terminateTreatment(treatmentId: string): Promise<TreatmentView> 
   );
 }
 
+export function addMedicationToTreatment(
+  treatmentId: string,
+  payload: MedicationCreate,
+): Promise<MedicationView> {
+  return postJson<MedicationCreate, MedicationView>(
+    `/treatments/${treatmentId}/medications`,
+    payload,
+  );
+}
+
 export function discontinueMedication(
   treatmentId: string,
   medicationId: string,

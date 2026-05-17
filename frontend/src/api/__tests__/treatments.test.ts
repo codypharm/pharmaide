@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  addMedicationToTreatment,
   archiveTreatment,
   createTreatment,
   createAdherenceEvent,
@@ -655,6 +656,44 @@ describe("terminateTreatment", () => {
 });
 
 describe("discontinueMedication", () => {
+  it("adds a medication to an existing treatment", async () => {
+    const spy = mockFetch({
+      status: 201,
+      body: {
+        id: "m2",
+        name: "Amlodipine",
+        dosage: "5 mg",
+        frequency: "Once Daily (QD)",
+        duration: "30 days",
+        objective: null,
+        discontinued_at: null,
+        ordinal: 1,
+      },
+    });
+
+    const result = await addMedicationToTreatment("t1", {
+      name: "Amlodipine",
+      dosage: "5 mg",
+      frequency: "Once Daily (QD)",
+      duration: "30 days",
+      objective: null,
+    });
+
+    const calledUrl = spy.mock.calls[0]?.[0] as string;
+    const init = spy.mock.calls[0]?.[1] as RequestInit;
+    expect(calledUrl).toMatch(/\/treatments\/t1\/medications$/);
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(String(init.body))).toEqual({
+      name: "Amlodipine",
+      dosage: "5 mg",
+      frequency: "Once Daily (QD)",
+      duration: "30 days",
+      objective: null,
+    });
+    expect(result.id).toBe("m2");
+    expect(result.ordinal).toBe(1);
+  });
+
   it("marks a treatment medication discontinued", async () => {
     const spy = mockFetch({
       status: 200,
