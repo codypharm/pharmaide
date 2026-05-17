@@ -1,11 +1,12 @@
 """Buffered patient message turn aggregation."""
 
+import asyncio
 import json
 from contextlib import suppress
 from datetime import UTC, date, datetime, timedelta
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.db.models import AuditLogEntry, ConversationMessage, Patient, Treatment
 from app.services.patient_message_buffer import (
@@ -123,6 +124,65 @@ async def test_process_buffered_patient_turn_leaves_messages_unprocessed_when_ha
     assert audit is None
 
 
+async def test_process_buffered_patient_turn_skips_messages_claimed_by_another_worker(
+    db_engine: AsyncEngine,
+) -> None:
+    session_factory = async_sessionmaker(db_engine, expire_on_commit=False)
+    async with session_factory() as setup_session:
+        treatment = await _persist_treatment(setup_session, mrn="BUFFER-LOCK-001")
+        await buffer_patient_message(
+            setup_session,
+            treatment_id=treatment.id,
+            message="I took it",
+        )
+        await _age_buffered_messages(setup_session, treatment.id)
+        await setup_session.commit()
+        treatment_id = treatment.id
+
+    first_worker_claimed = asyncio.Event()
+    release_first_worker = asyncio.Event()
+
+    async def slow_handle_turn(turn: object) -> None:
+        first_worker_claimed.set()
+        await release_first_worker.wait()
+
+    async def first_worker() -> object:
+        async with session_factory() as session:
+            result = await process_buffered_patient_turn(
+                session,
+                treatment_id=treatment_id,
+                handle_turn=slow_handle_turn,
+            )
+            await session.commit()
+            return result
+
+    async def unexpected_duplicate_handler(turn: object) -> None:
+        raise AssertionError("locked messages must not be handed to a second worker")
+
+    try:
+        first_task = asyncio.create_task(first_worker())
+        await first_worker_claimed.wait()
+
+        async with session_factory() as second_session:
+            second = await process_buffered_patient_turn(
+                second_session,
+                treatment_id=treatment_id,
+                handle_turn=unexpected_duplicate_handler,
+            )
+            await second_session.commit()
+
+        release_first_worker.set()
+        first = await first_task
+
+        assert first.processed_count == 1
+        assert second.processed_count == 0
+    finally:
+        release_first_worker.set()
+        async with session_factory() as cleanup_session:
+            await cleanup_session.execute(delete(Treatment).where(Treatment.id == treatment_id))
+            await cleanup_session.commit()
+
+
 async def _persist_treatment(session: AsyncSession, mrn: str = "BUFFER-001") -> Treatment:
     patient = Patient(
         name="Eleanor Vance",
@@ -139,10 +199,12 @@ async def _persist_treatment(session: AsyncSession, mrn: str = "BUFFER-001") -> 
 async def _age_buffered_messages(session: AsyncSession, treatment_id: object) -> None:
     messages = (
         await session.execute(
-            select(ConversationMessage).where(ConversationMessage.treatment_id == treatment_id)
+            select(ConversationMessage)
+            .where(ConversationMessage.treatment_id == treatment_id)
+            .order_by(ConversationMessage.created_at.asc(), ConversationMessage.id.asc())
         )
     ).scalars().all()
     old_enough = datetime.now(UTC) - timedelta(seconds=10)
-    for message in messages:
-        message.created_at = old_enough
+    for index, message in enumerate(messages):
+        message.created_at = old_enough + timedelta(milliseconds=index)
     await session.flush()

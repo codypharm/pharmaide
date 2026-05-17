@@ -136,6 +136,10 @@ async def _load_unprocessed_messages(
         )
         .order_by(ConversationMessage.created_at.asc(), ConversationMessage.id.asc())
         .limit(limit)
+        # Workers hold this row lock only while the aggregated turn is being
+        # handled. SKIP LOCKED makes parallel workers take no work instead of
+        # building duplicate replies from the same inbound message.
+        .with_for_update(skip_locked=True)
     )
     return list(result.scalars())
 
