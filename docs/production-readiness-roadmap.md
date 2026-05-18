@@ -24,6 +24,5 @@ Keep each item as a small, reviewable slice.
 - Behavioral nudging for patient adherence, while preserving safety boundaries.
 - Privacy mode hardening and PHI masking review.
 - Workspace isolation tests.
-- Safety failure-mode tests for guard timeouts, invalid safety output, and provider outage.
 - Scheduling failure-mode tests for delayed tasks, duplicate triggers, and course completion.
 - Security review for secrets, CORS, auth headers, audit trails, and data minimisation.

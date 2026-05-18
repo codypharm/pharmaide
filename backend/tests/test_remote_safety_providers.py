@@ -121,3 +121,25 @@ async def test_remote_http_provider_fails_closed_on_http_error() -> None:
                     content="Take twice the dose.",
                 )
             )
+
+
+async def test_remote_http_provider_fails_closed_on_timeout() -> None:
+    def timeout(_request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("guard timed out")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(timeout)) as client:
+        provider = RemoteHttpGuardProvider(
+            url="https://safety.test/v1/guard/check",
+            api_key=None,
+            client=client,
+        )
+
+        with pytest.raises(SafetyProviderUnavailable):
+            await provider.check(
+                GuardRequest(
+                    stage="input",
+                    treatment_id=TREATMENT_ID,
+                    actor_role="patient",
+                    content="Can I stop taking this medication?",
+                )
+            )
