@@ -33,6 +33,11 @@ from app.services.triage import create_open_triage_item
 log = structlog.get_logger(__name__)
 SYSTEM_RESOURCE_ID = UUID("00000000-0000-0000-0000-000000000000")
 NON_RESPONSE_GRACE_PERIOD = timedelta(hours=4)
+ADHERENCE_NUDGE = (
+    "Taking it close to the planned time helps you stay on track. "
+    "Reply when taken, or tell us if you feel unwell, are unsure, "
+    "or are having trouble with this dose."
+)
 
 
 class TreatmentNotFound(Exception):
@@ -252,7 +257,7 @@ def _build_reminder_message(
         status="queued",
         body=(
             f"Reminder: it is time for {medication.name} ({human_label}). "
-            "Reply when taken, or tell us if you are having trouble with this dose."
+            f"{ADHERENCE_NUDGE}"
         ),
     )
 

@@ -21,6 +21,5 @@ Keep each item as a small, reviewable slice.
 
 ## Global Standard Checklist
 
-- Behavioral nudging for patient adherence, while preserving safety boundaries.
 - Privacy mode hardening and PHI masking review.
 - Security review for secrets, CORS, auth headers, audit trails, and data minimisation.

@@ -62,6 +62,8 @@ async def test_run_treatment_monitoring_queues_due_reminder_message_and_audits(
     assert message.channel == "whatsapp"
     assert message.status == "queued"
     assert "Lisinopril" in message.body
+    assert "Taking it close to the planned time helps you stay on track." in message.body
+    assert "tell us if you feel unwell, are unsure" in message.body
 
     audit = await db_session.scalar(
         select(AuditLogEntry).where(AuditLogEntry.event_type == "monitoring_message_queued")
