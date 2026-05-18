@@ -153,6 +153,57 @@ async def test_review_patient_draft_safety_reports_output_guard_hold_reason(
     assert decision.hold_reason == "output_guard"
 
 
+async def test_review_patient_draft_safety_holds_clinically_unanswerable_question_after_input_allow(
+    db_session: AsyncSession,
+) -> None:
+    """Benign wording can still require pharmacist review after draft generation."""
+
+    guard_provider = SequencedGuardProvider([_guard_payload("input", "allow")])
+    referee_provider = FakeRefereeProvider(
+        {
+            "action": "block",
+            "violations": [
+                {
+                    "violation_type": "missing_required_context",
+                    "description": (
+                        "The draft answers a clinical timing question without enough context."
+                    ),
+                }
+            ],
+            "rationale": "The patient question is allowed, but the draft needs pharmacist review.",
+            "confidence": 0.92,
+        }
+    )
+
+    decision = await review_patient_draft_safety(
+        db_session,
+        treatment_id=uuid4(),
+        patient_message="Can I take this before breakfast tomorrow?",
+        assistant_draft="Yes, take it before breakfast tomorrow.",
+        prescription_context="Medication timing instructions are not available.",
+        providers=ConfiguredSafetyProviders(
+            guard_provider=guard_provider,
+            referee_provider=referee_provider,
+        ),
+    )
+    await db_session.flush()
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(AuditLogEntry.event_type == "safety_review_completed")
+    )
+
+    assert decision.status == "hold_for_pharmacist"
+    assert decision.message_to_send is None
+    assert decision.hold_reason == "referee"
+    assert decision.review.input_guard.action == "allow"
+    assert decision.review.referee.requires_pharmacist_review is True
+    assert decision.review.output_guard.action == "block"
+    assert [request.stage for request in guard_provider.seen_requests] == ["input"]
+    assert audit is not None
+    assert audit.payload["requires_pharmacist_review"] is True
+    assert "before breakfast" not in json.dumps(audit.payload)
+
+
 def _guard_payload(
     stage: str,
     action: str,
