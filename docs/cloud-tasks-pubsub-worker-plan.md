@@ -101,7 +101,7 @@ passing coroutine objects through the production adapter.
 
 ## Suggested Implementation Slices
 
-1. Replace direct `task_runner.schedule(...)` route calls with named job
+1. Replace the KB upload direct `task_runner.schedule(...)` call with named job
    scheduling.
 2. Add internal worker routes for analysis and KB ingestion.
 3. Add Cloud Tasks adapter with OIDC-authenticated HTTP targets.

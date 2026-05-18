@@ -74,12 +74,19 @@ async def _create_treatment_for_analysis_endpoint(
 async def test_post_treatment_analyze_starts_analysis(
     app_client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    scheduled: list[tuple[object, tuple[object, ...], dict[str, object]]] = []
+    scheduled: list[
+        tuple[task_runner.BackgroundJob, object, tuple[object, ...], dict[str, object]]
+    ] = []
 
-    def capture_schedule(coro_fn: object, *args: object, **kwargs: object) -> None:
-        scheduled.append((coro_fn, args, kwargs))
+    def capture_schedule(
+        job: task_runner.BackgroundJob,
+        coro_fn: object,
+        *args: object,
+        **kwargs: object,
+    ) -> None:
+        scheduled.append((job, coro_fn, args, kwargs))
 
-    monkeypatch.setattr(task_runner, "schedule", capture_schedule)
+    monkeypatch.setattr(task_runner, "schedule_job", capture_schedule)
 
     treatment_id = await _create_treatment_for_analysis_endpoint(db_session, "ANALYZE-001")
 
@@ -93,25 +100,37 @@ async def test_post_treatment_analyze_starts_analysis(
     assert analysis.treatment_id == treatment_id
     assert analysis.status == "pending"
     assert len(scheduled) == 1
-    assert scheduled[0][1][1] == analysis_id
-    assert scheduled[0][1][2] == 60
-    assert scheduled[0][2]["checkpoint_db_path"] == "./pharmaide.db"
-    assert scheduled[0][2]["rxnorm_base_url"] == "https://rxnav.nlm.nih.gov/REST"
-    assert "openai_api_key" in scheduled[0][2]
-    assert scheduled[0][2]["kb_scope_id"] is None
+    assert scheduled[0][0].name == "analysis.run"
+    assert scheduled[0][0].idempotency_key == f"analysis:{analysis_id}"
+    assert scheduled[0][0].payload == {
+        "analysis_id": str(analysis_id),
+        "timeout_seconds": 60,
+        "kb_scope_id": None,
+    }
+    assert scheduled[0][2][1] == analysis_id
+    assert scheduled[0][2][2] == 60
+    assert scheduled[0][3]["checkpoint_db_path"] == "./pharmaide.db"
+    assert scheduled[0][3]["rxnorm_base_url"] == "https://rxnav.nlm.nih.gov/REST"
+    assert "openai_api_key" in scheduled[0][3]
+    assert scheduled[0][3]["kb_scope_id"] is None
 
 
 @pytest.mark.usefixtures("postgres_container")
 async def test_post_treatment_analyze_passes_uuid_user_header_as_kb_scope(
     app_client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    scheduled: list[tuple[object, tuple[object, ...], dict[str, object]]] = []
+    scheduled: list[tuple[task_runner.BackgroundJob, dict[str, object]]] = []
     scope_id = uuid4()
 
-    def capture_schedule(coro_fn: object, *args: object, **kwargs: object) -> None:
-        scheduled.append((coro_fn, args, kwargs))
+    def capture_schedule(
+        job: task_runner.BackgroundJob,
+        _coro_fn: object,
+        *_args: object,
+        **kwargs: object,
+    ) -> None:
+        scheduled.append((job, kwargs))
 
-    monkeypatch.setattr(task_runner, "schedule", capture_schedule)
+    monkeypatch.setattr(task_runner, "schedule_job", capture_schedule)
 
     treatment_id = await _create_treatment_for_analysis_endpoint(db_session, "ANALYZE-006")
 
@@ -121,20 +140,26 @@ async def test_post_treatment_analyze_passes_uuid_user_header_as_kb_scope(
     )
 
     assert response.status_code == 202, response.text
-    assert scheduled[0][2]["user_id"] == str(scope_id)
-    assert scheduled[0][2]["kb_scope_id"] == scope_id
+    assert scheduled[0][0].payload["kb_scope_id"] == str(scope_id)
+    assert scheduled[0][1]["user_id"] == str(scope_id)
+    assert scheduled[0][1]["kb_scope_id"] == scope_id
 
 
 @pytest.mark.usefixtures("postgres_container")
 async def test_post_treatment_analyze_passes_timeout_override(
     app_client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    scheduled: list[tuple[object, tuple[object, ...]]] = []
+    scheduled: list[tuple[task_runner.BackgroundJob, tuple[object, ...]]] = []
 
-    def capture_schedule(coro_fn: object, *args: object, **_kwargs: object) -> None:
-        scheduled.append((coro_fn, args))
+    def capture_schedule(
+        job: task_runner.BackgroundJob,
+        _coro_fn: object,
+        *args: object,
+        **_kwargs: object,
+    ) -> None:
+        scheduled.append((job, args))
 
-    monkeypatch.setattr(task_runner, "schedule", capture_schedule)
+    monkeypatch.setattr(task_runner, "schedule_job", capture_schedule)
 
     treatment_id = await _create_treatment_for_analysis_endpoint(db_session, "ANALYZE-004")
 
@@ -142,6 +167,7 @@ async def test_post_treatment_analyze_passes_timeout_override(
 
     assert response.status_code == 202, response.text
     assert len(scheduled) == 1
+    assert scheduled[0][0].payload["timeout_seconds"] == 12
     assert scheduled[0][1][2] == 12
 
 
@@ -152,7 +178,7 @@ async def test_post_treatment_analyze_returns_429_when_user_is_rate_limited(
     def reject_schedule(*_args: object, **_kwargs: object) -> None:
         raise task_runner.RateLimitExceeded("pharmacist-1")
 
-    monkeypatch.setattr(task_runner, "schedule", reject_schedule)
+    monkeypatch.setattr(task_runner, "schedule_job", reject_schedule)
 
     treatment_id = await _create_treatment_for_analysis_endpoint(db_session, "ANALYZE-005")
 

@@ -63,6 +63,25 @@ async def test_in_process_scheduler_matches_background_job_interface() -> None:
     assert seen == ["named-job"]
 
 
+async def test_schedule_job_runs_coroutine_with_metadata() -> None:
+    seen: list[str] = []
+    job = task_runner.BackgroundJob(
+        name="analysis.run",
+        idempotency_key="analysis:analysis-1",
+        payload={"analysis_id": "analysis-1"},
+    )
+
+    async def record(value: str) -> None:
+        await asyncio.sleep(0)
+        seen.append(value)
+
+    task_runner.schedule_job(job, record, "scheduled")
+
+    await task_runner.drain()
+
+    assert seen == ["scheduled"]
+
+
 async def test_drain_waits_for_in_flight_tasks() -> None:
     started = asyncio.Event()
     release = asyncio.Event()

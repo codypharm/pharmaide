@@ -778,7 +778,17 @@ def _schedule_analysis(
     user_id: str,
 ) -> None:
     """Schedule analysis with the same runtime options for create and rerun."""
-    task_runner.schedule(
+    kb_scope_id = _parse_optional_uuid(user_id)
+    task_runner.schedule_job(
+        task_runner.BackgroundJob(
+            name="analysis.run",
+            idempotency_key=f"analysis:{analysis_id}",
+            payload={
+                "analysis_id": str(analysis_id),
+                "timeout_seconds": timeout_seconds,
+                "kb_scope_id": str(kb_scope_id) if kb_scope_id is not None else None,
+            },
+        ),
         analyze_treatment,
         session_factory,
         analysis_id,
@@ -786,7 +796,7 @@ def _schedule_analysis(
         checkpoint_db_path=settings.checkpoint_db_path,
         rxnorm_base_url=settings.rxnorm_base_url,
         openai_api_key=settings.openai_api_key,
-        kb_scope_id=_parse_optional_uuid(user_id),
+        kb_scope_id=kb_scope_id,
         user_id=user_id,
         max_concurrent_per_user=settings.max_concurrent_analyses_per_user,
     )

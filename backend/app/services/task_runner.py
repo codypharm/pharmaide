@@ -8,7 +8,7 @@ implementation while callers keep the same `schedule(coro_fn, *args)` shape.
 
 import asyncio
 import time
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Coroutine, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -28,6 +28,15 @@ class CheckpointCleanupResult:
     freed_mb: float
 
 
+@dataclass(frozen=True)
+class BackgroundJob:
+    """Metadata-only description of background work for a future queue adapter."""
+
+    name: str
+    idempotency_key: str
+    payload: Mapping[str, object]
+
+
 class BackgroundJobScheduler(Protocol):
     """Minimal scheduler contract that a Cloud Tasks adapter can later satisfy."""
 
@@ -40,6 +49,18 @@ class BackgroundJobScheduler(Protocol):
         **kwargs: object,
     ) -> asyncio.Task[T]:
         """Schedule background work and return the local task handle when available."""
+        ...
+
+    def schedule_job[T](
+        self,
+        job: BackgroundJob,
+        coro_fn: Callable[..., Coroutine[Any, Any, T]],
+        *args: object,
+        user_id: str | None = None,
+        max_concurrent_per_user: int | None = None,
+        **kwargs: object,
+    ) -> asyncio.Task[T]:
+        """Schedule named background work and return the local task handle."""
         ...
 
     async def drain(self) -> None:
@@ -76,6 +97,25 @@ class InProcessBackgroundJobScheduler:
             task.add_done_callback(lambda done_task: self._forget_user_task(user_id, done_task))
         return task
 
+    def schedule_job[T](
+        self,
+        job: BackgroundJob,
+        coro_fn: Callable[..., Coroutine[Any, Any, T]],
+        *args: object,
+        user_id: str | None = None,
+        max_concurrent_per_user: int | None = None,
+        **kwargs: object,
+    ) -> asyncio.Task[T]:
+        """Run named jobs locally while preserving production queue metadata."""
+        del job
+        return self.schedule(
+            coro_fn,
+            *args,
+            user_id=user_id,
+            max_concurrent_per_user=max_concurrent_per_user,
+            **kwargs,
+        )
+
     async def drain(self) -> None:
         """Wait for all scheduled tasks to finish.
 
@@ -106,6 +146,30 @@ def schedule[T](
 ) -> asyncio.Task[T]:
     """Schedule background work through the configured local scheduler."""
     return _scheduler.schedule(
+        coro_fn,
+        *args,
+        user_id=user_id,
+        max_concurrent_per_user=max_concurrent_per_user,
+        **kwargs,
+    )
+
+
+def schedule_job[T](
+    job: BackgroundJob,
+    coro_fn: Callable[..., Coroutine[Any, Any, T]],
+    *args: object,
+    user_id: str | None = None,
+    max_concurrent_per_user: int | None = None,
+    **kwargs: object,
+) -> asyncio.Task[T]:
+    """Schedule a named job through the local runner.
+
+    The metadata is the production queue contract. Local execution still flows
+    through `schedule(...)` so existing tests and dev hooks that monkeypatch the
+    old seam keep suppressing in-process work.
+    """
+    del job
+    return schedule(
         coro_fn,
         *args,
         user_id=user_id,
