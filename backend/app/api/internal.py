@@ -4,12 +4,12 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings, get_settings
-from app.db.engine import get_session
-from app.db.models import AuditLogEntry
+from app.db.engine import get_session, get_session_factory
+from app.db.models import AuditLogEntry, TreatmentAnalysis
 from app.services import (
     dailymed_cache,
     message_delivery,
@@ -18,11 +18,13 @@ from app.services import (
     patient_message_worker,
     task_runner,
 )
+from app.services.analysis import analyze_treatment
 from app.services.patient_reply_drafts import (
     TreatmentNotFound as ReplyDraftTreatmentNotFound,
 )
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+SessionFactoryDep = Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 SYSTEM_RESOURCE_ID = UUID("00000000-0000-0000-0000-000000000000")
 
@@ -66,6 +68,16 @@ class DueMonitoringRunResponse(BaseModel):
     processed_count: int
     queued_count: int
     skipped_count: int
+
+
+class AnalysisRunRequest(BaseModel):
+    kb_scope_id: UUID | None = None
+    timeout_seconds: int | None = Field(default=None, gt=0, le=300)
+
+
+class AnalysisRunResponse(BaseModel):
+    analysis_id: UUID
+    status: str
 
 
 class BufferedPatientTurnProcessResponse(BaseModel):
@@ -162,6 +174,32 @@ async def run_due_monitoring(session: SessionDep) -> DueMonitoringRunResponse:
 
 
 @router.post(
+    "/analyses/{analysis_id}/run",
+    response_model=AnalysisRunResponse,
+)
+async def run_analysis_worker(
+    analysis_id: UUID,
+    session_factory: SessionFactoryDep,
+    settings: SettingsDep,
+    body: AnalysisRunRequest | None = None,
+) -> AnalysisRunResponse:
+    """Run one queued analysis job by reopening persisted state from its id."""
+    await _ensure_analysis_exists(session_factory, analysis_id)
+    run_request = body or AnalysisRunRequest()
+    await analyze_treatment(
+        session_factory,
+        analysis_id,
+        run_request.timeout_seconds or settings.analysis_timeout_seconds,
+        checkpoint_db_path=settings.checkpoint_db_path,
+        rxnorm_base_url=settings.rxnorm_base_url,
+        openai_api_key=settings.openai_api_key,
+        kb_scope_id=run_request.kb_scope_id,
+    )
+    status = await _analysis_status(session_factory, analysis_id)
+    return AnalysisRunResponse(analysis_id=analysis_id, status=status)
+
+
+@router.post(
     "/treatments/{treatment_id}/process-buffered-patient-turn",
     response_model=BufferedPatientTurnProcessResponse,
 )
@@ -208,3 +246,21 @@ async def run_treatment_due_monitoring(
         queued_count=result.queued_count,
         skipped_count=result.skipped_count,
     )
+
+
+async def _ensure_analysis_exists(
+    session_factory: async_sessionmaker[AsyncSession],
+    analysis_id: UUID,
+) -> None:
+    status = await _analysis_status(session_factory, analysis_id)
+    if status is None:
+        raise HTTPException(status_code=404, detail={"error": "analysis_not_found"})
+
+
+async def _analysis_status(
+    session_factory: async_sessionmaker[AsyncSession],
+    analysis_id: UUID,
+) -> str | None:
+    async with session_factory() as session:
+        analysis = await session.get(TreatmentAnalysis, analysis_id)
+        return analysis.status if analysis is not None else None
