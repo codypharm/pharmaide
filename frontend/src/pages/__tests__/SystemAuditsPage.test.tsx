@@ -66,6 +66,20 @@ describe("SystemAuditsPage", () => {
     expect(spy).toHaveBeenCalledWith({ limit: 50, offset: 0 });
   });
 
+  it("exposes production audit filters for clinical, delivery, and infrastructure events", async () => {
+    vi.spyOn(auditsApi, "listAuditLogEntries").mockResolvedValue(AUDITS);
+
+    renderPage();
+
+    await screen.findByText("Analysis Started");
+    expect(screen.getByRole("option", { name: "Message delivery sent" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Message delivery retried" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Treatment cycle started" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Medication edited" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Knowledge retrieval completed" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Checkpoints cleaned" })).toBeTruthy();
+  });
+
   it("filters loaded audits by event or resource text", async () => {
     const user = userEvent.setup();
     vi.spyOn(auditsApi, "listAuditLogEntries").mockResolvedValue(AUDITS);
@@ -90,6 +104,25 @@ describe("SystemAuditsPage", () => {
 
     expect(screen.getByText("Triage Item Status Changed")).toBeTruthy();
     expect(screen.queryByText("Analysis Started")).toBeNull();
+  });
+
+  it("uses backend resource type values for knowledge audit filters", async () => {
+    const user = userEvent.setup();
+    const spy = vi.spyOn(auditsApi, "listAuditLogEntries").mockResolvedValue(AUDITS);
+
+    renderPage();
+
+    await screen.findByText("Analysis Started");
+    await user.selectOptions(screen.getByLabelText(/resource type/i), "kb_document");
+    await user.click(screen.getByRole("button", { name: /apply audit filters/i }));
+
+    await waitFor(() =>
+      expect(spy).toHaveBeenLastCalledWith({
+        limit: 50,
+        offset: 0,
+        resource_type: "kb_document",
+      }),
+    );
   });
 
   it("requests backend-filtered audits from pharmacist-friendly filter labels", async () => {
