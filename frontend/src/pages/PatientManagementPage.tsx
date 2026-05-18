@@ -672,6 +672,7 @@ export default function PatientManagementPage() {
                 activeTriageItems={selectedTreatmentTriageItems}
                 treatmentDetailState={treatmentDetailState}
                 patientUpdatesState={patientUpdatesState}
+                isPrivacyMode={isPrivacyMode}
                 isUpdatingObjective={isUpdatingObjective}
                 onUpdateClinicalObjective={updateClinicalObjective}
               />
@@ -680,6 +681,7 @@ export default function PatientManagementPage() {
                 conversationState={conversationState}
                 conversationLastUpdatedAt={conversationLastUpdatedAt}
                 activeTriageItems={selectedTreatmentTriageItems}
+                isPrivacyMode={isPrivacyMode}
                 incomingMessage={incomingMessage}
                 pharmacistMessage={pharmacistMessage}
                 chatResponseMode={selectedTreatment.treatment.chat_response_mode}
@@ -774,7 +776,9 @@ function PatientTreatmentGroup({
               {treatmentCountLabel}
             </span>
           </div>
-          <p className="mt-0.5 text-[10px] font-medium text-slate-400">MRN {patient.mrn}</p>
+          <p className={`mt-0.5 text-[10px] font-medium text-slate-400 ${isPrivacyMode ? "blur-sm select-none" : ""}`}>
+            MRN {patient.mrn}
+          </p>
         </div>
       </div>
       <div className="pb-2">
@@ -952,7 +956,7 @@ function PatientHeader({
         <h1 className={`text-2xl font-bold text-slate-900 tracking-tight ${isPrivacyMode ? "blur-sm" : ""}`}>
           {isPrivacyMode ? maskedName : item.patient.name}, {patientAge(item.patient.dob)}
         </h1>
-        <p className="text-sm text-slate-500">
+        <p className={`text-sm text-slate-500 ${isPrivacyMode ? "blur-sm select-none" : ""}`}>
           MRN: {item.patient.mrn} | First listed medication: {item.first_medication_name ?? "Not listed"}
         </p>
       </div>
@@ -977,6 +981,7 @@ function ClinicalWorkspace({
   activeTriageItems,
   treatmentDetailState,
   patientUpdatesState,
+  isPrivacyMode,
   isUpdatingObjective,
   onUpdateClinicalObjective,
 }: {
@@ -984,6 +989,7 @@ function ClinicalWorkspace({
   activeTriageItems: TriageItemView[];
   treatmentDetailState: TreatmentDetailState;
   patientUpdatesState: PatientUpdatesState;
+  isPrivacyMode: boolean;
   isUpdatingObjective: boolean;
   onUpdateClinicalObjective: (value: string) => void;
 }) {
@@ -1017,7 +1023,7 @@ function ClinicalWorkspace({
 
       <MedicationsPanel state={treatmentDetailState} />
 
-      <PatientUpdatesPanel state={patientUpdatesState} />
+      <PatientUpdatesPanel state={patientUpdatesState} isPrivacyMode={isPrivacyMode} />
     </div>
   );
 }
@@ -1076,7 +1082,13 @@ function ObjectiveEditor({
   );
 }
 
-function PatientUpdatesPanel({ state }: { state: PatientUpdatesState }) {
+function PatientUpdatesPanel({
+  state,
+  isPrivacyMode,
+}: {
+  state: PatientUpdatesState;
+  isPrivacyMode: boolean;
+}) {
   if (state.kind === "idle" || state.kind === "loading") {
     return (
       <section className="bg-white border border-slate-200 rounded-2xl p-6">
@@ -1126,7 +1138,9 @@ function PatientUpdatesPanel({ state }: { state: PatientUpdatesState }) {
                 {formatDateTime(update.observed_at ?? update.created_at)}
               </span>
             </div>
-            <p className="mt-2 text-sm leading-6 text-slate-700">{update.message}</p>
+            <p className="mt-2 text-sm leading-6 text-slate-700">
+              {formatSensitiveText(update.message, isPrivacyMode)}
+            </p>
           </article>
         ))}
       </div>
@@ -1253,6 +1267,7 @@ function InteractionLog({
   conversationState,
   conversationLastUpdatedAt,
   activeTriageItems,
+  isPrivacyMode,
   incomingMessage,
   pharmacistMessage,
   chatResponseMode,
@@ -1272,6 +1287,7 @@ function InteractionLog({
   conversationState: ConversationState;
   conversationLastUpdatedAt: Date | null;
   activeTriageItems: TriageItemView[];
+  isPrivacyMode: boolean;
   incomingMessage: string;
   pharmacistMessage: string;
   chatResponseMode: TreatmentView["chat_response_mode"];
@@ -1335,6 +1351,7 @@ function InteractionLog({
         {activeProfileTab === "patient" ? (
           <ConversationMessages
             state={conversationState}
+            isPrivacyMode={isPrivacyMode}
             retryingMessageId={retryingMessageId}
             onRetryMessageDelivery={onRetryMessageDelivery}
           />
@@ -1342,6 +1359,7 @@ function InteractionLog({
           <SafetyReviewPanel
             activeTriageItems={activeTriageItems}
             conversationState={conversationState}
+            isPrivacyMode={isPrivacyMode}
           />
         )}
       </div>
@@ -1451,10 +1469,12 @@ function ChatModeSwitch({
 
 function ConversationMessages({
   state,
+  isPrivacyMode,
   retryingMessageId,
   onRetryMessageDelivery,
 }: {
   state: ConversationState;
+  isPrivacyMode: boolean;
   retryingMessageId: string | null;
   onRetryMessageDelivery: (messageId: string) => void;
 }) {
@@ -1507,6 +1527,7 @@ function ConversationMessages({
         <ConversationBubble
           key={message.id}
           message={message}
+          isPrivacyMode={isPrivacyMode}
           isRetrying={retryingMessageId === message.id}
           onRetryMessageDelivery={onRetryMessageDelivery}
         />
@@ -1518,10 +1539,12 @@ function ConversationMessages({
 
 function ConversationBubble({
   message,
+  isPrivacyMode,
   isRetrying,
   onRetryMessageDelivery,
 }: {
   message: ConversationMessageView;
+  isPrivacyMode: boolean;
   isRetrying: boolean;
   onRetryMessageDelivery: (messageId: string) => void;
 }) {
@@ -1554,7 +1577,9 @@ function ConversationBubble({
       </div>
       <div className="max-w-[85%]">
         <div className={`rounded-2xl p-3 ${bubbleClass}`}>
-          <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.body}</p>
+          <p className="text-sm leading-relaxed whitespace-pre-wrap">
+            {formatSensitiveText(message.body, isPrivacyMode)}
+          </p>
         </div>
         <div className={`mt-1 flex items-center gap-2 text-[10px] text-slate-400 ${isOutbound ? "justify-end" : ""}`}>
           <span>{formatDateTime(message.created_at)}</span>
@@ -1640,9 +1665,11 @@ function deliveryStatusBadge(
 function SafetyReviewPanel({
   activeTriageItems,
   conversationState,
+  isPrivacyMode,
 }: {
   activeTriageItems: TriageItemView[];
   conversationState: ConversationState;
+  isPrivacyMode: boolean;
 }) {
   const messages = conversationState.kind === "ok" ? conversationState.items : [];
 
@@ -1671,7 +1698,12 @@ function SafetyReviewPanel({
       </div>
 
       {activeTriageItems.map((item) => (
-        <SafetyReviewFlagCard key={item.id} item={item} message={findMessage(messages, item)} />
+        <SafetyReviewFlagCard
+          key={item.id}
+          item={item}
+          message={findMessage(messages, item)}
+          isPrivacyMode={isPrivacyMode}
+        />
       ))}
     </div>
   );
@@ -1680,9 +1712,11 @@ function SafetyReviewPanel({
 function SafetyReviewFlagCard({
   item,
   message,
+  isPrivacyMode,
 }: {
   item: TriageItemView;
   message: ConversationMessageView | null;
+  isPrivacyMode: boolean;
 }) {
   return (
     <article className="rounded-xl border border-slate-200 bg-white p-3">
@@ -1702,7 +1736,9 @@ function SafetyReviewFlagCard({
           {message ? safetyReviewMessageLabel(message) : "Message context unavailable"}
         </p>
         {message ? (
-          <p className="mt-2 text-xs leading-5 text-slate-700 whitespace-pre-wrap">{message.body}</p>
+          <p className="mt-2 text-xs leading-5 text-slate-700 whitespace-pre-wrap">
+            {formatSensitiveText(message.body, isPrivacyMode)}
+          </p>
         ) : (
           <p className="mt-2 text-xs leading-5 text-slate-500">
             Open the Triage Queue for the full review context.
@@ -1711,6 +1747,11 @@ function SafetyReviewFlagCard({
       </div>
     </article>
   );
+}
+
+function formatSensitiveText(value: string, isPrivacyMode: boolean): string {
+  if (!isPrivacyMode) return value;
+  return "Message hidden in privacy mode.";
 }
 
 function findMessage(

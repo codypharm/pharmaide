@@ -325,11 +325,11 @@ const EMPTY_PATIENT_UPDATES: PatientCheckInList = {
   items: [],
 };
 
-function renderPage() {
+function renderPage({ isPrivacyMode = false }: { isPrivacyMode?: boolean } = {}) {
   return render(
     <MemoryRouter initialEntries={["/dashboard/surveillance"]}>
       <Routes>
-        <Route element={<Outlet context={{ isPrivacyMode: false }} />}>
+        <Route element={<Outlet context={{ isPrivacyMode }} />}>
           <Route path="/dashboard/surveillance" element={<PatientManagementPage />} />
         </Route>
       </Routes>
@@ -415,6 +415,23 @@ describe("PatientManagementPage", () => {
       "data-message-side",
       "left",
     );
+  });
+
+  it("hides patient identifiers and conversation bodies when privacy mode is active", async () => {
+    vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue(TREATMENTS);
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(DETAIL);
+    vi.spyOn(treatmentsApi, "listConversationMessages").mockResolvedValue(MESSAGES);
+    vi.spyOn(treatmentsApi, "listPatientCheckIns").mockResolvedValue(PATIENT_UPDATES);
+    vi.spyOn(triageApi, "listTriageItems").mockResolvedValue(TRIAGE_ITEMS);
+
+    renderPage({ isPrivacyMode: true });
+
+    await screen.findByText("Eleanor Vance");
+    const mrn = screen.getAllByText(/PHA-AB12/)[0];
+    expect(mrn.className).toMatch(/blur-sm/);
+    expect(screen.getAllByText("Message hidden in privacy mode.").length).toBeGreaterThan(1);
+    expect(screen.queryByText("I feel dizzy today.")).toBeNull();
+    expect(screen.queryByText("Pain has not improved since yesterday.")).toBeNull();
   });
 
   it("separates completed treatments and links them to the report view", async () => {
