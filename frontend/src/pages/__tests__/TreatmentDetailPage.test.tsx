@@ -756,6 +756,18 @@ describe("TreatmentDetailPage", () => {
     expect(screen.getByText("Source: Patient")).toBeTruthy();
   });
 
+  it("hides patient-reported update text when privacy mode is on", async () => {
+    vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(SAMPLE);
+    vi.spyOn(treatmentsApi, "listPatientCheckIns").mockResolvedValue({
+      items: SAMPLE_CHECK_INS,
+    });
+
+    renderAt(SAMPLE.treatment.id, { isPrivacyMode: true });
+
+    expect(await screen.findByText("Message hidden in privacy mode.")).toBeTruthy();
+    expect(screen.queryByText("I am not feeling better after three days.")).toBeNull();
+  });
+
   it("lets the pharmacist record a patient-reported clinical update", async () => {
     vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(SAMPLE);
     vi.spyOn(treatmentsApi, "listPatientCheckIns").mockResolvedValue({ items: [] });

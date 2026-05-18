@@ -329,8 +329,6 @@ function PatientUpdatesCard({
     }
   }
 
-  const phi = isPrivacyMode ? "blur-sm select-none" : "";
-
   return (
     <Section
       title="Patient-Reported Updates"
@@ -380,10 +378,8 @@ function PatientUpdatesCard({
                           {formatCreatedAt(item.observed_at ?? item.created_at)}
                         </span>
                       </div>
-                      <p
-                        className={`mt-2 text-sm leading-6 text-slate-900 ${phi}`}
-                      >
-                        {item.message}
+                      <p className="mt-2 text-sm leading-6 text-slate-900">
+                        {formatSensitiveText(item.message, isPrivacyMode)}
                       </p>
                       <p className="mt-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
                         Source: {sourceLabel(item.source)}
@@ -477,6 +473,11 @@ function PatientUpdatesCard({
       </div>
     </Section>
   );
+}
+
+function formatSensitiveText(value: string, isPrivacyMode: boolean): string {
+  if (!isPrivacyMode) return value;
+  return "Message hidden in privacy mode.";
 }
 
 function TreatmentTabs({
