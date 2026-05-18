@@ -9,7 +9,7 @@ Keep each item as a small, reviewable slice.
 - GCIP authentication: login/session enforcement, MFA, user identity propagation, and replacement of pre-auth `X-Pharmaide-User-Id` scaffolding.
 - Workspace scoping: derive clinical and knowledge-base scope from the pharmacist's clinic/workspace, not from the patient.
 - GCP deployment: Cloud Run containers, production environment variables, secrets, HTTPS-only browser-to-API path, and deployment runbooks.
-- Cloud Tasks/Pub/Sub operations: replace the in-process task runner before production scheduling and WhatsApp processing.
+- Cloud Tasks/Pub/Sub operations: replace the in-process task runner before production scheduling and WhatsApp processing. See `docs/cloud-tasks-pubsub-worker-plan.md`.
 - Private safety gateway: deploy Llama Guard / AgentDoG behind backend-only provider adapters with fail-closed behavior.
 - Evaluation suite: run clinical, safety, retrieval, DDI, and patient-message regression cases before production release.
 
