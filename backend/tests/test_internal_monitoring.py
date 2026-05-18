@@ -106,6 +106,37 @@ async def test_run_treatment_monitoring_completes_course_after_final_reminder_is
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_run_treatment_monitoring_waits_for_future_reminders_without_completing_course(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    treatment_id = await _active_treatment_with_analysis(
+        app_client,
+        db_session,
+        mrn="MONITOR-FUTURE-001",
+        analysis_builder=_analysis_result_with_future_only_reminder,
+    )
+
+    response = await app_client.post(f"/internal/treatments/{treatment_id}/run-due-monitoring")
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"queued_count": 0, "skipped_count": 1}
+    reminder_count = await db_session.scalar(
+        select(func.count()).select_from(_reminder_messages_query().subquery())
+    )
+    assert reminder_count == 0
+    treatment = await db_session.get(Treatment, treatment_id)
+    assert treatment is not None
+    assert treatment.status == "active"
+    completed_audit_count = await db_session.scalar(
+        select(func.count())
+        .select_from(AuditLogEntry)
+        .where(AuditLogEntry.event_type == "treatment_completed")
+    )
+    assert completed_audit_count == 0
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_run_treatment_monitoring_does_not_duplicate_existing_reminder_message(
     app_client: AsyncClient,
     db_session: AsyncSession,
@@ -567,6 +598,25 @@ def _analysis_result_with_future_reminder(medication_id: UUID) -> dict[str, obje
                     offset_from_start=timedelta(days=3650),
                     human_label="future dose",
                 ),
+            ]
+        ),
+        reasoning=None,
+        degraded=False,
+        completed_stages=["schedule"],
+    ).model_dump(mode="json")
+
+
+def _analysis_result_with_future_only_reminder(medication_id: UUID) -> dict[str, object]:
+    return AnalysisResult(
+        groundings=[],
+        ddi_warnings=[],
+        schedule=Schedule(
+            reminders=[
+                ReminderSlot(
+                    medication_id=medication_id,
+                    offset_from_start=timedelta(days=3650),
+                    human_label="tomorrow dose",
+                )
             ]
         ),
         reasoning=None,
