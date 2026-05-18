@@ -349,6 +349,13 @@ async def test_analyze_treatment_configured_retriever_persists_clinic_and_dailym
         source_uri="local://kb/lisinopril.pdf",
         content="Clinic-specific lisinopril monitoring protocol.",
     )
+    await _add_ready_kb_document(
+        db_session,
+        uploaded_by=UUID("22222222-2222-4222-8222-222222222222"),
+        title="Other Workspace Protocol",
+        source_uri="local://kb/other-workspace.pdf",
+        content="Other workspace content must not reach this analysis.",
+    )
     analysis_id = await create_pending_analysis(db_session, treatment.id)
     session_factory = async_sessionmaker(db_session.bind, expire_on_commit=False)
     summary_agent = build_summary_agent(
@@ -402,6 +409,10 @@ async def test_analyze_treatment_configured_retriever_persists_clinic_and_dailym
     assert citations[0]["source_uri"] == "local://kb/lisinopril.pdf"
     assert citations[0]["text"] == "Clinic-specific lisinopril monitoring protocol."
     assert citations[0]["score"] == 0.95
+    assert "Other workspace" not in {citation["document_title"] for citation in citations}
+    assert "local://kb/other-workspace.pdf" not in {
+        citation["source_uri"] for citation in citations
+    }
     assert citations[1]["source_type"] == "dailymed"
     assert citations[1]["document_title"] == "Lisinopril Tablet"
     assert citations[1]["source_uri"] == "dailymed://setid-1"

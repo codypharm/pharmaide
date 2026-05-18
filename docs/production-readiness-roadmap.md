@@ -23,5 +23,4 @@ Keep each item as a small, reviewable slice.
 
 - Behavioral nudging for patient adherence, while preserving safety boundaries.
 - Privacy mode hardening and PHI masking review.
-- Workspace isolation tests.
 - Security review for secrets, CORS, auth headers, audit trails, and data minimisation.
