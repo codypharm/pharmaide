@@ -11,10 +11,7 @@ import time
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
-
-_live_tasks: set[asyncio.Task[Any]] = set()
-_user_tasks: dict[str, set[asyncio.Future[Any]]] = {}
+from typing import Any, Protocol
 
 
 class RateLimitExceeded(Exception):
@@ -31,13 +28,73 @@ class CheckpointCleanupResult:
     freed_mb: float
 
 
-def _forget_user_task(user_id: str, task: asyncio.Future[Any]) -> None:
-    tasks = _user_tasks.get(user_id)
-    if tasks is None:
-        return
-    tasks.discard(task)
-    if not tasks:
-        _user_tasks.pop(user_id, None)
+class BackgroundJobScheduler(Protocol):
+    """Minimal scheduler contract that a Cloud Tasks adapter can later satisfy."""
+
+    def schedule[T](
+        self,
+        coro_fn: Callable[..., Coroutine[Any, Any, T]],
+        *args: object,
+        user_id: str | None = None,
+        max_concurrent_per_user: int | None = None,
+        **kwargs: object,
+    ) -> asyncio.Task[T]:
+        """Schedule background work and return the local task handle when available."""
+        ...
+
+    async def drain(self) -> None:
+        """Wait for locally tracked work to finish."""
+        ...
+
+
+class InProcessBackgroundJobScheduler:
+    """Local scheduler used before production Cloud Tasks/Pub/Sub is wired."""
+
+    def __init__(self) -> None:
+        self._live_tasks: set[asyncio.Task[Any]] = set()
+        self._user_tasks: dict[str, set[asyncio.Future[Any]]] = {}
+
+    def schedule[T](
+        self,
+        coro_fn: Callable[..., Coroutine[Any, Any, T]],
+        *args: object,
+        user_id: str | None = None,
+        max_concurrent_per_user: int | None = None,
+        **kwargs: object,
+    ) -> asyncio.Task[T]:
+        """Start a coroutine and keep a strong reference until completion."""
+        if user_id is not None and max_concurrent_per_user is not None:
+            user_tasks = self._user_tasks.setdefault(user_id, set())
+            if len(user_tasks) >= max_concurrent_per_user:
+                raise RateLimitExceeded(user_id)
+
+        task: asyncio.Task[T] = asyncio.create_task(coro_fn(*args, **kwargs))
+        self._live_tasks.add(task)
+        task.add_done_callback(self._live_tasks.discard)
+        if user_id is not None and max_concurrent_per_user is not None:
+            user_tasks.add(task)
+            task.add_done_callback(lambda done_task: self._forget_user_task(user_id, done_task))
+        return task
+
+    async def drain(self) -> None:
+        """Wait for all scheduled tasks to finish.
+
+        Shutdown should wait for in-flight clinical/audit work, but one failed
+        task should not prevent the runner from waiting on the remaining tasks.
+        """
+        while self._live_tasks:
+            await asyncio.gather(*self._live_tasks, return_exceptions=True)
+
+    def _forget_user_task(self, user_id: str, task: asyncio.Future[Any]) -> None:
+        tasks = self._user_tasks.get(user_id)
+        if tasks is None:
+            return
+        tasks.discard(task)
+        if not tasks:
+            self._user_tasks.pop(user_id, None)
+
+
+_scheduler: BackgroundJobScheduler = InProcessBackgroundJobScheduler()
 
 
 def schedule[T](
@@ -47,34 +104,19 @@ def schedule[T](
     max_concurrent_per_user: int | None = None,
     **kwargs: object,
 ) -> asyncio.Task[T]:
-    """Start a coroutine in the background and keep it alive until completion.
-
-    The module-level set is intentional: the event loop only keeps weak task
-    references, so a fire-and-forget task can otherwise be garbage-collected
-    before it finishes.
-    """
-    if user_id is not None and max_concurrent_per_user is not None:
-        user_tasks = _user_tasks.setdefault(user_id, set())
-        if len(user_tasks) >= max_concurrent_per_user:
-            raise RateLimitExceeded(user_id)
-
-    task: asyncio.Task[T] = asyncio.create_task(coro_fn(*args, **kwargs))
-    _live_tasks.add(task)
-    task.add_done_callback(_live_tasks.discard)
-    if user_id is not None and max_concurrent_per_user is not None:
-        user_tasks.add(task)
-        task.add_done_callback(lambda done_task: _forget_user_task(user_id, done_task))
-    return task
+    """Schedule background work through the configured local scheduler."""
+    return _scheduler.schedule(
+        coro_fn,
+        *args,
+        user_id=user_id,
+        max_concurrent_per_user=max_concurrent_per_user,
+        **kwargs,
+    )
 
 
 async def drain() -> None:
-    """Wait for all scheduled tasks to finish.
-
-    Shutdown should wait for in-flight clinical/audit work, but one failed
-    task should not prevent the runner from waiting on the remaining tasks.
-    """
-    while _live_tasks:
-        await asyncio.gather(*_live_tasks, return_exceptions=True)
+    """Wait for all scheduled local tasks to finish."""
+    await _scheduler.drain()
 
 
 def cleanup_checkpoints(

@@ -101,11 +101,9 @@ passing coroutine objects through the production adapter.
 
 ## Suggested Implementation Slices
 
-1. Introduce a `BackgroundJobScheduler` interface and keep the current
-   in-process implementation.
-2. Replace direct `task_runner.schedule(...)` route calls with named job
+1. Replace direct `task_runner.schedule(...)` route calls with named job
    scheduling.
-3. Add internal worker routes for analysis and KB ingestion.
-4. Add Cloud Tasks adapter with OIDC-authenticated HTTP targets.
-5. Add Cloud Scheduler/Pub/Sub ticks for due monitoring and delivery.
-6. Add queue retry/dead-letter audit events without PHI.
+2. Add internal worker routes for analysis and KB ingestion.
+3. Add Cloud Tasks adapter with OIDC-authenticated HTTP targets.
+4. Add Cloud Scheduler/Pub/Sub ticks for due monitoring and delivery.
+5. Add queue retry/dead-letter audit events without PHI.

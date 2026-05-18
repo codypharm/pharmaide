@@ -48,6 +48,21 @@ async def test_schedule_forwards_keyword_arguments() -> None:
     assert seen == ["configured"]
 
 
+async def test_in_process_scheduler_matches_background_job_interface() -> None:
+    seen: list[str] = []
+    scheduler: task_runner.BackgroundJobScheduler = task_runner.InProcessBackgroundJobScheduler()
+
+    async def record(value: str) -> None:
+        await asyncio.sleep(0)
+        seen.append(value)
+
+    scheduler.schedule(record, "named-job")
+
+    await scheduler.drain()
+
+    assert seen == ["named-job"]
+
+
 async def test_drain_waits_for_in_flight_tasks() -> None:
     started = asyncio.Event()
     release = asyncio.Event()
