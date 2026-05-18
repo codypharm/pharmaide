@@ -17,7 +17,6 @@ Keep each item as a small, reviewable slice.
 
 - Real WhatsApp scheduled check-ins and adherence capture.
 - Buffered-message worker integration: connect the internal processing seam to Cloud Tasks/Pub/Sub once deployment infrastructure is available.
-- Buffered-message operator visibility: expose processing/retry state only where pharmacists need it, without showing queue internals in routine chat UI.
 - Production audit coverage review for remaining clinical, delivery, and infrastructure actions.
 - Licensed DDI provider replacement when Lexicomp, DrugBank, or another approved source is available.
 

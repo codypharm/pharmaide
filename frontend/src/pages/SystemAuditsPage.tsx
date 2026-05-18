@@ -55,6 +55,10 @@ const EVENT_TYPE_OPTIONS: AuditFilterOption[] = [
   { label: "Patient check-in recorded", value: "patient_check_in_recorded" },
   { label: "Adherence event recorded", value: "adherence_event_recorded" },
   { label: "Non-response recorded", value: "monitoring_non_response_recorded" },
+  { label: "Patient message buffered", value: "patient_message_buffered" },
+  { label: "Buffered turn processed", value: "patient_message_buffer_processed" },
+  { label: "Buffer worker run", value: "patient_message_buffer_worker_run" },
+  { label: "Buffered conversation recorded", value: "buffered_conversation_turn_recorded" },
 ];
 
 const RESOURCE_TYPE_OPTIONS: AuditFilterOption[] = [
