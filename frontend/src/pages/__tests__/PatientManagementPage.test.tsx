@@ -417,7 +417,7 @@ describe("PatientManagementPage", () => {
     );
   });
 
-  it("hides patient identifiers and conversation bodies when privacy mode is active", async () => {
+  it("removes patient identifiers and conversation bodies when privacy mode is active", async () => {
     vi.spyOn(treatmentsApi, "listTreatments").mockResolvedValue(TREATMENTS);
     vi.spyOn(treatmentsApi, "getTreatment").mockResolvedValue(DETAIL);
     vi.spyOn(treatmentsApi, "listConversationMessages").mockResolvedValue(MESSAGES);
@@ -426,9 +426,10 @@ describe("PatientManagementPage", () => {
 
     renderPage({ isPrivacyMode: true });
 
-    await screen.findByText("Eleanor Vance");
-    const mrn = screen.getAllByText(/PHA-AB12/)[0];
-    expect(mrn.className).toMatch(/blur-sm/);
+    expect(await screen.findAllByText("Patient hidden")).toHaveLength(2);
+    expect(screen.queryByText("Eleanor Vance")).toBeNull();
+    expect(screen.queryByText(/PHA-AB12/)).toBeNull();
+    expect(screen.queryByText("Eleanor V.")).toBeNull();
     expect(screen.getAllByText("Message hidden in privacy mode.").length).toBeGreaterThan(1);
     expect(screen.queryByText("I feel dizzy today.")).toBeNull();
     expect(screen.queryByText("Pain has not improved since yesterday.")).toBeNull();

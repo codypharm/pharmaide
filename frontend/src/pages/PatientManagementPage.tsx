@@ -760,24 +760,26 @@ function PatientTreatmentGroup({
 }) {
   const patient = group.items[0].patient;
   const treatmentCountLabel = `${group.items.length} treatment${group.items.length === 1 ? "" : "s"}`;
+  const displayName = isPrivacyMode ? "Patient hidden" : patient.name;
+  const displayMrn = isPrivacyMode ? "MRN hidden" : `MRN ${patient.mrn}`;
 
   return (
     <section className="bg-white">
       <div className="px-4 pt-4 pb-2 flex items-center gap-3">
         <div className="h-9 w-9 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center text-xs font-black text-slate-500">
-          {initials(patient.name) || "P"}
+          {isPrivacyMode ? "P" : initials(patient.name) || "P"}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-3">
-            <p className={`truncate text-sm font-bold ${isPrivacyMode ? "blur-sm" : "text-slate-900"}`}>
-              {patient.name}
+            <p className="truncate text-sm font-bold text-slate-900">
+              {displayName}
             </p>
             <span className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-500">
               {treatmentCountLabel}
             </span>
           </div>
-          <p className={`mt-0.5 text-[10px] font-medium text-slate-400 ${isPrivacyMode ? "blur-sm select-none" : ""}`}>
-            MRN {patient.mrn}
+          <p className="mt-0.5 text-[10px] font-medium text-slate-400">
+            {displayMrn}
           </p>
         </div>
       </div>
@@ -942,9 +944,10 @@ function PatientHeader({
   item: TreatmentListItem;
   isPrivacyMode: boolean;
 }) {
-  const maskedName = `${item.patient.name.split(" ")[0] ?? "Patient"} ${
-    item.patient.name.split(" ")[1]?.[0] ?? ""
-  }.`;
+  const patientHeading = isPrivacyMode
+    ? "Patient hidden"
+    : `${item.patient.name}, ${patientAge(item.patient.dob)}`;
+  const patientMeta = isPrivacyMode ? "MRN hidden" : `MRN: ${item.patient.mrn}`;
 
   return (
     <div className="p-8 border-b border-slate-100 flex items-center justify-between shrink-0">
@@ -953,11 +956,11 @@ function PatientHeader({
           <span>Surveillance</span>
           <span className="text-[#5548E8]">{item.treatment.id.slice(0, 8)}</span>
         </div>
-        <h1 className={`text-2xl font-bold text-slate-900 tracking-tight ${isPrivacyMode ? "blur-sm" : ""}`}>
-          {isPrivacyMode ? maskedName : item.patient.name}, {patientAge(item.patient.dob)}
+        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+          {patientHeading}
         </h1>
-        <p className={`text-sm text-slate-500 ${isPrivacyMode ? "blur-sm select-none" : ""}`}>
-          MRN: {item.patient.mrn} | First listed medication: {item.first_medication_name ?? "Not listed"}
+        <p className="text-sm text-slate-500">
+          {patientMeta} | First listed medication: {item.first_medication_name ?? "Not listed"}
         </p>
       </div>
       <div className="flex items-center gap-2">
