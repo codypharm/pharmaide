@@ -61,6 +61,7 @@ const EVENT_TYPE_OPTIONS: AuditFilterOption[] = [
   { label: "Message delivery sent", value: "conversation_message_delivery_marked_sent" },
   { label: "Message delivery failed", value: "conversation_message_delivery_failed" },
   { label: "Message delivery retried", value: "conversation_message_delivery_retried" },
+  { label: "Delivery callback rejected", value: "conversation_message_delivery_callback_rejected" },
   { label: "Treatment created", value: "treatment_created" },
   { label: "Treatment cycle started", value: "treatment_cycle_started" },
   { label: "Treatment completed", value: "treatment_completed" },

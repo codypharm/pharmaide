@@ -25,6 +25,5 @@ Keep each item as a small, reviewable slice.
 - Privacy mode hardening and PHI masking review.
 - Workspace isolation tests.
 - Safety failure-mode tests for guard timeouts, invalid safety output, and provider outage.
-- Delivery failure-mode tests for WhatsApp retries and provider callback mismatch.
 - Scheduling failure-mode tests for delayed tasks, duplicate triggers, and course completion.
 - Security review for secrets, CORS, auth headers, audit trails, and data minimisation.

@@ -74,6 +74,7 @@ describe("SystemAuditsPage", () => {
     await screen.findByText("Analysis Started");
     expect(screen.getByRole("option", { name: "Message delivery sent" })).toBeTruthy();
     expect(screen.getByRole("option", { name: "Message delivery retried" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Delivery callback rejected" })).toBeTruthy();
     expect(screen.getByRole("option", { name: "Treatment cycle started" })).toBeTruthy();
     expect(screen.getByRole("option", { name: "Medication edited" })).toBeTruthy();
     expect(screen.getByRole("option", { name: "Knowledge retrieval completed" })).toBeTruthy();

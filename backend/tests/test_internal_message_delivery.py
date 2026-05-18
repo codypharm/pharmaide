@@ -166,6 +166,60 @@ async def test_run_message_delivery_marks_message_failed_when_provider_raises(
     assert "pharmacy" not in str(audit.payload).lower()
 
 
+@pytest.mark.usefixtures("postgres_container")
+async def test_delivery_callback_rejects_provider_mismatch_without_changing_message(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    treatment_id = await _create_treatment(app_client, "DELIVERY-004")
+    queued = await app_client.post(
+        f"/treatments/{treatment_id}/pharmacist-messages",
+        json={"message": "Please continue the current dose."},
+    )
+    assert queued.status_code == 201, queued.text
+    message_id = UUID(queued.json()["id"])
+
+    run_response = await app_client.post("/internal/message-delivery/run-once")
+    assert run_response.status_code == 200, run_response.text
+
+    callback_response = await app_client.post(
+        "/internal/message-delivery/callback",
+        json={
+            "provider": "wrong-provider",
+            "external_message_id": f"internal-delivery:{message_id}",
+            "status": "sent",
+        },
+    )
+
+    assert callback_response.status_code == 200, callback_response.text
+    assert callback_response.json() == {
+        "accepted": False,
+        "reason": "provider_mismatch",
+        "message_id": str(message_id),
+    }
+
+    message = await db_session.get(ConversationMessage, message_id)
+    assert message is not None
+    assert message.status == "sent"
+    assert message.external_message_id == f"internal-delivery:{message_id}"
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.event_type == "conversation_message_delivery_callback_rejected"
+        )
+    )
+    assert audit is not None
+    assert audit.payload == {
+        "message_id": str(message_id),
+        "external_message_id": f"internal-delivery:{message_id}",
+        "provider": "wrong-provider",
+        "expected_provider": "internal-placeholder",
+        "callback_status": "sent",
+        "reason": "provider_mismatch",
+    }
+    assert "continue" not in str(audit.payload).lower()
+
+
 class FailingDeliveryProvider:
     def __init__(self, error_code: str) -> None:
         self.error_code = error_code

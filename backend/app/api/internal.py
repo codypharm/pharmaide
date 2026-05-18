@@ -45,6 +45,18 @@ class MessageDeliveryRunResponse(BaseModel):
     failed_count: int
 
 
+class MessageDeliveryCallbackRequest(BaseModel):
+    provider: str
+    external_message_id: str
+    status: str
+
+
+class MessageDeliveryCallbackResponse(BaseModel):
+    accepted: bool
+    reason: str
+    message_id: UUID | None = None
+
+
 class TreatmentMonitoringRunResponse(BaseModel):
     queued_count: int
     skipped_count: int
@@ -112,6 +124,27 @@ async def run_message_delivery_once(session: SessionDep) -> MessageDeliveryRunRe
         processed_count=result.processed_count,
         sent_count=result.sent_count,
         failed_count=result.failed_count,
+    )
+
+
+@router.post(
+    "/message-delivery/callback",
+    response_model=MessageDeliveryCallbackResponse,
+)
+async def record_message_delivery_callback(
+    body: MessageDeliveryCallbackRequest,
+    session: SessionDep,
+) -> MessageDeliveryCallbackResponse:
+    result = await message_delivery.record_delivery_callback(
+        session,
+        provider=body.provider,
+        external_message_id=body.external_message_id,
+        status=body.status,
+    )
+    return MessageDeliveryCallbackResponse(
+        accepted=result.accepted,
+        reason=result.reason,
+        message_id=result.message_id,
     )
 
 

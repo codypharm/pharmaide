@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from typing import Protocol
+from uuid import UUID
 
 import structlog
 from sqlalchemy import select
@@ -13,6 +14,7 @@ log = structlog.get_logger(__name__)
 
 PLACEHOLDER_PROVIDER = "internal-placeholder"
 DEFAULT_DELIVERY_LIMIT = 50
+SYSTEM_RESOURCE_ID = UUID("00000000-0000-0000-0000-000000000000")
 
 
 @dataclass(frozen=True)
@@ -28,6 +30,13 @@ class DeliveryAttemptResult:
     provider: str
     external_message_id: str | None = None
     error_code: str | None = None
+
+
+@dataclass(frozen=True)
+class DeliveryCallbackResult:
+    accepted: bool
+    reason: str
+    message_id: UUID | None = None
 
 
 class DeliveryProvider(Protocol):
@@ -82,6 +91,54 @@ async def run_message_delivery_once(
     )
 
 
+async def record_delivery_callback(
+    session: AsyncSession,
+    *,
+    provider: str,
+    external_message_id: str,
+    status: str,
+) -> DeliveryCallbackResult:
+    """Record provider callback mismatches without trusting provider payload blindly."""
+    message = await _load_message_by_external_id(session, external_message_id)
+    if message is None:
+        _audit_callback_rejected(
+            session,
+            resource_id=SYSTEM_RESOURCE_ID,
+            message=None,
+            provider=provider,
+            external_message_id=external_message_id,
+            status=status,
+            reason="message_not_found",
+        )
+        await session.flush()
+        return DeliveryCallbackResult(accepted=False, reason="message_not_found")
+
+    if provider != PLACEHOLDER_PROVIDER:
+        _audit_callback_rejected(
+            session,
+            resource_id=message.id,
+            message=message,
+            provider=provider,
+            external_message_id=external_message_id,
+            status=status,
+            reason="provider_mismatch",
+        )
+        await session.flush()
+        return DeliveryCallbackResult(
+            accepted=False,
+            reason="provider_mismatch",
+            message_id=message.id,
+        )
+
+    log.info(
+        "message_delivery_callback_accepted",
+        message_id=str(message.id),
+        provider=provider,
+        callback_status=status,
+    )
+    return DeliveryCallbackResult(accepted=True, reason="accepted", message_id=message.id)
+
+
 async def _attempt_delivery(
     provider: DeliveryProvider,
     message: ConversationMessage,
@@ -100,6 +157,38 @@ async def _attempt_delivery(
             provider=provider.__class__.__name__,
             error_code="provider_exception",
         )
+
+
+def _audit_callback_rejected(
+    session: AsyncSession,
+    *,
+    resource_id: UUID,
+    message: ConversationMessage | None,
+    provider: str,
+    external_message_id: str,
+    status: str,
+    reason: str,
+) -> None:
+    payload: dict[str, object] = {
+        "external_message_id": external_message_id,
+        "provider": provider,
+        "expected_provider": PLACEHOLDER_PROVIDER,
+        "callback_status": status,
+        "reason": reason,
+    }
+    if message is not None:
+        payload["message_id"] = str(message.id)
+
+    session.add(
+        AuditLogEntry(
+            event_type="conversation_message_delivery_callback_rejected",
+            resource_type="conversation_message" if message is not None else "system",
+            resource_id=resource_id,
+            # Provider callbacks are untrusted. Persist only routing/state
+            # metadata, never message bodies or patient identifiers.
+            payload=payload,
+        )
+    )
 
 
 def _mark_message_sent(
@@ -175,3 +264,14 @@ async def _load_queued_whatsapp_messages(
         .limit(limit)
     )
     return list(result.scalars())
+
+
+async def _load_message_by_external_id(
+    session: AsyncSession,
+    external_message_id: str,
+) -> ConversationMessage | None:
+    return await session.scalar(
+        select(ConversationMessage).where(
+            ConversationMessage.external_message_id == external_message_id,
+        )
+    )
