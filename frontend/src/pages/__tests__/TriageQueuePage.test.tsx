@@ -47,11 +47,11 @@ const CONVERSATION_MESSAGES: ConversationMessageList = {
   ],
 };
 
-function renderPage() {
+function renderPage({ isPrivacyMode = false }: { isPrivacyMode?: boolean } = {}) {
   return render(
     <MemoryRouter initialEntries={["/dashboard/triage"]}>
       <Routes>
-        <Route element={<Outlet context={{ isPrivacyMode: false }} />}>
+        <Route element={<Outlet context={{ isPrivacyMode }} />}>
           <Route path="/dashboard/triage" element={<TriageQueuePage />} />
         </Route>
       </Routes>
@@ -182,6 +182,23 @@ describe("TriageQueuePage", () => {
     expect(screen.getAllByText("I feel dizzy after the second dose.").length).toBeGreaterThan(0);
     expect(screen.getAllByText("You can skip the next dose.").length).toBeGreaterThan(0);
     expect(screen.getByText("Held draft, not sent")).toBeTruthy();
+  });
+
+  it("hides patient conversation bodies when privacy mode is active", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(triageApi, "listTriageItems").mockResolvedValue({
+      items: [OPEN_ITEM],
+    });
+    vi.spyOn(treatmentsApi, "listConversationMessages").mockResolvedValue(CONVERSATION_MESSAGES);
+
+    renderPage({ isPrivacyMode: true });
+
+    await screen.findByText("Clinical draft review");
+    await user.click(screen.getByRole("button", { name: /review item/i }));
+
+    expect(await screen.findAllByText("Message hidden in privacy mode.")).toHaveLength(4);
+    expect(screen.queryByText("I feel dizzy after the second dose.")).toBeNull();
+    expect(screen.queryByText("You can skip the next dose.")).toBeNull();
   });
 
   it("shows pharmacist-facing wording for draft review hold reasons", async () => {

@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useOutletContext } from "react-router-dom";
 import {
   AlertCircle,
   CheckCircle2,
@@ -42,6 +42,10 @@ type ConversationState =
   | { kind: "ok"; items: ConversationMessageView[] }
   | { kind: "error"; requestId: string | null };
 
+type OutletContext = {
+  isPrivacyMode: boolean;
+};
+
 const REASON_LABELS: Record<TriageReason, string> = {
   input_guard: "Incoming message safety review",
   referee: "Clinical draft review",
@@ -80,6 +84,7 @@ function shortId(id: string): string {
 }
 
 export default function TriageQueuePage() {
+  const { isPrivacyMode } = useOutletContext<OutletContext>();
   const [state, setState] = useState<FetchState>({ kind: "loading" });
   const [actionItemId, setActionItemId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<ActionError | null>(null);
@@ -312,6 +317,7 @@ export default function TriageQueuePage() {
         {state.kind === "ok" && state.items.length > 0 && (
           <TriageTable
             items={state.items}
+            isPrivacyMode={isPrivacyMode}
             actionItemId={actionItemId}
             expandedItemId={expandedItemId}
             conversationByItem={conversationByItem}
@@ -484,6 +490,7 @@ function ActionErrorCard({ error }: { error: ActionError }) {
 
 function TriageTable({
   items,
+  isPrivacyMode,
   actionItemId,
   expandedItemId,
   conversationByItem,
@@ -494,6 +501,7 @@ function TriageTable({
   onToggleConversation,
 }: {
   items: TriageItemView[];
+  isPrivacyMode: boolean;
   actionItemId: string | null;
   expandedItemId: string | null;
   conversationByItem: Record<string, ConversationState>;
@@ -562,6 +570,7 @@ function TriageTable({
                     <td colSpan={5} className="px-6 py-5">
                       <ConversationPanel
                         item={item}
+                        isPrivacyMode={isPrivacyMode}
                         isBusy={actionItemId === item.id}
                         state={conversationByItem[item.id] ?? { kind: "loading" }}
                         onApproveItem={onApproveItem}
@@ -583,6 +592,7 @@ function TriageTable({
 
 function ConversationPanel({
   item,
+  isPrivacyMode,
   isBusy,
   state,
   onApproveItem,
@@ -591,6 +601,7 @@ function ConversationPanel({
   onRejectItem,
 }: {
   item: TriageItemView;
+  isPrivacyMode: boolean;
   isBusy: boolean;
   state: ConversationState;
   onApproveItem: (itemId: string) => Promise<void>;
@@ -658,12 +669,13 @@ function ConversationPanel({
         </div>
       </div>
       <FlagSummary item={item} heldDraft={heldDraft} />
-      <ReviewFocusPanel item={item} messages={state.items} />
+      <ReviewFocusPanel item={item} messages={state.items} isPrivacyMode={isPrivacyMode} />
       <div className="grid gap-3">
         {state.items.map((message) => (
           <ConversationMessageRow
             key={message.id}
             message={message}
+            isPrivacyMode={isPrivacyMode}
             isHeldDraft={message.id === item.conversation_message_id}
           />
         ))}
@@ -733,9 +745,11 @@ function FlagSummaryFact({ label, value }: { label: string; value: string }) {
 function ReviewFocusPanel({
   item,
   messages,
+  isPrivacyMode,
 }: {
   item: TriageItemView;
   messages: ConversationMessageView[];
+  isPrivacyMode: boolean;
 }) {
   const heldDraft = messages.find((message) => message.id === item.conversation_message_id);
   const heldDraftIndex = heldDraft ? messages.findIndex((message) => message.id === heldDraft.id) : -1;
@@ -752,12 +766,14 @@ function ReviewFocusPanel({
         label="Patient message"
         body={patientMessage?.body ?? "No patient message found for this review item."}
         createdAt={patientMessage?.created_at}
+        isPrivacyMode={isPrivacyMode}
       />
       <ReviewFocusCard
         label="Held assistant draft"
         body={heldDraft?.body ?? "No held draft found for this review item."}
         createdAt={heldDraft?.created_at}
         intent="amber"
+        isPrivacyMode={isPrivacyMode}
       />
     </div>
   );
@@ -767,11 +783,13 @@ function ReviewFocusCard({
   label,
   body,
   createdAt,
+  isPrivacyMode,
   intent = "slate",
 }: {
   label: string;
   body: string;
   createdAt?: string;
+  isPrivacyMode: boolean;
   intent?: "slate" | "amber";
 }) {
   const classes =
@@ -785,16 +803,20 @@ function ReviewFocusCard({
         <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
         {createdAt && <span className="text-xs text-slate-500">{formatCreatedAt(createdAt)}</span>}
       </div>
-      <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-800">{body}</p>
+      <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-800">
+        {formatConversationBody(body, isPrivacyMode)}
+      </p>
     </div>
   );
 }
 
 function ConversationMessageRow({
   message,
+  isPrivacyMode,
   isHeldDraft,
 }: {
   message: ConversationMessageView;
+  isPrivacyMode: boolean;
   isHeldDraft: boolean;
 }) {
   const senderLabel = {
@@ -844,7 +866,9 @@ function ConversationMessageRow({
         </div>
         <span className="text-xs text-slate-500">{formatCreatedAt(message.created_at)}</span>
       </div>
-      <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-800">{message.body}</p>
+      <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-800">
+        {formatConversationBody(message.body, isPrivacyMode)}
+      </p>
       {message.safety_hold_reason && (
         <p className="mt-3 text-xs font-semibold text-amber-700">
           Hold reason: {formatHoldReason(message.safety_hold_reason)}
@@ -852,6 +876,11 @@ function ConversationMessageRow({
       )}
     </div>
   );
+}
+
+function formatConversationBody(body: string, isPrivacyMode: boolean): string {
+  if (!isPrivacyMode) return body;
+  return "Message hidden in privacy mode.";
 }
 
 function formatHoldReason(reason: string | null | undefined): string {
