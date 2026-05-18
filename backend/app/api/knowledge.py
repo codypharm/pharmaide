@@ -96,7 +96,12 @@ async def upload_document(
         source_uri = document.source_uri
         status = document.status
 
-    task_runner.schedule(
+    task_runner.schedule_job(
+        task_runner.BackgroundJob(
+            name="kb.ingest",
+            idempotency_key=f"kb-ingest:{document_id}",
+            payload={"document_id": str(document_id)},
+        ),
         ingest_document,
         session_factory,
         document_id,

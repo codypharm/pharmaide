@@ -28,16 +28,18 @@ async def test_upload_knowledge_document_stores_file_schedules_ingestion_and_aud
 ) -> None:
     scheduled: dict[str, object] = {}
 
-    def capture_schedule(
+    def capture_schedule_job(
+        job: task_runner.BackgroundJob,
         coro_fn: Callable[..., object],
         *args: object,
         **kwargs: object,
     ) -> None:
+        scheduled["job"] = job
         scheduled["coro_fn"] = coro_fn
         scheduled["args"] = args
         scheduled["kwargs"] = kwargs
 
-    monkeypatch.setattr(task_runner, "schedule", capture_schedule)
+    monkeypatch.setattr(task_runner, "schedule_job", capture_schedule_job)
     test_app.dependency_overrides[get_settings] = lambda: Settings(
         _env_file=None,
         knowledge_upload_dir=str(tmp_path),
@@ -70,6 +72,11 @@ async def test_upload_knowledge_document_stores_file_schedules_ingestion_and_aud
     assert document.uploaded_by == actor_id
     assert document.source_uri == f"local://kb/{document_id}/warfarin.txt"
     assert (tmp_path / f"{document_id}.bin").read_bytes() == b"Warfarin requires INR monitoring."
+    job = scheduled["job"]
+    assert isinstance(job, task_runner.BackgroundJob)
+    assert job.name == "kb.ingest"
+    assert job.idempotency_key == f"kb-ingest:{document_id}"
+    assert job.payload == {"document_id": str(document_id)}
     assert scheduled["coro_fn"].__name__ == "ingest_document"
     assert scheduled["args"][1] == document_id
     assert "source" in scheduled["kwargs"]
