@@ -1,5 +1,8 @@
 """WhatsApp inbound webhook buffering."""
 
+import hashlib
+import hmac
+import json
 from datetime import date
 
 import pytest
@@ -106,6 +109,65 @@ async def test_whatsapp_webhook_buffers_text_message_and_schedules_turn_processi
         "schedule_delay_seconds": 5,
     }
     assert "dizzy" not in str(job.payload).lower()
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_whatsapp_webhook_accepts_valid_signed_request(
+    test_app: FastAPI,
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    test_app.state.settings = Settings(_env_file=None, whatsapp_webhook_app_secret="app-secret")
+    treatment = await _persist_active_treatment(db_session)
+    scheduled: list[task_runner.BackgroundJob] = []
+    monkeypatch.setattr(
+        task_runner,
+        "schedule_job",
+        lambda job, *args, **kwargs: scheduled.append(job),
+    )
+
+    body = _json_body(_message_payload(from_phone="18005551212", message="I took it"))
+    response = await app_client.post(
+        "/webhooks/whatsapp",
+        content=body,
+        headers={
+            "content-type": "application/json",
+            "x-hub-signature-256": _meta_signature(body, "app-secret"),
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["buffered_count"] == 1
+    assert (await db_session.scalar(select(ConversationMessage))).treatment_id == treatment.id
+    assert len(scheduled) == 1
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_whatsapp_webhook_rejects_invalid_signature_without_buffering(
+    test_app: FastAPI,
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    test_app.state.settings = Settings(_env_file=None, whatsapp_webhook_app_secret="app-secret")
+    await _persist_active_treatment(db_session)
+    scheduled: list[task_runner.BackgroundJob] = []
+    monkeypatch.setattr(
+        task_runner,
+        "schedule_job",
+        lambda job, *args, **kwargs: scheduled.append(job),
+    )
+
+    response = await app_client.post(
+        "/webhooks/whatsapp",
+        json=_message_payload(from_phone="18005551212", message="I took it"),
+        headers={"x-hub-signature-256": "sha256=bad"},
+    )
+
+    assert response.status_code == 401
+    assert await db_session.scalar(select(ConversationMessage)) is None
+    assert scheduled == []
 
 
 @pytest.mark.usefixtures("postgres_container")
@@ -243,3 +305,12 @@ def _message_payload(*, from_phone: str, message: str) -> dict[str, object]:
             }
         ],
     }
+
+
+def _json_body(payload: dict[str, object]) -> bytes:
+    return json.dumps(payload, separators=(",", ":")).encode("utf-8")
+
+
+def _meta_signature(body: bytes, secret: str) -> str:
+    digest = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
+    return f"sha256={digest}"

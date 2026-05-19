@@ -6,6 +6,8 @@ timing metadata; patient message text stays in the database row.
 """
 
 import asyncio
+import hashlib
+import hmac
 import time
 from dataclasses import dataclass
 from typing import Annotated
@@ -25,6 +27,7 @@ from app.services.patient_message_buffer import (
 )
 
 log = structlog.get_logger(__name__)
+_META_SIGNATURE_PREFIX = "sha256="
 
 
 class WhatsAppText(BaseModel):
@@ -72,6 +75,24 @@ class WhatsAppWebhookResult:
     buffered_count: int
     scheduled_count: int
     ignored_count: int
+
+
+def verify_meta_webhook_signature(
+    raw_body: bytes,
+    signature_header: str | None,
+    app_secret: str,
+) -> bool:
+    """Verify Meta's HMAC-SHA256 webhook signature over the raw request body."""
+    if not signature_header or not signature_header.startswith(_META_SIGNATURE_PREFIX):
+        return False
+
+    expected = hmac.new(
+        app_secret.encode("utf-8"),
+        raw_body,
+        hashlib.sha256,
+    ).hexdigest()
+    received = signature_header.removeprefix(_META_SIGNATURE_PREFIX)
+    return hmac.compare_digest(expected, received)
 
 
 async def process_whatsapp_webhook(
