@@ -101,7 +101,6 @@ passing coroutine objects through the production adapter.
 
 ## Suggested Implementation Slices
 
-1. Add the internal worker route for KB ingestion.
-2. Add Cloud Tasks adapter with OIDC-authenticated HTTP targets.
-3. Add Cloud Scheduler/Pub/Sub ticks for due monitoring and delivery.
-4. Add queue retry/dead-letter audit events without PHI.
+1. Add Cloud Tasks adapter with OIDC-authenticated HTTP targets.
+2. Add Cloud Scheduler/Pub/Sub ticks for due monitoring and delivery.
+3. Add queue retry/dead-letter audit events without PHI.

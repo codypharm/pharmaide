@@ -1,15 +1,18 @@
 """Internal maintenance routes."""
 
+from collections.abc import Sequence
+from pathlib import Path
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.agents.knowledge_sources.user_upload import UserUploadSource
 from app.config import Settings, get_settings
 from app.db.engine import get_session, get_session_factory
-from app.db.models import AuditLogEntry, TreatmentAnalysis
+from app.db.models import AuditLogEntry, KnowledgeDocument, TreatmentAnalysis
 from app.services import (
     dailymed_cache,
     message_delivery,
@@ -19,6 +22,8 @@ from app.services import (
     task_runner,
 )
 from app.services.analysis import analyze_treatment
+from app.services.embeddings import build_embedding_client, embed_texts
+from app.services.kb_ingestion import ingest_document
 from app.services.patient_reply_drafts import (
     TreatmentNotFound as ReplyDraftTreatmentNotFound,
 )
@@ -77,6 +82,11 @@ class AnalysisRunRequest(BaseModel):
 
 class AnalysisRunResponse(BaseModel):
     analysis_id: UUID
+    status: str
+
+
+class KnowledgeIngestionRunResponse(BaseModel):
+    document_id: UUID
     status: str
 
 
@@ -200,6 +210,35 @@ async def run_analysis_worker(
 
 
 @router.post(
+    "/knowledge/documents/{document_id}/ingest",
+    response_model=KnowledgeIngestionRunResponse,
+)
+async def run_knowledge_ingestion_worker(
+    document_id: UUID,
+    session_factory: SessionFactoryDep,
+    settings: SettingsDep,
+) -> KnowledgeIngestionRunResponse:
+    """Run one queued user-upload ingestion job from persisted metadata."""
+    document = await _load_knowledge_document(session_factory, document_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail={"error": "knowledge_document_not_found"})
+
+    await ingest_document(
+        session_factory,
+        document_id,
+        source=UserUploadSource(
+            path=_stored_upload_path(settings.knowledge_upload_dir, document_id),
+            mime=document.mime,
+            title=document.title,
+            source_uri=document.source_uri,
+        ),
+        embedder=_knowledge_embedder(settings.openai_api_key),
+    )
+    status = await _knowledge_document_status(session_factory, document_id)
+    return KnowledgeIngestionRunResponse(document_id=document_id, status=status)
+
+
+@router.post(
     "/treatments/{treatment_id}/process-buffered-patient-turn",
     response_model=BufferedPatientTurnProcessResponse,
 )
@@ -264,3 +303,36 @@ async def _analysis_status(
     async with session_factory() as session:
         analysis = await session.get(TreatmentAnalysis, analysis_id)
         return analysis.status if analysis is not None else None
+
+
+async def _load_knowledge_document(
+    session_factory: async_sessionmaker[AsyncSession],
+    document_id: UUID,
+) -> KnowledgeDocument | None:
+    async with session_factory() as session:
+        return await session.get(KnowledgeDocument, document_id)
+
+
+async def _knowledge_document_status(
+    session_factory: async_sessionmaker[AsyncSession],
+    document_id: UUID,
+) -> str:
+    document = await _load_knowledge_document(session_factory, document_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail={"error": "knowledge_document_not_found"})
+    return document.status
+
+
+def _stored_upload_path(upload_dir: str, document_id: UUID) -> Path:
+    return Path(upload_dir) / f"{document_id}.bin"
+
+
+def _knowledge_embedder(openai_api_key: SecretStr | None):
+    async def embed(texts: Sequence[str]) -> list[list[float]]:
+        client = build_embedding_client(openai_api_key)
+        try:
+            return await embed_texts(texts, client=client)
+        finally:
+            await client.close()
+
+    return embed
