@@ -114,6 +114,8 @@ The Cloud Tasks/Pub/Sub worker foundation is implemented:
 
 - Named jobs enqueue metadata-only Cloud Tasks with OIDC-authenticated HTTP targets.
 - App startup selects the configured task backend.
+- Existing `task_runner.schedule_job(...)` callers delegate to the configured
+  backend in production while preserving local in-process test hooks.
 - Cloud Scheduler Pub/Sub ticks dispatch due monitoring and message delivery.
 - Internal worker routes can require Google OIDC service-to-service auth.
 - Queue retry and dead-letter metadata are audited without storing clinical payloads.

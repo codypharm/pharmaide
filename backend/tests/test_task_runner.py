@@ -147,6 +147,35 @@ async def test_cloud_tasks_scheduler_enqueues_analysis_job() -> None:
     assert request.task.http_request.oidc_token.audience == "https://worker.test"
 
 
+async def test_configured_cloud_tasks_scheduler_receives_module_level_schedule_job() -> None:
+    settings = Settings(
+        _env_file=None,
+        task_backend="cloud_tasks",
+        cloud_tasks_queue_path="projects/pharmaide/locations/europe-west2/queues/default",
+        cloud_tasks_base_url="https://worker.test",
+        cloud_tasks_service_account_email="tasks-invoker@pharmaide.iam.gserviceaccount.com",
+        cloud_tasks_oidc_audience="https://worker.test",
+    )
+    fake_client = FakeCloudTasksClient()
+    scheduler = task_runner.build_scheduler(settings, cloud_tasks_client=fake_client)
+    job = task_runner.BackgroundJob(
+        name="analysis.run",
+        idempotency_key="analysis:analysis-1",
+        payload={"analysis_id": "00000000-0000-4000-8000-000000000001"},
+    )
+
+    task_runner.configure_scheduler(scheduler)
+    try:
+        task_runner.schedule_job(job, _unexpected_coroutine)
+    finally:
+        task_runner.configure_scheduler(task_runner.InProcessBackgroundJobScheduler())
+
+    assert len(fake_client.requests) == 1
+    assert fake_client.requests[0].task.http_request.url == (
+        "https://worker.test/internal/analyses/00000000-0000-4000-8000-000000000001/run"
+    )
+
+
 async def test_cloud_tasks_scheduler_maps_knowledge_ingestion_job() -> None:
     settings = Settings(
         _env_file=None,

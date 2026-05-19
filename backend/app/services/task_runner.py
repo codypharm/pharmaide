@@ -357,11 +357,20 @@ def schedule_job[T](
 ) -> asyncio.Task[T]:
     """Schedule a named job through the local runner.
 
-    The metadata is the production queue contract. Local execution still flows
-    through `schedule(...)` so existing tests and dev hooks that monkeypatch the
-    old seam keep suppressing in-process work.
+    The metadata is the production queue contract. Local in-process execution
+    still flows through the module-level `schedule(...)` so existing tests and
+    dev hooks can suppress local background work by monkeypatching the old seam.
     """
-    del job
+    if not isinstance(_scheduler, InProcessBackgroundJobScheduler):
+        return _scheduler.schedule_job(
+            job,
+            coro_fn,
+            *args,
+            user_id=user_id,
+            max_concurrent_per_user=max_concurrent_per_user,
+            **kwargs,
+        )
+
     return schedule(
         coro_fn,
         *args,
