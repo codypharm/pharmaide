@@ -292,6 +292,12 @@ def _cloud_tasks_module() -> Any:
 _scheduler: BackgroundJobScheduler = InProcessBackgroundJobScheduler()
 
 
+def configure_scheduler(scheduler: BackgroundJobScheduler) -> None:
+    """Install the process-wide scheduler selected during app startup."""
+    global _scheduler
+    _scheduler = scheduler
+
+
 def schedule[T](
     coro_fn: Callable[..., Coroutine[Any, Any, T]],
     *args: object,

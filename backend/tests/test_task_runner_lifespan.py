@@ -48,3 +48,27 @@ async def test_app_shutdown_waits_for_scheduled_tasks() -> None:
             release.set()
 
     assert completed is True
+
+
+def test_create_app_configures_task_scheduler(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The app factory is the production seam that applies env-selected workers."""
+    built_with: list[Settings] = []
+
+    class FakeScheduler:
+        async def drain(self) -> None:
+            return None
+
+    def build_scheduler(settings: Settings) -> FakeScheduler:
+        built_with.append(settings)
+        return FakeScheduler()
+
+    configured: list[FakeScheduler] = []
+
+    monkeypatch.setattr(task_runner, "build_scheduler", build_scheduler)
+    monkeypatch.setattr(task_runner, "configure_scheduler", configured.append)
+    settings = Settings(_env_file=None)
+
+    create_app(settings)
+
+    assert built_with == [settings]
+    assert len(configured) == 1

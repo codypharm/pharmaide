@@ -53,6 +53,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 def create_app(settings: Settings) -> FastAPI:
     configure_logging(settings.log_mode)
+    task_runner.configure_scheduler(task_runner.build_scheduler(settings))
 
     app = FastAPI(title="PharmAide API", version=VERSION, lifespan=lifespan)
 
