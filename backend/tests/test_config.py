@@ -13,6 +13,11 @@ def test_settings_defaults_match_env_example(monkeypatch: pytest.MonkeyPatch) ->
         "PHARMAIDE_OPENAI_API_KEY",
         "PHARMAIDE_WHATSAPP_WEBHOOK_VERIFY_TOKEN",
         "PHARMAIDE_WHATSAPP_WEBHOOK_APP_SECRET",
+        "PHARMAIDE_WHATSAPP_DELIVERY_PROVIDER",
+        "PHARMAIDE_WHATSAPP_CLOUD_API_ACCESS_TOKEN",
+        "PHARMAIDE_WHATSAPP_CLOUD_API_PHONE_NUMBER_ID",
+        "PHARMAIDE_WHATSAPP_CLOUD_API_VERSION",
+        "PHARMAIDE_WHATSAPP_CLOUD_API_BASE_URL",
         "PHARMAIDE_SAFETY_PROVIDER",
         "PHARMAIDE_LLAMA_GUARD_URL",
         "PHARMAIDE_AGENTDOG_URL",
@@ -42,6 +47,11 @@ def test_settings_defaults_match_env_example(monkeypatch: pytest.MonkeyPatch) ->
     assert settings.openai_api_key is None
     assert settings.whatsapp_webhook_verify_token is None
     assert settings.whatsapp_webhook_app_secret is None
+    assert settings.whatsapp_delivery_provider == "placeholder"
+    assert settings.whatsapp_cloud_api_access_token is None
+    assert settings.whatsapp_cloud_api_phone_number_id is None
+    assert settings.whatsapp_cloud_api_version == "v25.0"
+    assert settings.whatsapp_cloud_api_base_url == "https://graph.facebook.com"
     assert settings.safety_provider == "model"
     assert settings.llama_guard_url is None
     assert settings.agentdog_url is None
@@ -69,6 +79,11 @@ def test_settings_reads_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PHARMAIDE_OPENAI_API_KEY", "sk-test")
     monkeypatch.setenv("PHARMAIDE_WHATSAPP_WEBHOOK_VERIFY_TOKEN", "verify-me")
     monkeypatch.setenv("PHARMAIDE_WHATSAPP_WEBHOOK_APP_SECRET", "app-secret")
+    monkeypatch.setenv("PHARMAIDE_WHATSAPP_DELIVERY_PROVIDER", "cloud_api")
+    monkeypatch.setenv("PHARMAIDE_WHATSAPP_CLOUD_API_ACCESS_TOKEN", "wa-token")
+    monkeypatch.setenv("PHARMAIDE_WHATSAPP_CLOUD_API_PHONE_NUMBER_ID", "phone-number-id")
+    monkeypatch.setenv("PHARMAIDE_WHATSAPP_CLOUD_API_VERSION", "v24.0")
+    monkeypatch.setenv("PHARMAIDE_WHATSAPP_CLOUD_API_BASE_URL", "https://graph.test")
     monkeypatch.setenv("PHARMAIDE_SAFETY_PROVIDER", "remote_http")
     monkeypatch.setenv("PHARMAIDE_LLAMA_GUARD_URL", "https://safety.test/v1/guard/check")
     monkeypatch.setenv("PHARMAIDE_AGENTDOG_URL", "https://safety.test/v1/referee/review")
@@ -105,6 +120,12 @@ def test_settings_reads_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.whatsapp_webhook_verify_token.get_secret_value() == "verify-me"
     assert settings.whatsapp_webhook_app_secret is not None
     assert settings.whatsapp_webhook_app_secret.get_secret_value() == "app-secret"
+    assert settings.whatsapp_delivery_provider == "cloud_api"
+    assert settings.whatsapp_cloud_api_access_token is not None
+    assert settings.whatsapp_cloud_api_access_token.get_secret_value() == "wa-token"
+    assert settings.whatsapp_cloud_api_phone_number_id == "phone-number-id"
+    assert settings.whatsapp_cloud_api_version == "v24.0"
+    assert settings.whatsapp_cloud_api_base_url == "https://graph.test"
     assert settings.safety_provider == "remote_http"
     assert settings.llama_guard_url == "https://safety.test/v1/guard/check"
     assert settings.agentdog_url == "https://safety.test/v1/referee/review"
@@ -163,6 +184,17 @@ def test_settings_requires_cloud_tasks_configuration(monkeypatch: pytest.MonkeyP
     monkeypatch.delenv("PHARMAIDE_CLOUD_TASKS_BASE_URL", raising=False)
     monkeypatch.delenv("PHARMAIDE_CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL", raising=False)
     monkeypatch.delenv("PHARMAIDE_CLOUD_TASKS_OIDC_AUDIENCE", raising=False)
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+
+def test_settings_requires_cloud_api_delivery_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PHARMAIDE_WHATSAPP_DELIVERY_PROVIDER", "cloud_api")
+    monkeypatch.delenv("PHARMAIDE_WHATSAPP_CLOUD_API_ACCESS_TOKEN", raising=False)
+    monkeypatch.delenv("PHARMAIDE_WHATSAPP_CLOUD_API_PHONE_NUMBER_ID", raising=False)
 
     with pytest.raises(ValidationError):
         Settings(_env_file=None)

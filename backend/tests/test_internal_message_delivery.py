@@ -1,7 +1,9 @@
 """Internal queued-message delivery worker endpoint."""
 
+import json
 from uuid import UUID
 
+import httpx
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
@@ -167,11 +169,126 @@ async def test_run_message_delivery_marks_message_failed_when_provider_raises(
 
 
 @pytest.mark.usefixtures("postgres_container")
-async def test_delivery_callback_rejects_provider_mismatch_without_changing_message(
+async def test_whatsapp_cloud_delivery_provider_sends_text_message_and_audits_metadata(
     app_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
     treatment_id = await _create_treatment(app_client, "DELIVERY-004")
+    queued = await app_client.post(
+        f"/treatments/{treatment_id}/pharmacist-messages",
+        json={"message": "Please continue the current dose."},
+    )
+    assert queued.status_code == 201, queued.text
+    message_id = UUID(queued.json()["id"])
+    seen_requests: list[httpx.Request] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen_requests.append(request)
+        return httpx.Response(200, json={"messages": [{"id": "wamid.sent-1"}]})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        result = await message_delivery.run_message_delivery_once(
+            db_session,
+            provider=message_delivery.WhatsAppCloudDeliveryProvider(
+                message_delivery.WhatsAppCloudDeliveryConfig(
+                    access_token="token-123",
+                    phone_number_id="phone-number-id",
+                    api_version="v25.0",
+                    base_url="https://graph.facebook.com",
+                ),
+                client=client,
+            ),
+        )
+
+    assert result.processed_count == 1
+    assert result.sent_count == 1
+    assert result.failed_count == 0
+    assert len(seen_requests) == 1
+    request = seen_requests[0]
+    assert str(request.url) == "https://graph.facebook.com/v25.0/phone-number-id/messages"
+    assert request.headers["authorization"] == "Bearer token-123"
+    assert json.loads(request.content) == {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": "18005551212",
+        "type": "text",
+        "text": {
+            "body": "Please continue the current dose.",
+            "preview_url": False,
+        },
+    }
+
+    message = await db_session.get(ConversationMessage, message_id)
+    assert message is not None
+    assert message.status == "sent"
+    assert message.external_message_id == "wamid.sent-1"
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.event_type == "conversation_message_delivery_marked_sent"
+        )
+    )
+    assert audit is not None
+    assert audit.payload["provider"] == "whatsapp-cloud-api"
+    assert audit.payload["external_message_id"] == "wamid.sent-1"
+    assert "continue" not in str(audit.payload).lower()
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_whatsapp_cloud_delivery_provider_marks_message_failed_on_api_error(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    treatment_id = await _create_treatment(app_client, "DELIVERY-005")
+    queued = await app_client.post(
+        f"/treatments/{treatment_id}/pharmacist-messages",
+        json={"message": "Please call the pharmacy before changing dose."},
+    )
+    assert queued.status_code == 201, queued.text
+    message_id = UUID(queued.json()["id"])
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _request: httpx.Response(400, json={}))
+    ) as client:
+        result = await message_delivery.run_message_delivery_once(
+            db_session,
+            provider=message_delivery.WhatsAppCloudDeliveryProvider(
+                message_delivery.WhatsAppCloudDeliveryConfig(
+                    access_token="token-123",
+                    phone_number_id="phone-number-id",
+                    api_version="v25.0",
+                    base_url="https://graph.facebook.com",
+                ),
+                client=client,
+            ),
+        )
+
+    assert result.processed_count == 1
+    assert result.sent_count == 0
+    assert result.failed_count == 1
+
+    message = await db_session.get(ConversationMessage, message_id)
+    assert message is not None
+    assert message.status == "failed"
+    assert message.external_message_id is None
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.event_type == "conversation_message_delivery_failed"
+        )
+    )
+    assert audit is not None
+    assert audit.payload["provider"] == "whatsapp-cloud-api"
+    assert audit.payload["error_code"] == "whatsapp_http_400"
+    assert "dose" not in str(audit.payload).lower()
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_delivery_callback_rejects_provider_mismatch_without_changing_message(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    treatment_id = await _create_treatment(app_client, "DELIVERY-006")
     queued = await app_client.post(
         f"/treatments/{treatment_id}/pharmacist-messages",
         json={"message": "Please continue the current dose."},

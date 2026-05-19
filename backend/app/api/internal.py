@@ -237,8 +237,14 @@ async def cleanup_dailymed_cache(session: SessionDep) -> CleanupDailyMedCacheRes
     "/message-delivery/run-once",
     response_model=MessageDeliveryRunResponse,
 )
-async def run_message_delivery_once(session: SessionDep) -> MessageDeliveryRunResponse:
-    result = await message_delivery.run_message_delivery_once(session)
+async def run_message_delivery_once(
+    session: SessionDep,
+    settings: SettingsDep,
+) -> MessageDeliveryRunResponse:
+    result = await message_delivery.run_message_delivery_once(
+        session,
+        provider=message_delivery.build_delivery_provider(settings),
+    )
     return MessageDeliveryRunResponse(
         processed_count=result.processed_count,
         sent_count=result.sent_count,

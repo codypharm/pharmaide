@@ -43,6 +43,11 @@ class Settings(BaseSettings):
 
     whatsapp_webhook_verify_token: SecretStr | None = None
     whatsapp_webhook_app_secret: SecretStr | None = None
+    whatsapp_delivery_provider: Literal["placeholder", "cloud_api"] = "placeholder"
+    whatsapp_cloud_api_access_token: SecretStr | None = None
+    whatsapp_cloud_api_phone_number_id: str | None = None
+    whatsapp_cloud_api_version: str = "v25.0"
+    whatsapp_cloud_api_base_url: str = "https://graph.facebook.com"
 
     # Caps a single analysis run so a stuck graph cannot pin background
     # capacity indefinitely. Route-level test overrides use the same bounds.
@@ -115,6 +120,16 @@ class Settings(BaseSettings):
                 "cloud_tasks task backend requires queue path, base URL, "
                 "service account email, and OIDC audience"
             )
+        return self
+
+    @model_validator(mode="after")
+    def require_whatsapp_cloud_api_configuration(self) -> "Settings":
+        """Real WhatsApp delivery needs provider credentials and sender metadata."""
+        if self.whatsapp_delivery_provider == "cloud_api" and (
+            not self.whatsapp_cloud_api_access_token
+            or not self.whatsapp_cloud_api_phone_number_id
+        ):
+            raise ValueError("cloud_api WhatsApp delivery requires token and phone number id")
         return self
 
     @model_validator(mode="after")
