@@ -1,12 +1,15 @@
 """Internal maintenance routes."""
 
+import base64
+import binascii
+import json
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import AliasChoices, BaseModel, Field, SecretStr
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.agents.knowledge_sources.user_upload import UserUploadSource
@@ -96,6 +99,25 @@ class BufferedPatientTurnProcessResponse(BaseModel):
     assistant_status: str | None = None
 
 
+class PubSubPushMessage(BaseModel):
+    data: str | None = None
+    attributes: dict[str, str] = Field(default_factory=dict)
+    message_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("messageId", "message_id"),
+    )
+
+
+class PubSubPushRequest(BaseModel):
+    message: PubSubPushMessage
+    subscription: str | None = None
+
+
+class SchedulerTickResponse(BaseModel):
+    tick_type: str
+    result: dict[str, int]
+
+
 @router.post(
     "/cleanup/checkpoints",
     response_model=CleanupCheckpointsResponse,
@@ -181,6 +203,40 @@ async def run_due_monitoring(session: SessionDep) -> DueMonitoringRunResponse:
         queued_count=result.queued_count,
         skipped_count=result.skipped_count,
     )
+
+
+@router.post(
+    "/scheduler/pubsub",
+    response_model=SchedulerTickResponse,
+)
+async def run_scheduler_pubsub_tick(
+    body: PubSubPushRequest,
+    session: SessionDep,
+) -> SchedulerTickResponse:
+    """Dispatch metadata-only Cloud Scheduler Pub/Sub ticks to internal workers."""
+    tick_type = _scheduler_tick_type(body)
+    if tick_type == "due_monitoring":
+        result = await monitoring.run_due_monitoring(session)
+        return SchedulerTickResponse(
+            tick_type=tick_type,
+            result={
+                "processed_count": result.processed_count,
+                "queued_count": result.queued_count,
+                "skipped_count": result.skipped_count,
+            },
+        )
+    if tick_type == "message_delivery":
+        result = await message_delivery.run_message_delivery_once(session)
+        return SchedulerTickResponse(
+            tick_type=tick_type,
+            result={
+                "processed_count": result.processed_count,
+                "sent_count": result.sent_count,
+                "failed_count": result.failed_count,
+            },
+        )
+
+    raise HTTPException(status_code=400, detail={"error": "unknown_scheduler_tick"})
 
 
 @router.post(
@@ -336,3 +392,28 @@ def _knowledge_embedder(openai_api_key: SecretStr | None):
             await client.close()
 
     return embed
+
+
+def _scheduler_tick_type(body: PubSubPushRequest) -> str | None:
+    """Read tick type from attributes first, then from base64 JSON data."""
+    attribute_tick = body.message.attributes.get("tick_type")
+    if attribute_tick:
+        return attribute_tick
+
+    payload = _decode_pubsub_json(body.message.data)
+    tick_type = payload.get("tick_type")
+    return tick_type if isinstance(tick_type, str) else None
+
+
+def _decode_pubsub_json(data: str | None) -> dict[str, object]:
+    if not data:
+        return {}
+    try:
+        decoded = base64.b64decode(data, validate=True).decode("utf-8")
+        payload = json.loads(decoded)
+    except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=400, detail={"error": "invalid_pubsub_message"}) from exc
+
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail={"error": "invalid_pubsub_message"})
+    return payload

@@ -51,6 +51,7 @@ auth protection before deployment:
 - `POST /internal/treatments/{treatment_id}/run-due-monitoring`
 - `POST /internal/monitoring/run-due`
 - `POST /internal/message-delivery/run-once`
+- `POST /internal/scheduler/pubsub`
 - `POST /internal/treatments/{treatment_id}/process-buffered-patient-turn`
 
 Add these production-only routes when the queue adapter lands:
@@ -109,6 +110,5 @@ route calls converge on the same Cloud Tasks resource instead of fanout.
 
 ## Suggested Implementation Slices
 
-1. Wire app startup to select `build_scheduler(get_settings())` outside tests.
-2. Add Cloud Scheduler/Pub/Sub ticks for due monitoring and delivery.
-3. Add queue retry/dead-letter audit events without PHI.
+1. Add queue retry/dead-letter audit events without PHI.
+2. Add service-to-service auth validation on internal worker routes.
