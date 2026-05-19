@@ -1,0 +1,245 @@
+"""WhatsApp inbound webhook buffering."""
+
+from datetime import date
+
+import pytest
+from fastapi import FastAPI
+from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.config import Settings
+from app.db.models import ConversationMessage, Patient, Treatment
+from app.services import task_runner
+
+
+@pytest.fixture(autouse=True)
+def disable_analysis_schedule(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Webhook tests create treatment rows directly or suppress analysis fanout."""
+    monkeypatch.setattr(task_runner, "schedule", lambda *args, **kwargs: None)
+
+
+async def test_whatsapp_webhook_verification_returns_challenge(
+    test_app: FastAPI,
+    app_client: AsyncClient,
+) -> None:
+    test_app.state.settings = Settings(
+        _env_file=None,
+        whatsapp_webhook_verify_token="verify-me",
+    )
+
+    response = await app_client.get(
+        "/webhooks/whatsapp",
+        params={
+            "hub.mode": "subscribe",
+            "hub.verify_token": "verify-me",
+            "hub.challenge": "challenge-123",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.text == "challenge-123"
+
+
+async def test_whatsapp_webhook_verification_requires_configured_token(
+    test_app: FastAPI,
+    app_client: AsyncClient,
+) -> None:
+    test_app.state.settings = Settings(_env_file=None, whatsapp_webhook_verify_token=None)
+
+    response = await app_client.get(
+        "/webhooks/whatsapp",
+        params={
+            "hub.mode": "subscribe",
+            "hub.challenge": "challenge-123",
+        },
+    )
+
+    assert response.status_code == 403
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_whatsapp_webhook_buffers_text_message_and_schedules_turn_processing(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    treatment = await _persist_active_treatment(db_session)
+    scheduled: list[task_runner.BackgroundJob] = []
+
+    def capture_schedule_job(
+        job: task_runner.BackgroundJob,
+        *_args: object,
+        **_kwargs: object,
+    ) -> None:
+        scheduled.append(job)
+
+    monkeypatch.setattr(task_runner, "schedule_job", capture_schedule_job)
+
+    response = await app_client.post(
+        "/webhooks/whatsapp",
+        json=_message_payload(from_phone="18005551212", message="I took it but I feel dizzy"),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "accepted_count": 1,
+        "buffered_count": 1,
+        "scheduled_count": 1,
+        "ignored_count": 0,
+    }
+
+    message = await db_session.scalar(select(ConversationMessage))
+    assert message is not None
+    assert message.treatment_id == treatment.id
+    assert message.direction == "inbound"
+    assert message.sender_type == "patient"
+    assert message.channel == "whatsapp"
+    assert message.status == "received"
+    assert message.body == "I took it but I feel dizzy"
+
+    assert len(scheduled) == 1
+    job = scheduled[0]
+    assert job.name == "patient-turn.process"
+    assert job.payload == {
+        "treatment_id": str(treatment.id),
+        "schedule_delay_seconds": 5,
+    }
+    assert "dizzy" not in str(job.payload).lower()
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_whatsapp_webhook_acknowledges_unknown_patient_without_buffering(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    scheduled: list[task_runner.BackgroundJob] = []
+    monkeypatch.setattr(
+        task_runner,
+        "schedule_job",
+        lambda job, *args, **kwargs: scheduled.append(job),
+    )
+
+    response = await app_client.post(
+        "/webhooks/whatsapp",
+        json=_message_payload(from_phone="18005550000", message="hello"),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "accepted_count": 1,
+        "buffered_count": 0,
+        "scheduled_count": 0,
+        "ignored_count": 1,
+    }
+    assert await db_session.scalar(select(ConversationMessage)) is None
+    assert scheduled == []
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_whatsapp_webhook_ignores_blank_text_without_buffering(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _persist_active_treatment(db_session)
+    scheduled: list[task_runner.BackgroundJob] = []
+    monkeypatch.setattr(
+        task_runner,
+        "schedule_job",
+        lambda job, *args, **kwargs: scheduled.append(job),
+    )
+
+    response = await app_client.post(
+        "/webhooks/whatsapp",
+        json=_message_payload(from_phone="18005551212", message="   "),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "accepted_count": 0,
+        "buffered_count": 0,
+        "scheduled_count": 0,
+        "ignored_count": 0,
+    }
+    assert await db_session.scalar(select(ConversationMessage)) is None
+    assert scheduled == []
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_whatsapp_webhook_ignores_ambiguous_active_phone_match(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _persist_active_treatment(db_session, mrn="WHATSAPP-001")
+    await _persist_active_treatment(db_session, mrn="WHATSAPP-002")
+    scheduled: list[task_runner.BackgroundJob] = []
+    monkeypatch.setattr(
+        task_runner,
+        "schedule_job",
+        lambda job, *args, **kwargs: scheduled.append(job),
+    )
+
+    response = await app_client.post(
+        "/webhooks/whatsapp",
+        json=_message_payload(from_phone="18005551212", message="hello"),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "accepted_count": 1,
+        "buffered_count": 0,
+        "scheduled_count": 0,
+        "ignored_count": 1,
+    }
+    assert await db_session.scalar(select(ConversationMessage)) is None
+    assert scheduled == []
+
+
+async def _persist_active_treatment(
+    session: AsyncSession,
+    *,
+    mrn: str = "WHATSAPP-001",
+) -> Treatment:
+    patient = Patient(
+        name="Eleanor Vance",
+        dob=date(1955, 10, 12),
+        mrn=mrn,
+        phone="+18005551212",
+    )
+    treatment = Treatment(
+        patient=patient,
+        status="active",
+        automation_mode="active",
+        clinical_objective="Monitor recovery",
+    )
+    session.add(treatment)
+    await session.flush()
+    return treatment
+
+
+def _message_payload(*, from_phone: str, message: str) -> dict[str, object]:
+    return {
+        "object": "whatsapp_business_account",
+        "entry": [
+            {
+                "changes": [
+                    {
+                        "value": {
+                            "messages": [
+                                {
+                                    "from": from_phone,
+                                    "id": "wamid.test-message-1",
+                                    "timestamp": "1710000000",
+                                    "type": "text",
+                                    "text": {"body": message},
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        ],
+    }

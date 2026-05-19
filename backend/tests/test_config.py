@@ -11,6 +11,7 @@ def test_settings_defaults_match_env_example(monkeypatch: pytest.MonkeyPatch) ->
         "PHARMAIDE_CHECKPOINT_DB_PATH",
         "PHARMAIDE_RXNORM_BASE_URL",
         "PHARMAIDE_OPENAI_API_KEY",
+        "PHARMAIDE_WHATSAPP_WEBHOOK_VERIFY_TOKEN",
         "PHARMAIDE_SAFETY_PROVIDER",
         "PHARMAIDE_LLAMA_GUARD_URL",
         "PHARMAIDE_AGENTDOG_URL",
@@ -38,6 +39,7 @@ def test_settings_defaults_match_env_example(monkeypatch: pytest.MonkeyPatch) ->
     assert settings.checkpoint_db_path == "./pharmaide.db"
     assert settings.rxnorm_base_url == "https://rxnav.nlm.nih.gov/REST"
     assert settings.openai_api_key is None
+    assert settings.whatsapp_webhook_verify_token is None
     assert settings.safety_provider == "model"
     assert settings.llama_guard_url is None
     assert settings.agentdog_url is None
@@ -63,6 +65,7 @@ def test_settings_reads_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PHARMAIDE_CHECKPOINT_DB_PATH", "/tmp/x.db")
     monkeypatch.setenv("PHARMAIDE_RXNORM_BASE_URL", "https://rxnav.test/REST")
     monkeypatch.setenv("PHARMAIDE_OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("PHARMAIDE_WHATSAPP_WEBHOOK_VERIFY_TOKEN", "verify-me")
     monkeypatch.setenv("PHARMAIDE_SAFETY_PROVIDER", "remote_http")
     monkeypatch.setenv("PHARMAIDE_LLAMA_GUARD_URL", "https://safety.test/v1/guard/check")
     monkeypatch.setenv("PHARMAIDE_AGENTDOG_URL", "https://safety.test/v1/referee/review")
@@ -95,6 +98,8 @@ def test_settings_reads_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.rxnorm_base_url == "https://rxnav.test/REST"
     assert settings.openai_api_key is not None
     assert settings.openai_api_key.get_secret_value() == "sk-test"
+    assert settings.whatsapp_webhook_verify_token is not None
+    assert settings.whatsapp_webhook_verify_token.get_secret_value() == "verify-me"
     assert settings.safety_provider == "remote_http"
     assert settings.llama_guard_url == "https://safety.test/v1/guard/check"
     assert settings.agentdog_url == "https://safety.test/v1/referee/review"

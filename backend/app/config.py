@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     safety_provider_api_key: SecretStr | None = None
     safety_provider_timeout_seconds: float = Field(default=10, gt=0, le=60)
 
+    whatsapp_webhook_verify_token: SecretStr | None = None
+
     # Caps a single analysis run so a stuck graph cannot pin background
     # capacity indefinitely. Route-level test overrides use the same bounds.
     analysis_timeout_seconds: int = Field(default=60, gt=0, le=300)

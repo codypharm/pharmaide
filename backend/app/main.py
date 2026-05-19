@@ -21,6 +21,7 @@ from app.api.patients import router as patients_router
 from app.api.prescriptions import router as prescriptions_router
 from app.api.treatments import router as treatments_router
 from app.api.triage import router as triage_router
+from app.api.webhooks import router as webhooks_router
 from app.config import Settings, get_settings
 from app.errors import RequestIdMiddleware, global_exception_handler, run_graph
 from app.graph import open_counter_graph
@@ -82,6 +83,7 @@ def create_app(settings: Settings) -> FastAPI:
     app.include_router(triage_router, tags=["triage"])
     app.include_router(audits_router, tags=["audits"])
     app.include_router(internal_router, tags=["internal"])
+    app.include_router(webhooks_router, tags=["webhooks"])
 
     # Mount-time gating, not request-time. When the flag is False the route
     # literally does not exist — no 403, no soft denial, no OpenAPI entry.

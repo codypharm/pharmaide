@@ -5,7 +5,7 @@ Keep each item as a small, reviewable slice.
 
 ## Core Production Blockers
 
-- WhatsApp integration: inbound webhook, outbound provider, delivery callbacks, and message buffering for multi-message patient bursts.
+- WhatsApp integration: webhook signature verification, outbound provider, delivery callbacks, and production phone-to-workspace routing.
 - GCIP authentication: login/session enforcement, MFA, user identity propagation, and replacement of pre-auth `X-Pharmaide-User-Id` scaffolding.
 - Workspace scoping: derive clinical and knowledge-base scope from the pharmacist's clinic/workspace, not from the patient.
 - GCP deployment: Cloud Run containers, production environment variables, secrets, HTTPS-only browser-to-API path, and deployment runbooks.
@@ -16,5 +16,4 @@ Keep each item as a small, reviewable slice.
 ## Product Completion
 
 - Real WhatsApp scheduled check-ins and adherence capture.
-- Buffered-message worker integration: connect the internal processing seam to Cloud Tasks/Pub/Sub once deployment infrastructure is available.
 - Licensed DDI provider replacement when Lexicomp, DrugBank, or another approved source is available.
