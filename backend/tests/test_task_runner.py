@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from app.config import Settings
 from app.services import task_runner
 
 
@@ -80,6 +81,36 @@ async def test_schedule_job_runs_coroutine_with_metadata() -> None:
     await task_runner.drain()
 
     assert seen == ["scheduled"]
+
+
+def test_build_scheduler_defaults_to_in_process() -> None:
+    settings = Settings(_env_file=None)
+
+    scheduler = task_runner.build_scheduler(settings)
+
+    assert isinstance(scheduler, task_runner.InProcessBackgroundJobScheduler)
+
+
+async def test_cloud_tasks_scheduler_fails_until_real_adapter_is_wired() -> None:
+    settings = Settings(
+        _env_file=None,
+        task_backend="cloud_tasks",
+        cloud_tasks_queue_path="projects/pharmaide/locations/europe-west2/queues/default",
+        cloud_tasks_base_url="https://worker.test",
+        cloud_tasks_oidc_audience="https://worker.test",
+    )
+    scheduler = task_runner.build_scheduler(settings)
+    job = task_runner.BackgroundJob(
+        name="analysis.run",
+        idempotency_key="analysis:analysis-1",
+        payload={"analysis_id": "analysis-1"},
+    )
+
+    async def record() -> None:
+        raise AssertionError("Cloud Tasks scheduling must not run work in-process.")
+
+    with pytest.raises(task_runner.TaskBackendUnavailable, match="Cloud Tasks"):
+        scheduler.schedule_job(job, record)
 
 
 async def test_drain_waits_for_in_flight_tasks() -> None:

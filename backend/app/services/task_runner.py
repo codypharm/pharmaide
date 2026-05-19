@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
+from app.config import Settings
+
 
 class RateLimitExceeded(Exception):
     """Raised when one user already owns the configured number of live tasks."""
@@ -20,6 +22,10 @@ class RateLimitExceeded(Exception):
     def __init__(self, user_id: str) -> None:
         super().__init__(user_id)
         self.user_id = user_id
+
+
+class TaskBackendUnavailable(RuntimeError):
+    """Raised when a configured durable task backend is not ready to enqueue."""
 
 
 @dataclass(frozen=True)
@@ -132,6 +138,70 @@ class InProcessBackgroundJobScheduler:
         tasks.discard(task)
         if not tasks:
             self._user_tasks.pop(user_id, None)
+
+
+@dataclass(frozen=True)
+class CloudTasksSchedulerConfig:
+    """Deployment metadata needed by the future Cloud Tasks client."""
+
+    queue_path: str
+    base_url: str
+    oidc_audience: str
+
+
+class CloudTasksBackgroundJobScheduler:
+    """Fail-fast shell for the durable production scheduler.
+
+    The class gives routes a real backend selection target now, while avoiding a
+    misleading local fallback when production is configured for Cloud Tasks.
+    """
+
+    def __init__(self, config: CloudTasksSchedulerConfig) -> None:
+        self.config = config
+
+    def schedule[T](
+        self,
+        coro_fn: Callable[..., Coroutine[Any, Any, T]],
+        *args: object,
+        user_id: str | None = None,
+        max_concurrent_per_user: int | None = None,
+        **kwargs: object,
+    ) -> asyncio.Task[T]:
+        del coro_fn, args, user_id, max_concurrent_per_user, kwargs
+        raise TaskBackendUnavailable(
+            "Cloud Tasks backend only supports named jobs and is not wired yet."
+        )
+
+    def schedule_job[T](
+        self,
+        job: BackgroundJob,
+        coro_fn: Callable[..., Coroutine[Any, Any, T]],
+        *args: object,
+        user_id: str | None = None,
+        max_concurrent_per_user: int | None = None,
+        **kwargs: object,
+    ) -> asyncio.Task[T]:
+        del job, coro_fn, args, user_id, max_concurrent_per_user, kwargs
+        raise TaskBackendUnavailable(
+            "Cloud Tasks scheduler adapter is not implemented yet."
+        )
+
+    async def drain(self) -> None:
+        """Cloud Tasks owns durable work; there are no local tasks to drain."""
+
+
+def build_scheduler(settings: Settings) -> BackgroundJobScheduler:
+    """Build the background scheduler selected by environment settings."""
+    if settings.task_backend == "in_process":
+        return InProcessBackgroundJobScheduler()
+
+    return CloudTasksBackgroundJobScheduler(
+        CloudTasksSchedulerConfig(
+            queue_path=settings.cloud_tasks_queue_path or "",
+            base_url=settings.cloud_tasks_base_url or "",
+            oidc_audience=settings.cloud_tasks_oidc_audience or "",
+        )
+    )
 
 
 _scheduler: BackgroundJobScheduler = InProcessBackgroundJobScheduler()

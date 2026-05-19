@@ -55,6 +55,13 @@ class Settings(BaseSettings):
     knowledge_max_upload_bytes: int = Field(default=25 * 1024 * 1024, gt=0)
     knowledge_ingestion_stale_minutes: int = Field(default=30, gt=0, le=24 * 60)
 
+    # In-process is the safe local default. Production will switch this to
+    # Cloud Tasks once the durable queue client is wired.
+    task_backend: Literal["in_process", "cloud_tasks"] = "in_process"
+    cloud_tasks_queue_path: str | None = None
+    cloud_tasks_base_url: str | None = None
+    cloud_tasks_oidc_audience: str | None = None
+
     @field_validator("knowledge_max_upload_bytes", mode="before")
     @classmethod
     def parse_upload_size(cls, value: object) -> object:
@@ -84,6 +91,19 @@ class Settings(BaseSettings):
             not self.llama_guard_url or not self.agentdog_url
         ):
             raise ValueError("remote_http safety provider requires both safety URLs")
+        return self
+
+    @model_validator(mode="after")
+    def require_cloud_tasks_configuration(self) -> "Settings":
+        """Cloud Tasks mode needs enough target metadata to enqueue safely."""
+        if self.task_backend == "cloud_tasks" and (
+            not self.cloud_tasks_queue_path
+            or not self.cloud_tasks_base_url
+            or not self.cloud_tasks_oidc_audience
+        ):
+            raise ValueError(
+                "cloud_tasks task backend requires queue path, base URL, and OIDC audience"
+            )
         return self
 
 

@@ -21,6 +21,10 @@ def test_settings_defaults_match_env_example(monkeypatch: pytest.MonkeyPatch) ->
         "PHARMAIDE_KNOWLEDGE_UPLOAD_DIR",
         "PHARMAIDE_KNOWLEDGE_MAX_UPLOAD_BYTES",
         "PHARMAIDE_KNOWLEDGE_INGESTION_STALE_MINUTES",
+        "PHARMAIDE_TASK_BACKEND",
+        "PHARMAIDE_CLOUD_TASKS_QUEUE_PATH",
+        "PHARMAIDE_CLOUD_TASKS_BASE_URL",
+        "PHARMAIDE_CLOUD_TASKS_OIDC_AUDIENCE",
     ):
         monkeypatch.delenv(var, raising=False)
 
@@ -41,6 +45,10 @@ def test_settings_defaults_match_env_example(monkeypatch: pytest.MonkeyPatch) ->
     assert settings.knowledge_upload_dir == "./data/kb_uploads"
     assert settings.knowledge_max_upload_bytes == 25 * 1024 * 1024
     assert settings.knowledge_ingestion_stale_minutes == 30
+    assert settings.task_backend == "in_process"
+    assert settings.cloud_tasks_queue_path is None
+    assert settings.cloud_tasks_base_url is None
+    assert settings.cloud_tasks_oidc_audience is None
 
 
 def test_settings_reads_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -59,6 +67,13 @@ def test_settings_reads_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PHARMAIDE_KNOWLEDGE_UPLOAD_DIR", "/tmp/kb")
     monkeypatch.setenv("PHARMAIDE_KNOWLEDGE_MAX_UPLOAD_BYTES", "1024")
     monkeypatch.setenv("PHARMAIDE_KNOWLEDGE_INGESTION_STALE_MINUTES", "7")
+    monkeypatch.setenv("PHARMAIDE_TASK_BACKEND", "cloud_tasks")
+    monkeypatch.setenv(
+        "PHARMAIDE_CLOUD_TASKS_QUEUE_PATH",
+        "projects/pharmaide/locations/europe-west2/queues/analysis",
+    )
+    monkeypatch.setenv("PHARMAIDE_CLOUD_TASKS_BASE_URL", "https://worker.test")
+    monkeypatch.setenv("PHARMAIDE_CLOUD_TASKS_OIDC_AUDIENCE", "https://worker.test")
 
     settings = Settings(_env_file=None)
 
@@ -79,6 +94,13 @@ def test_settings_reads_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.knowledge_upload_dir == "/tmp/kb"
     assert settings.knowledge_max_upload_bytes == 1024
     assert settings.knowledge_ingestion_stale_minutes == 7
+    assert settings.task_backend == "cloud_tasks"
+    assert (
+        settings.cloud_tasks_queue_path
+        == "projects/pharmaide/locations/europe-west2/queues/analysis"
+    )
+    assert settings.cloud_tasks_base_url == "https://worker.test"
+    assert settings.cloud_tasks_oidc_audience == "https://worker.test"
 
 
 def test_settings_accepts_human_readable_knowledge_upload_size(
@@ -102,6 +124,16 @@ def test_settings_requires_remote_http_safety_urls(monkeypatch: pytest.MonkeyPat
     monkeypatch.setenv("PHARMAIDE_SAFETY_PROVIDER", "remote_http")
     monkeypatch.delenv("PHARMAIDE_LLAMA_GUARD_URL", raising=False)
     monkeypatch.delenv("PHARMAIDE_AGENTDOG_URL", raising=False)
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+
+def test_settings_requires_cloud_tasks_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PHARMAIDE_TASK_BACKEND", "cloud_tasks")
+    monkeypatch.delenv("PHARMAIDE_CLOUD_TASKS_QUEUE_PATH", raising=False)
+    monkeypatch.delenv("PHARMAIDE_CLOUD_TASKS_BASE_URL", raising=False)
+    monkeypatch.delenv("PHARMAIDE_CLOUD_TASKS_OIDC_AUDIENCE", raising=False)
 
     with pytest.raises(ValidationError):
         Settings(_env_file=None)
