@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import AliasChoices, BaseModel, Field, SecretStr
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -18,6 +18,7 @@ from app.db.engine import get_session, get_session_factory
 from app.db.models import AuditLogEntry, KnowledgeDocument, TreatmentAnalysis
 from app.services import (
     dailymed_cache,
+    internal_worker_auth,
     message_delivery,
     monitoring,
     patient_message_buffer,
@@ -36,7 +37,33 @@ SessionFactoryDep = Annotated[async_sessionmaker[AsyncSession], Depends(get_sess
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 SYSTEM_RESOURCE_ID = UUID("00000000-0000-0000-0000-000000000000")
 
-router = APIRouter(prefix="/internal")
+
+async def require_internal_worker_auth(
+    request: Request,
+    authorization: Annotated[str | None, Header()] = None,
+) -> None:
+    """Require service-to-service auth for internal routes when enabled."""
+    settings = request.app.state.settings
+    if settings.internal_worker_auth == "disabled":
+        return
+
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail={"error": "internal_worker_auth_required"})
+
+    token = authorization.removeprefix("Bearer ").strip()
+    try:
+        internal_worker_auth.verify_internal_oidc_token(
+            token,
+            audience=settings.internal_worker_audience or "",
+        )
+    except internal_worker_auth.InternalWorkerAuthError as exc:
+        raise HTTPException(
+            status_code=401,
+            detail={"error": "internal_worker_auth_invalid"},
+        ) from exc
+
+
+router = APIRouter(prefix="/internal", dependencies=[Depends(require_internal_worker_auth)])
 
 
 class CleanupCheckpointsResponse(BaseModel):

@@ -56,6 +56,7 @@ def create_app(settings: Settings) -> FastAPI:
     task_runner.configure_scheduler(task_runner.build_scheduler(settings))
 
     app = FastAPI(title="PharmAide API", version=VERSION, lifespan=lifespan)
+    app.state.settings = settings
 
     # Middleware order: RequestIdMiddleware is added last so it runs first
     # (Starlette stacks middleware LIFO). The request_id is bound before any

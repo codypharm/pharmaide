@@ -111,4 +111,3 @@ route calls converge on the same Cloud Tasks resource instead of fanout.
 ## Suggested Implementation Slices
 
 1. Add queue retry/dead-letter audit events without PHI.
-2. Add service-to-service auth validation on internal worker routes.

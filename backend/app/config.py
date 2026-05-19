@@ -55,6 +55,11 @@ class Settings(BaseSettings):
     knowledge_max_upload_bytes: int = Field(default=25 * 1024 * 1024, gt=0)
     knowledge_ingestion_stale_minutes: int = Field(default=30, gt=0, le=24 * 60)
 
+    # Internal worker routes are open in local dev, but production should require
+    # Google-issued OIDC identity tokens from Cloud Tasks/Scheduler invokers.
+    internal_worker_auth: Literal["disabled", "oidc"] = "disabled"
+    internal_worker_audience: str | None = None
+
     # In-process is the safe local default. Production will switch this to
     # Cloud Tasks once the durable queue client is wired.
     task_backend: Literal["in_process", "cloud_tasks"] = "in_process"
@@ -107,6 +112,13 @@ class Settings(BaseSettings):
                 "cloud_tasks task backend requires queue path, base URL, "
                 "service account email, and OIDC audience"
             )
+        return self
+
+    @model_validator(mode="after")
+    def require_internal_worker_audience(self) -> "Settings":
+        """OIDC internal worker auth needs the expected token audience."""
+        if self.internal_worker_auth == "oidc" and not self.internal_worker_audience:
+            raise ValueError("oidc internal worker auth requires an audience")
         return self
 
 
