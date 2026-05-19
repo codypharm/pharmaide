@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, cast
 
+from google.protobuf.timestamp_pb2 import Timestamp
+
 from app.config import Settings
 
 
@@ -192,9 +194,9 @@ class CloudTasksBackgroundJobScheduler:
         client = self._client or _build_cloud_tasks_client()
         tasks_v2 = _cloud_tasks_module()
         target = _cloud_task_target(self.config.base_url, job)
-        task = tasks_v2.Task(
-            name=f"{self.config.queue_path}/tasks/{_cloud_task_id(job.idempotency_key)}",
-            http_request=tasks_v2.HttpRequest(
+        task_fields: dict[str, object] = {
+            "name": f"{self.config.queue_path}/tasks/{_cloud_task_id(job.idempotency_key)}",
+            "http_request": tasks_v2.HttpRequest(
                 http_method=tasks_v2.HttpMethod.POST,
                 url=target.url,
                 headers={"Content-Type": "application/json"},
@@ -204,7 +206,10 @@ class CloudTasksBackgroundJobScheduler:
                 ),
                 body=json.dumps(target.body, separators=(",", ":")).encode("utf-8"),
             ),
-        )
+        }
+        if target.schedule_delay_seconds > 0:
+            task_fields["schedule_time"] = _schedule_time_after(target.schedule_delay_seconds)
+        task = tasks_v2.Task(**task_fields)
         return client.create_task(
             tasks_v2.CreateTaskRequest(parent=self.config.queue_path, task=task)
         )
@@ -214,6 +219,7 @@ class CloudTasksBackgroundJobScheduler:
 class CloudTaskTarget:
     url: str
     body: Mapping[str, object]
+    schedule_delay_seconds: int = 0
 
 
 def build_scheduler(
@@ -252,6 +258,17 @@ def _cloud_task_target(base_url: str, job: BackgroundJob) -> CloudTaskTarget:
             body={},
         )
 
+    if job.name == "patient-turn.process":
+        treatment_id = _required_payload_value(job, "treatment_id")
+        return CloudTaskTarget(
+            url=f"{base}/internal/treatments/{treatment_id}/process-buffered-patient-turn",
+            body={},
+            schedule_delay_seconds=_optional_positive_int(
+                job,
+                "schedule_delay_seconds",
+            ),
+        )
+
     raise TaskBackendUnavailable(f"Cloud Tasks job is not mapped: {job.name}")
 
 
@@ -268,6 +285,21 @@ def _filtered_payload(job: BackgroundJob, allowed_keys: set[str]) -> dict[str, o
         for key, value in job.payload.items()
         if key in allowed_keys and value is not None
     }
+
+
+def _optional_positive_int(job: BackgroundJob, key: str) -> int:
+    value = job.payload.get(key)
+    if value is None:
+        return 0
+    if not isinstance(value, int) or value < 0:
+        raise TaskBackendUnavailable(f"Cloud Tasks job {job.name} has invalid {key}")
+    return value
+
+
+def _schedule_time_after(delay_seconds: int) -> Timestamp:
+    schedule_time = Timestamp()
+    schedule_time.FromSeconds(int(time.time()) + delay_seconds)
+    return schedule_time
 
 
 def _cloud_task_id(idempotency_key: str) -> str:

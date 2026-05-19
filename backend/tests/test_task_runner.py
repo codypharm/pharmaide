@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import time
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -171,6 +172,39 @@ async def test_cloud_tasks_scheduler_maps_knowledge_ingestion_job() -> None:
         "00000000-0000-4000-8000-000000000003/ingest"
     )
     assert json.loads(request.task.http_request.body.decode()) == {}
+
+
+async def test_cloud_tasks_scheduler_maps_buffered_patient_turn_with_delay() -> None:
+    settings = Settings(
+        _env_file=None,
+        task_backend="cloud_tasks",
+        cloud_tasks_queue_path="projects/pharmaide/locations/europe-west2/queues/default",
+        cloud_tasks_base_url="https://worker.test",
+        cloud_tasks_service_account_email="tasks-invoker@pharmaide.iam.gserviceaccount.com",
+        cloud_tasks_oidc_audience="https://worker.test",
+    )
+    fake_client = FakeCloudTasksClient()
+    scheduler = task_runner.build_scheduler(settings, cloud_tasks_client=fake_client)
+    job = task_runner.BackgroundJob(
+        name="patient-turn.process",
+        idempotency_key="patient-turn:00000000-0000-4000-8000-000000000004:12345",
+        payload={
+            "treatment_id": "00000000-0000-4000-8000-000000000004",
+            "schedule_delay_seconds": 5,
+        },
+    )
+    before = int(time.time())
+
+    scheduler.schedule_job(job, _unexpected_coroutine)
+
+    request = fake_client.requests[0]
+    assert request.task.http_request.url == (
+        "https://worker.test/internal/treatments/"
+        "00000000-0000-4000-8000-000000000004/process-buffered-patient-turn"
+    )
+    assert json.loads(request.task.http_request.body.decode()) == {}
+    schedule_timestamp = int(request.task.schedule_time.timestamp())
+    assert before + 5 <= schedule_timestamp <= before + 10
 
 
 async def test_cloud_tasks_scheduler_rejects_unknown_job_name() -> None:

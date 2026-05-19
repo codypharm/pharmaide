@@ -35,7 +35,7 @@ browser must never call production worker routes directly.
 | --- | --- | --- | --- | --- |
 | Treatment analysis | `analyze_treatment(session_factory, analysis_id, ...)` | Cloud Task after `create_pending_analysis` | `analysis_id`, `kb_scope_id`, config flags only | `analysis:{analysis_id}` |
 | Knowledge ingestion | `ingest_document(session_factory, document_id, ...)` | Cloud Task after upload row commit | `document_id` only | `kb-ingest:{document_id}` |
-| Buffered patient turn | `process_buffered_patient_messages_for_treatment(...)` | Cloud Task from WhatsApp webhook after debounce | `treatment_id` only | `patient-turn:{treatment_id}:{debounce_bucket}` |
+| Buffered patient turn | `process_buffered_patient_messages_for_treatment(...)` | `patient-turn.process` Cloud Task from WhatsApp webhook after debounce | `treatment_id` only | `patient-turn:{treatment_id}:{debounce_bucket}` |
 | Due monitoring | `run_due_monitoring(...)` | Cloud Scheduler Pub/Sub tick | `limit`, optional `now` for tests only | service-level schedule tick id |
 | Message delivery | `run_message_delivery_once(...)` | Cloud Scheduler Pub/Sub tick or task fanout | `limit` | service-level schedule tick id |
 
@@ -117,3 +117,5 @@ The Cloud Tasks/Pub/Sub worker foundation is implemented:
 - Cloud Scheduler Pub/Sub ticks dispatch due monitoring and message delivery.
 - Internal worker routes can require Google OIDC service-to-service auth.
 - Queue retry and dead-letter metadata are audited without storing clinical payloads.
+- Buffered patient-turn jobs map to the existing internal processor route with a
+  queue-level delay for the debounce window.
