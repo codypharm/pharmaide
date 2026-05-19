@@ -108,6 +108,12 @@ The Cloud Tasks backend enqueues metadata-only HTTP tasks for named jobs. It
 uses deterministic task names from idempotency keys, so retries and duplicate
 route calls converge on the same Cloud Tasks resource instead of fanout.
 
-## Suggested Implementation Slices
+## Implementation Status
 
-1. Add queue retry/dead-letter audit events without PHI.
+The Cloud Tasks/Pub/Sub worker foundation is implemented:
+
+- Named jobs enqueue metadata-only Cloud Tasks with OIDC-authenticated HTTP targets.
+- App startup selects the configured task backend.
+- Cloud Scheduler Pub/Sub ticks dispatch due monitoring and message delivery.
+- Internal worker routes can require Google OIDC service-to-service auth.
+- Queue retry and dead-letter metadata are audited without storing clinical payloads.

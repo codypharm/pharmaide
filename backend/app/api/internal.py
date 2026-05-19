@@ -63,7 +63,42 @@ async def require_internal_worker_auth(
         ) from exc
 
 
-router = APIRouter(prefix="/internal", dependencies=[Depends(require_internal_worker_auth)])
+async def audit_queue_retry_metadata(
+    request: Request,
+    session: SessionDep,
+) -> None:
+    """Audit Cloud Tasks retry metadata without storing worker request bodies."""
+    retry_count = _parse_int_header(request, "x-cloudtasks-taskretrycount")
+    if retry_count is None or retry_count <= 0:
+        return
+
+    session.add(
+        AuditLogEntry(
+            event_type="queue_task_retry_observed",
+            resource_type="queue_task",
+            resource_id=SYSTEM_RESOURCE_ID,
+            payload={
+                "queue_name": request.headers.get("x-cloudtasks-queuename"),
+                "task_name": request.headers.get("x-cloudtasks-taskname"),
+                "retry_count": retry_count,
+                "execution_count": _parse_int_header(
+                    request,
+                    "x-cloudtasks-taskexecutioncount",
+                ),
+                "worker_path": request.url.path,
+            },
+        )
+    )
+    await session.flush()
+
+
+router = APIRouter(
+    prefix="/internal",
+    dependencies=[
+        Depends(require_internal_worker_auth),
+        Depends(audit_queue_retry_metadata),
+    ],
+)
 
 
 class CleanupCheckpointsResponse(BaseModel):
@@ -143,6 +178,19 @@ class PubSubPushRequest(BaseModel):
 class SchedulerTickResponse(BaseModel):
     tick_type: str
     result: dict[str, int]
+
+
+class QueueDeadLetterRequest(BaseModel):
+    source: str = Field(min_length=1)
+    queue_name: str = Field(min_length=1)
+    task_name: str = Field(min_length=1)
+    job_name: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+    attempt_count: int = Field(ge=0)
+
+
+class QueueDeadLetterResponse(BaseModel):
+    recorded: bool
 
 
 @router.post(
@@ -264,6 +312,34 @@ async def run_scheduler_pubsub_tick(
         )
 
     raise HTTPException(status_code=400, detail={"error": "unknown_scheduler_tick"})
+
+
+@router.post(
+    "/queue/dead-letter",
+    response_model=QueueDeadLetterResponse,
+)
+async def record_queue_dead_letter(
+    body: QueueDeadLetterRequest,
+    session: SessionDep,
+) -> QueueDeadLetterResponse:
+    """Record queue dead-letter metadata without storing clinical payloads."""
+    session.add(
+        AuditLogEntry(
+            event_type="queue_dead_letter_received",
+            resource_type="queue_task",
+            resource_id=SYSTEM_RESOURCE_ID,
+            payload={
+                "source": body.source,
+                "queue_name": body.queue_name,
+                "task_name": body.task_name,
+                "job_name": body.job_name,
+                "reason": body.reason,
+                "attempt_count": body.attempt_count,
+            },
+        )
+    )
+    await session.flush()
+    return QueueDeadLetterResponse(recorded=True)
 
 
 @router.post(
@@ -444,3 +520,13 @@ def _decode_pubsub_json(data: str | None) -> dict[str, object]:
     if not isinstance(payload, dict):
         raise HTTPException(status_code=400, detail={"error": "invalid_pubsub_message"})
     return payload
+
+
+def _parse_int_header(request: Request, name: str) -> int | None:
+    value = request.headers.get(name)
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
