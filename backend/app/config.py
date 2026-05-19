@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     task_backend: Literal["in_process", "cloud_tasks"] = "in_process"
     cloud_tasks_queue_path: str | None = None
     cloud_tasks_base_url: str | None = None
+    cloud_tasks_service_account_email: str | None = None
     cloud_tasks_oidc_audience: str | None = None
 
     @field_validator("knowledge_max_upload_bytes", mode="before")
@@ -99,10 +100,12 @@ class Settings(BaseSettings):
         if self.task_backend == "cloud_tasks" and (
             not self.cloud_tasks_queue_path
             or not self.cloud_tasks_base_url
+            or not self.cloud_tasks_service_account_email
             or not self.cloud_tasks_oidc_audience
         ):
             raise ValueError(
-                "cloud_tasks task backend requires queue path, base URL, and OIDC audience"
+                "cloud_tasks task backend requires queue path, base URL, "
+                "service account email, and OIDC audience"
             )
         return self
 

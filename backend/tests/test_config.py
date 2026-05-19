@@ -24,6 +24,7 @@ def test_settings_defaults_match_env_example(monkeypatch: pytest.MonkeyPatch) ->
         "PHARMAIDE_TASK_BACKEND",
         "PHARMAIDE_CLOUD_TASKS_QUEUE_PATH",
         "PHARMAIDE_CLOUD_TASKS_BASE_URL",
+        "PHARMAIDE_CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL",
         "PHARMAIDE_CLOUD_TASKS_OIDC_AUDIENCE",
     ):
         monkeypatch.delenv(var, raising=False)
@@ -48,6 +49,7 @@ def test_settings_defaults_match_env_example(monkeypatch: pytest.MonkeyPatch) ->
     assert settings.task_backend == "in_process"
     assert settings.cloud_tasks_queue_path is None
     assert settings.cloud_tasks_base_url is None
+    assert settings.cloud_tasks_service_account_email is None
     assert settings.cloud_tasks_oidc_audience is None
 
 
@@ -73,6 +75,10 @@ def test_settings_reads_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
         "projects/pharmaide/locations/europe-west2/queues/analysis",
     )
     monkeypatch.setenv("PHARMAIDE_CLOUD_TASKS_BASE_URL", "https://worker.test")
+    monkeypatch.setenv(
+        "PHARMAIDE_CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL",
+        "tasks-invoker@pharmaide.iam.gserviceaccount.com",
+    )
     monkeypatch.setenv("PHARMAIDE_CLOUD_TASKS_OIDC_AUDIENCE", "https://worker.test")
 
     settings = Settings(_env_file=None)
@@ -100,6 +106,10 @@ def test_settings_reads_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
         == "projects/pharmaide/locations/europe-west2/queues/analysis"
     )
     assert settings.cloud_tasks_base_url == "https://worker.test"
+    assert (
+        settings.cloud_tasks_service_account_email
+        == "tasks-invoker@pharmaide.iam.gserviceaccount.com"
+    )
     assert settings.cloud_tasks_oidc_audience == "https://worker.test"
 
 
@@ -133,6 +143,7 @@ def test_settings_requires_cloud_tasks_configuration(monkeypatch: pytest.MonkeyP
     monkeypatch.setenv("PHARMAIDE_TASK_BACKEND", "cloud_tasks")
     monkeypatch.delenv("PHARMAIDE_CLOUD_TASKS_QUEUE_PATH", raising=False)
     monkeypatch.delenv("PHARMAIDE_CLOUD_TASKS_BASE_URL", raising=False)
+    monkeypatch.delenv("PHARMAIDE_CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL", raising=False)
     monkeypatch.delenv("PHARMAIDE_CLOUD_TASKS_OIDC_AUDIENCE", raising=False)
 
     with pytest.raises(ValidationError):

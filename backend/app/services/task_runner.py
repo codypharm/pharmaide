@@ -7,11 +7,13 @@ implementation while callers keep the same `schedule(coro_fn, *args)` shape.
 """
 
 import asyncio
+import hashlib
+import json
 import time
 from collections.abc import Callable, Coroutine, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from app.config import Settings
 
@@ -65,7 +67,7 @@ class BackgroundJobScheduler(Protocol):
         user_id: str | None = None,
         max_concurrent_per_user: int | None = None,
         **kwargs: object,
-    ) -> asyncio.Task[T]:
+    ) -> object:
         """Schedule named background work and return the local task handle."""
         ...
 
@@ -146,18 +148,16 @@ class CloudTasksSchedulerConfig:
 
     queue_path: str
     base_url: str
+    service_account_email: str
     oidc_audience: str
 
 
 class CloudTasksBackgroundJobScheduler:
-    """Fail-fast shell for the durable production scheduler.
+    """Durable scheduler that enqueues metadata-only HTTP worker tasks."""
 
-    The class gives routes a real backend selection target now, while avoiding a
-    misleading local fallback when production is configured for Cloud Tasks.
-    """
-
-    def __init__(self, config: CloudTasksSchedulerConfig) -> None:
+    def __init__(self, config: CloudTasksSchedulerConfig, *, client: object | None = None) -> None:
         self.config = config
+        self._client = client
 
     def schedule[T](
         self,
@@ -180,17 +180,47 @@ class CloudTasksBackgroundJobScheduler:
         user_id: str | None = None,
         max_concurrent_per_user: int | None = None,
         **kwargs: object,
-    ) -> asyncio.Task[T]:
-        del job, coro_fn, args, user_id, max_concurrent_per_user, kwargs
-        raise TaskBackendUnavailable(
-            "Cloud Tasks scheduler adapter is not implemented yet."
-        )
+    ) -> object:
+        del coro_fn, args, user_id, max_concurrent_per_user, kwargs
+        return self._create_task(job)
 
     async def drain(self) -> None:
         """Cloud Tasks owns durable work; there are no local tasks to drain."""
 
 
-def build_scheduler(settings: Settings) -> BackgroundJobScheduler:
+    def _create_task(self, job: BackgroundJob) -> object:
+        client = self._client or _build_cloud_tasks_client()
+        tasks_v2 = _cloud_tasks_module()
+        target = _cloud_task_target(self.config.base_url, job)
+        task = tasks_v2.Task(
+            name=f"{self.config.queue_path}/tasks/{_cloud_task_id(job.idempotency_key)}",
+            http_request=tasks_v2.HttpRequest(
+                http_method=tasks_v2.HttpMethod.POST,
+                url=target.url,
+                headers={"Content-Type": "application/json"},
+                oidc_token=tasks_v2.OidcToken(
+                    service_account_email=self.config.service_account_email,
+                    audience=self.config.oidc_audience,
+                ),
+                body=json.dumps(target.body, separators=(",", ":")).encode("utf-8"),
+            ),
+        )
+        return client.create_task(
+            tasks_v2.CreateTaskRequest(parent=self.config.queue_path, task=task)
+        )
+
+
+@dataclass(frozen=True)
+class CloudTaskTarget:
+    url: str
+    body: Mapping[str, object]
+
+
+def build_scheduler(
+    settings: Settings,
+    *,
+    cloud_tasks_client: object | None = None,
+) -> BackgroundJobScheduler:
     """Build the background scheduler selected by environment settings."""
     if settings.task_backend == "in_process":
         return InProcessBackgroundJobScheduler()
@@ -199,9 +229,64 @@ def build_scheduler(settings: Settings) -> BackgroundJobScheduler:
         CloudTasksSchedulerConfig(
             queue_path=settings.cloud_tasks_queue_path or "",
             base_url=settings.cloud_tasks_base_url or "",
+            service_account_email=settings.cloud_tasks_service_account_email or "",
             oidc_audience=settings.cloud_tasks_oidc_audience or "",
-        )
+        ),
+        client=cloud_tasks_client,
     )
+
+
+def _cloud_task_target(base_url: str, job: BackgroundJob) -> CloudTaskTarget:
+    base = base_url.rstrip("/")
+    if job.name == "analysis.run":
+        analysis_id = _required_payload_value(job, "analysis_id")
+        return CloudTaskTarget(
+            url=f"{base}/internal/analyses/{analysis_id}/run",
+            body=_filtered_payload(job, {"kb_scope_id", "timeout_seconds"}),
+        )
+
+    if job.name == "kb.ingest":
+        document_id = _required_payload_value(job, "document_id")
+        return CloudTaskTarget(
+            url=f"{base}/internal/knowledge/documents/{document_id}/ingest",
+            body={},
+        )
+
+    raise TaskBackendUnavailable(f"Cloud Tasks job is not mapped: {job.name}")
+
+
+def _required_payload_value(job: BackgroundJob, key: str) -> object:
+    value = job.payload.get(key)
+    if value is None:
+        raise TaskBackendUnavailable(f"Cloud Tasks job {job.name} missing payload field: {key}")
+    return value
+
+
+def _filtered_payload(job: BackgroundJob, allowed_keys: set[str]) -> dict[str, object]:
+    return {
+        key: value
+        for key, value in job.payload.items()
+        if key in allowed_keys and value is not None
+    }
+
+
+def _cloud_task_id(idempotency_key: str) -> str:
+    """Keep task ids deterministic without leaking raw resource identifiers."""
+    return f"pa-{hashlib.sha256(idempotency_key.encode('utf-8')).hexdigest()[:40]}"
+
+
+def _build_cloud_tasks_client() -> object:
+    return _cloud_tasks_module().CloudTasksClient()
+
+
+def _cloud_tasks_module() -> Any:
+    try:
+        from google.cloud import tasks_v2
+    except ImportError as exc:
+        raise TaskBackendUnavailable(
+            "google-cloud-tasks is required when PHARMAIDE_TASK_BACKEND=cloud_tasks"
+        ) from exc
+    return cast(Any, tasks_v2)
 
 
 _scheduler: BackgroundJobScheduler = InProcessBackgroundJobScheduler()

@@ -97,18 +97,18 @@ select a queue adapter from settings, for example:
 - `PHARMAIDE_TASK_BACKEND=cloud_tasks`
 - `PHARMAIDE_CLOUD_TASKS_QUEUE_PATH=projects/.../locations/.../queues/...`
 - `PHARMAIDE_CLOUD_TASKS_BASE_URL=https://...`
+- `PHARMAIDE_CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL=...@...iam.gserviceaccount.com`
 - `PHARMAIDE_CLOUD_TASKS_OIDC_AUDIENCE=https://...`
 
 The caller contract should stay small: schedule a named job plus ids. Avoid
 passing coroutine objects through the production adapter.
 
-The current Cloud Tasks backend is a fail-fast skeleton: configuration is
-validated and route code can select the backend, but the real Google client is
-not installed yet. This prevents production from silently falling back to
-in-process work.
+The Cloud Tasks backend enqueues metadata-only HTTP tasks for named jobs. It
+uses deterministic task names from idempotency keys, so retries and duplicate
+route calls converge on the same Cloud Tasks resource instead of fanout.
 
 ## Suggested Implementation Slices
 
-1. Implement real Cloud Tasks enqueue client with OIDC-authenticated HTTP targets.
+1. Wire app startup to select `build_scheduler(get_settings())` outside tests.
 2. Add Cloud Scheduler/Pub/Sub ticks for due monitoring and delivery.
 3. Add queue retry/dead-letter audit events without PHI.

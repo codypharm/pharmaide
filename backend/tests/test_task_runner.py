@@ -1,6 +1,7 @@
 """In-process task runner."""
 
 import asyncio
+import json
 import os
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
@@ -10,6 +11,15 @@ import pytest
 
 from app.config import Settings
 from app.services import task_runner
+
+
+class FakeCloudTasksClient:
+    def __init__(self) -> None:
+        self.requests: list[object] = []
+
+    def create_task(self, request: object) -> object:
+        self.requests.append(request)
+        return {"name": "created-task"}
 
 
 @pytest.fixture(autouse=True)
@@ -91,26 +101,100 @@ def test_build_scheduler_defaults_to_in_process() -> None:
     assert isinstance(scheduler, task_runner.InProcessBackgroundJobScheduler)
 
 
-async def test_cloud_tasks_scheduler_fails_until_real_adapter_is_wired() -> None:
+async def test_cloud_tasks_scheduler_enqueues_analysis_job() -> None:
+    settings = Settings(
+        _env_file=None,
+        task_backend="cloud_tasks",
+        cloud_tasks_queue_path="projects/pharmaide/locations/europe-west2/queues/default",
+        cloud_tasks_base_url="https://worker.test/",
+        cloud_tasks_service_account_email="tasks-invoker@pharmaide.iam.gserviceaccount.com",
+        cloud_tasks_oidc_audience="https://worker.test",
+    )
+    fake_client = FakeCloudTasksClient()
+    scheduler = task_runner.build_scheduler(settings, cloud_tasks_client=fake_client)
+    job = task_runner.BackgroundJob(
+        name="analysis.run",
+        idempotency_key="analysis:analysis-1",
+        payload={
+            "analysis_id": "00000000-0000-4000-8000-000000000001",
+            "kb_scope_id": "00000000-0000-4000-8000-000000000002",
+            "timeout_seconds": 45,
+        },
+    )
+
+    result = scheduler.schedule_job(job, _unexpected_coroutine)
+
+    assert result == {"name": "created-task"}
+    assert len(fake_client.requests) == 1
+    request = fake_client.requests[0]
+    assert request.parent == "projects/pharmaide/locations/europe-west2/queues/default"
+    assert request.task.name.startswith(
+        "projects/pharmaide/locations/europe-west2/queues/default/tasks/"
+    )
+    assert request.task.http_request.url == (
+        "https://worker.test/internal/analyses/00000000-0000-4000-8000-000000000001/run"
+    )
+    assert request.task.http_request.headers["Content-Type"] == "application/json"
+    assert json.loads(request.task.http_request.body.decode()) == {
+        "kb_scope_id": "00000000-0000-4000-8000-000000000002",
+        "timeout_seconds": 45,
+    }
+    assert (
+        request.task.http_request.oidc_token.service_account_email
+        == "tasks-invoker@pharmaide.iam.gserviceaccount.com"
+    )
+    assert request.task.http_request.oidc_token.audience == "https://worker.test"
+
+
+async def test_cloud_tasks_scheduler_maps_knowledge_ingestion_job() -> None:
     settings = Settings(
         _env_file=None,
         task_backend="cloud_tasks",
         cloud_tasks_queue_path="projects/pharmaide/locations/europe-west2/queues/default",
         cloud_tasks_base_url="https://worker.test",
+        cloud_tasks_service_account_email="tasks-invoker@pharmaide.iam.gserviceaccount.com",
         cloud_tasks_oidc_audience="https://worker.test",
     )
-    scheduler = task_runner.build_scheduler(settings)
+    fake_client = FakeCloudTasksClient()
+    scheduler = task_runner.build_scheduler(settings, cloud_tasks_client=fake_client)
     job = task_runner.BackgroundJob(
-        name="analysis.run",
-        idempotency_key="analysis:analysis-1",
-        payload={"analysis_id": "analysis-1"},
+        name="kb.ingest",
+        idempotency_key="kb-ingest:document-1",
+        payload={"document_id": "00000000-0000-4000-8000-000000000003"},
     )
 
-    async def record() -> None:
-        raise AssertionError("Cloud Tasks scheduling must not run work in-process.")
+    scheduler.schedule_job(job, _unexpected_coroutine)
 
-    with pytest.raises(task_runner.TaskBackendUnavailable, match="Cloud Tasks"):
-        scheduler.schedule_job(job, record)
+    request = fake_client.requests[0]
+    assert request.task.http_request.url == (
+        "https://worker.test/internal/knowledge/documents/"
+        "00000000-0000-4000-8000-000000000003/ingest"
+    )
+    assert json.loads(request.task.http_request.body.decode()) == {}
+
+
+async def test_cloud_tasks_scheduler_rejects_unknown_job_name() -> None:
+    settings = Settings(
+        _env_file=None,
+        task_backend="cloud_tasks",
+        cloud_tasks_queue_path="projects/pharmaide/locations/europe-west2/queues/default",
+        cloud_tasks_base_url="https://worker.test",
+        cloud_tasks_service_account_email="tasks-invoker@pharmaide.iam.gserviceaccount.com",
+        cloud_tasks_oidc_audience="https://worker.test",
+    )
+    scheduler = task_runner.build_scheduler(settings, cloud_tasks_client=FakeCloudTasksClient())
+    job = task_runner.BackgroundJob(
+        name="unknown.job",
+        idempotency_key="unknown:1",
+        payload={},
+    )
+
+    with pytest.raises(task_runner.TaskBackendUnavailable, match=r"unknown\.job"):
+        scheduler.schedule_job(job, _unexpected_coroutine)
+
+
+async def _unexpected_coroutine() -> None:
+    raise AssertionError("Cloud Tasks scheduling must not run work in-process.")
 
 
 async def test_drain_waits_for_in_flight_tasks() -> None:
