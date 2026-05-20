@@ -199,6 +199,7 @@ async def record_delivery_callback(
     provider: str,
     external_message_id: str,
     status: str,
+    error_metadata: dict[str, object] | None = None,
 ) -> DeliveryCallbackResult:
     """Record provider callback mismatches without trusting provider payload blindly."""
     message = await _load_message_by_external_id(session, external_message_id)
@@ -258,6 +259,7 @@ async def record_delivery_callback(
         external_message_id=external_message_id,
         callback_status=status,
         old_status=old_status,
+        error_metadata=error_metadata,
     )
     await session.flush()
     log.info(
@@ -329,6 +331,7 @@ def _audit_callback_accepted(
     external_message_id: str,
     callback_status: str,
     old_status: str,
+    error_metadata: dict[str, object] | None,
 ) -> None:
     session.add(
         AuditLogEntry(
@@ -344,6 +347,7 @@ def _audit_callback_accepted(
                 "callback_status": callback_status,
                 "old_status": old_status,
                 "new_status": message.status,
+                **(error_metadata or {}),
             },
         )
     )

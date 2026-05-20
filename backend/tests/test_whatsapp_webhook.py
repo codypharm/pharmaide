@@ -338,6 +338,58 @@ async def test_whatsapp_webhook_counts_unmatched_delivery_status_as_ignored(
     assert await db_session.scalar(select(ConversationMessage)) is None
 
 
+@pytest.mark.usefixtures("postgres_container")
+async def test_whatsapp_webhook_records_failed_delivery_status_metadata_without_free_text(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    treatment = await _persist_active_treatment(db_session)
+    message = ConversationMessage(
+        treatment_id=treatment.id,
+        direction="outbound",
+        sender_type="pharmacist",
+        channel="whatsapp",
+        status="sent",
+        body="Please continue the current dose.",
+        external_message_id="wamid.failed-status-1",
+    )
+    db_session.add(message)
+    await db_session.flush()
+
+    response = await app_client.post(
+        "/webhooks/whatsapp",
+        json=_status_payload(
+            message_id="wamid.failed-status-1",
+            status="failed",
+            errors=[
+                {
+                    "code": 131026,
+                    "title": "Message undeliverable",
+                    "message": "Recipient phone number is not currently reachable.",
+                    "error_data": {"details": "Free-text provider details"},
+                }
+            ],
+        ),
+    )
+
+    assert response.status_code == 200, response.text
+    await db_session.refresh(message)
+    assert message.status == "failed"
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.event_type == "conversation_message_delivery_callback_accepted"
+        )
+    )
+    assert audit is not None
+    assert audit.payload["provider_error_code"] == 131026
+    assert audit.payload["provider_error_count"] == 1
+    assert "undeliverable" not in str(audit.payload).lower()
+    assert "reachable" not in str(audit.payload).lower()
+    assert "details" not in str(audit.payload).lower()
+    assert "continue" not in str(audit.payload).lower()
+
+
 async def _persist_active_treatment(
     session: AsyncSession,
     *,
@@ -385,7 +437,21 @@ def _message_payload(*, from_phone: str, message: str) -> dict[str, object]:
     }
 
 
-def _status_payload(*, message_id: str, status: str) -> dict[str, object]:
+def _status_payload(
+    *,
+    message_id: str,
+    status: str,
+    errors: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
+    status_item: dict[str, object] = {
+        "id": message_id,
+        "status": status,
+        "timestamp": "1710000001",
+        "recipient_id": "18005551212",
+    }
+    if errors is not None:
+        status_item["errors"] = errors
+
     return {
         "object": "whatsapp_business_account",
         "entry": [
@@ -393,14 +459,7 @@ def _status_payload(*, message_id: str, status: str) -> dict[str, object]:
                 "changes": [
                     {
                         "value": {
-                            "statuses": [
-                                {
-                                    "id": message_id,
-                                    "status": status,
-                                    "timestamp": "1710000001",
-                                    "recipient_id": "18005551212",
-                                }
-                            ]
+                            "statuses": [status_item]
                         }
                     }
                 ]

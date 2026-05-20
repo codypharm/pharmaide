@@ -45,11 +45,19 @@ class WhatsAppMessage(BaseModel):
     text: WhatsAppText | None = None
 
 
+class WhatsAppStatusError(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    code: int | str | None = None
+    error_subcode: int | str | None = None
+
+
 class WhatsAppStatus(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     provider_message_id: Annotated[str, Field(alias="id")]
     status: str = Field(min_length=1)
+    errors: list[WhatsAppStatusError] = Field(default_factory=list)
 
 
 class WhatsAppWebhookValue(BaseModel):
@@ -141,6 +149,7 @@ async def process_whatsapp_webhook(
             provider=message_delivery.WHATSAPP_CLOUD_PROVIDER,
             external_message_id=status.provider_message_id,
             status=status.status,
+            error_metadata=_status_error_metadata(status),
         )
         if not result.accepted:
             ignored_count += 1
@@ -181,6 +190,20 @@ def _delivery_statuses(payload: WhatsAppWebhookPayload) -> list[WhatsAppStatus]:
         for change in entry.changes:
             statuses.extend(change.value.statuses)
     return statuses
+
+
+def _status_error_metadata(status: WhatsAppStatus) -> dict[str, object]:
+    """Preserve provider error codes, not free-text error descriptions."""
+    if not status.errors:
+        return {}
+
+    metadata: dict[str, object] = {"provider_error_count": len(status.errors)}
+    first_error = status.errors[0]
+    if first_error.code is not None:
+        metadata["provider_error_code"] = first_error.code
+    if first_error.error_subcode is not None:
+        metadata["provider_error_subcode"] = first_error.error_subcode
+    return metadata
 
 
 async def _resolve_active_treatment_id(
