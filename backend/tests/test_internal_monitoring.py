@@ -484,7 +484,7 @@ async def _create_treatment(app_client: AsyncClient, mrn: str) -> UUID:
                 "name": "Eleanor Vance",
                 "dob": "1955-10-12",
                 "mrn": mrn,
-                "phone": "+18005551212",
+                "phone": _phone_for_mrn(mrn),
             },
             "treatment": {
                 "clinical_objective": "Monitor adherence",
@@ -504,6 +504,11 @@ async def _create_treatment(app_client: AsyncClient, mrn: str) -> UUID:
     )
     assert response.status_code == 201, response.text
     return UUID(response.json()["treatment_id"])
+
+
+def _phone_for_mrn(mrn: str) -> str:
+    suffix = sum(ord(character) for character in mrn) % 10_000
+    return f"+1800555{suffix:04d}"
 
 
 async def _active_treatment_with_analysis(

@@ -66,6 +66,10 @@ class AnalysisNotCompleted(Exception):
     """Raised when monitoring is requested before clinical analysis is ready."""
 
 
+class ActiveTreatmentForPhoneExists(Exception):
+    """Raised when WhatsApp routing would be ambiguous for this patient phone."""
+
+
 class TreatmentNotCompleted(Exception):
     """Raised when a completion-only command targets an unfinished treatment."""
 
@@ -304,6 +308,8 @@ async def start_treatment_cycle(session: AsyncSession, treatment_id: UUID) -> Tr
         analysis = await _latest_completed_analysis(session, treatment_id)
         if analysis is None:
             raise AnalysisNotCompleted()
+        if await _has_other_active_treatment_for_patient_phone(session, treatment):
+            raise ActiveTreatmentForPhoneExists()
 
         old_automation_mode = treatment.automation_mode
         treatment.status = "active"
@@ -343,6 +349,33 @@ async def start_treatment_cycle(session: AsyncSession, treatment_id: UUID) -> Tr
 
     await session.flush()
     return TreatmentView.model_validate(treatment)
+
+
+async def _has_other_active_treatment_for_patient_phone(
+    session: AsyncSession,
+    treatment: Treatment,
+) -> bool:
+    """Keep WhatsApp inbound routing one-to-one until workspace routing lands."""
+    phone = await session.scalar(
+        select(Patient.phone)
+        .join(Treatment)
+        .where(Treatment.id == treatment.id)
+    )
+    if phone is None:
+        return False
+
+    result = await session.execute(
+        select(Treatment.id)
+        .join(Patient)
+        .where(
+            Treatment.id != treatment.id,
+            Treatment.status == "active",
+            Treatment.archived_at.is_(None),
+            Patient.phone == phone,
+        )
+        .limit(1)
+    )
+    return result.scalar_one_or_none() is not None
 
 
 def _build_cycle_onboarding_message(*, treatment_id: UUID) -> ConversationMessage:

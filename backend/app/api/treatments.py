@@ -104,6 +104,7 @@ from app.services.patient_reply_drafts import (
     draft_patient_reply_for_treatment,
 )
 from app.services.treatments import (
+    ActiveTreatmentForPhoneExists,
     AnalysisNotCompleted,
     MedicationAlreadyDiscontinued,
     MRNConflict,
@@ -261,6 +262,11 @@ async def post_treatment_start_cycle(
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
     except AnalysisNotCompleted as exc:
         raise HTTPException(status_code=409, detail={"error": "analysis_not_completed"}) from exc
+    except ActiveTreatmentForPhoneExists as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "active_treatment_exists_for_patient_phone"},
+        ) from exc
 
 
 @router.post(

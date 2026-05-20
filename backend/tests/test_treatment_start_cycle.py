@@ -117,6 +117,60 @@ async def test_post_start_cycle_rejects_completed_analysis_without_result(
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_post_start_cycle_rejects_second_active_treatment_for_same_phone(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    first = await app_client.post("/treatments", json=_treatment_body("START-CYCLE-004"))
+    assert first.status_code == 201, first.text
+    first_treatment_id = UUID(first.json()["treatment_id"])
+    second = await app_client.post(
+        "/treatments",
+        json=_treatment_body("START-CYCLE-005"),
+    )
+    assert second.status_code == 201, second.text
+    second_treatment_id = UUID(second.json()["treatment_id"])
+    db_session.add_all(
+        [
+            TreatmentAnalysis(
+                treatment_id=first_treatment_id,
+                status="completed",
+                result={"clinical_summary": "Ready for monitoring."},
+            ),
+            TreatmentAnalysis(
+                treatment_id=second_treatment_id,
+                status="completed",
+                result={"clinical_summary": "Ready for monitoring."},
+            ),
+        ]
+    )
+    first_treatment = await db_session.get(Treatment, first_treatment_id)
+    assert first_treatment is not None
+    first_treatment.status = "active"
+    await db_session.flush()
+
+    response = await app_client.post(f"/treatments/{second_treatment_id}/start-cycle")
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": {"error": "active_treatment_exists_for_patient_phone"}
+    }
+    second_treatment = await db_session.get(Treatment, second_treatment_id)
+    assert second_treatment is not None
+    assert second_treatment.status == "pending"
+    onboarding_count = await db_session.scalar(
+        select(func.count())
+        .select_from(ConversationMessage)
+        .where(
+            ConversationMessage.treatment_id == second_treatment_id,
+            ConversationMessage.direction == "outbound",
+            ConversationMessage.channel == "whatsapp",
+        )
+    )
+    assert onboarding_count == 0
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_post_start_cycle_returns_404_for_missing_treatment(app_client: AsyncClient) -> None:
     response = await app_client.post(f"/treatments/{uuid4()}/start-cycle")
 
