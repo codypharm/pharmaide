@@ -75,6 +75,7 @@ asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 addopts = "-ra"
 markers = [
+    "clinical_eval: deterministic production-readiness regression cases for clinical and patient-message behavior",
     "live_llm: manual tests that call a real LLM provider; skipped unless explicitly enabled",
     "live_embedding: manual tests that call the real embedding provider; skipped unless explicitly enabled",
 ]
