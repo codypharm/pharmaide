@@ -381,6 +381,7 @@ describe("PatientManagementPage", () => {
 
     await screen.findByText("Eleanor Vance");
     expect(screen.getAllByText(/PHA-AB12/).length).toBeGreaterThan(0);
+    expect(screen.getByText("Phone: +18005551212")).toBeTruthy();
     expect(screen.getByText("2 treatments")).toBeTruthy();
     expect(screen.getByText(/First listed medication: Lisinopril/)).toBeTruthy();
     expect(screen.getByRole("link", { name: /treatment detail/i })).toHaveAttribute(
@@ -429,8 +430,12 @@ describe("PatientManagementPage", () => {
     expect(await screen.findAllByText("Patient hidden")).toHaveLength(2);
     expect(screen.queryByText("Eleanor Vance")).toBeNull();
     expect(screen.queryByText(/PHA-AB12/)).toBeNull();
+    expect(screen.queryByText(/\+18005551212/)).toBeNull();
+    expect(screen.getByText("Phone hidden")).toBeTruthy();
     expect(screen.queryByText("Eleanor V.")).toBeNull();
-    expect(screen.getAllByText("Message hidden in privacy mode.").length).toBeGreaterThan(1);
+    expect((await screen.findAllByText("Message hidden in privacy mode.")).length).toBeGreaterThan(
+      1,
+    );
     expect(screen.queryByText("I feel dizzy today.")).toBeNull();
     expect(screen.queryByText("Pain has not improved since yesterday.")).toBeNull();
   });

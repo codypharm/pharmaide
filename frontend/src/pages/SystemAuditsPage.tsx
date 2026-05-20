@@ -487,14 +487,14 @@ function Header({
 function AuditTable({ items }: { items: AuditLogEntryView[] }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-left">
+      <table className="w-full table-fixed text-left">
         <thead>
           <tr className="bg-slate-50/50 border-b border-slate-200">
-            <th className="px-6 py-4 text-[11px] font-bold tracking-wider text-slate-500 uppercase">Log ID</th>
-            <th className="px-6 py-4 text-[11px] font-bold tracking-wider text-slate-500 uppercase">Timestamp</th>
-            <th className="px-6 py-4 text-[11px] font-bold tracking-wider text-slate-500 uppercase">Actor</th>
-            <th className="px-6 py-4 text-[11px] font-bold tracking-wider text-slate-500 uppercase">Action</th>
-            <th className="px-6 py-4 text-[11px] font-bold tracking-wider text-slate-500 uppercase">Resource</th>
+            <th className="w-24 px-6 py-4 text-[11px] font-bold tracking-wider text-slate-500 uppercase">Log ID</th>
+            <th className="w-44 px-6 py-4 text-[11px] font-bold tracking-wider text-slate-500 uppercase">Timestamp</th>
+            <th className="w-36 px-6 py-4 text-[11px] font-bold tracking-wider text-slate-500 uppercase">Actor</th>
+            <th className="w-56 px-6 py-4 text-[11px] font-bold tracking-wider text-slate-500 uppercase">Action</th>
+            <th className="w-44 px-6 py-4 text-[11px] font-bold tracking-wider text-slate-500 uppercase">Resource</th>
             <th className="px-6 py-4 text-[11px] font-bold tracking-wider text-slate-500 uppercase">Details</th>
           </tr>
         </thead>
@@ -521,7 +521,10 @@ function AuditTable({ items }: { items: AuditLogEntryView[] }) {
                 </div>
                 <div className="font-mono text-xs text-slate-400">{shortId(log.resource_id)}</div>
               </td>
-              <td className="px-6 py-4 text-sm text-slate-600 max-w-xl">
+              <td
+                className="px-6 py-4 text-sm text-slate-600 break-words [overflow-wrap:anywhere]"
+                data-testid={`audit-details-${log.id}`}
+              >
                 {payloadSummary(log.payload)}
               </td>
             </tr>

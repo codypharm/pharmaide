@@ -66,6 +66,31 @@ describe("SystemAuditsPage", () => {
     expect(spy).toHaveBeenCalledWith({ limit: 50, offset: 0 });
   });
 
+  it("wraps long audit detail tokens inside the details column", async () => {
+    const longTraceId = "trace_" + "a".repeat(96);
+    const auditId = "66666666-6666-4666-8666-666666666666";
+    vi.spyOn(auditsApi, "listAuditLogEntries").mockResolvedValue({
+      items: [
+        {
+          id: auditId,
+          actor_id: null,
+          event_type: "conversation_message_delivery_failed",
+          resource_type: "conversation_message",
+          resource_id: "77777777-7777-4777-8777-777777777777",
+          payload: { provider_trace_id: longTraceId },
+          created_at: "2026-05-15T12:00:00Z",
+        },
+      ],
+    });
+
+    renderPage();
+
+    expect(await screen.findByText(new RegExp(longTraceId))).toBeTruthy();
+    expect(screen.getByTestId(`audit-details-${auditId}`).className).toContain(
+      "[overflow-wrap:anywhere]",
+    );
+  });
+
   it("exposes production audit filters for clinical, delivery, and infrastructure events", async () => {
     vi.spyOn(auditsApi, "listAuditLogEntries").mockResolvedValue(AUDITS);
 

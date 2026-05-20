@@ -947,7 +947,8 @@ function PatientHeader({
   const patientHeading = isPrivacyMode
     ? "Patient hidden"
     : `${item.patient.name}, ${patientAge(item.patient.dob)}`;
-  const patientMeta = isPrivacyMode ? "MRN hidden" : `MRN: ${item.patient.mrn}`;
+  const patientMrn = isPrivacyMode ? "MRN hidden" : `MRN: ${item.patient.mrn}`;
+  const patientPhone = isPrivacyMode ? "Phone hidden" : `Phone: ${item.patient.phone}`;
 
   return (
     <div className="p-8 border-b border-slate-100 flex items-center justify-between shrink-0">
@@ -959,9 +960,13 @@ function PatientHeader({
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
           {patientHeading}
         </h1>
-        <p className="text-sm text-slate-500">
-          {patientMeta} | First listed medication: {item.first_medication_name ?? "Not listed"}
-        </p>
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
+          <span>{patientMrn}</span>
+          <span className="hidden text-slate-300 sm:inline">|</span>
+          <span>{patientPhone}</span>
+          <span className="hidden text-slate-300 sm:inline">|</span>
+          <span>First listed medication: {item.first_medication_name ?? "Not listed"}</span>
+        </div>
       </div>
       <div className="flex items-center gap-2">
         <Link
