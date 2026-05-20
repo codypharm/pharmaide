@@ -96,6 +96,12 @@ from app.services.patient_checkins import (
     create_patient_check_in,
     list_patient_check_ins,
 )
+from app.services.patient_interaction_evidence import (
+    InteractionEvidenceRetriever,
+    build_patient_interaction_evidence_retriever,
+    format_interaction_evidence,
+    lookup_patient_interaction_evidence,
+)
 from app.services.patient_reply_drafts import (
     TreatmentNotFound as ReplyDraftTreatmentNotFound,
 )
@@ -598,6 +604,7 @@ async def post_patient_reply_draft(
     body: PatientReplyDraftCreate,
     session_factory: SessionFactoryDep,
     settings: SettingsDep,
+    user_id: Annotated[str, Header(alias="X-Pharmaide-User-Id", min_length=1)] = "anonymous",
 ) -> ConversationTurnView:
     try:
         async with session_factory() as session, session.begin():
@@ -616,11 +623,17 @@ async def post_patient_reply_draft(
                     ),
                 )
 
+            interaction_evidence_retriever = build_patient_interaction_evidence_retriever(
+                session,
+                openai_api_key=settings.openai_api_key,
+                kb_scope_id=_parse_optional_uuid(user_id),
+            )
             draft = await draft_patient_reply_for_treatment(
                 session,
                 treatment_id,
                 patient_message=body.patient_message,
                 agent=_build_configured_patient_reply_agent(settings),
+                interaction_evidence_retriever=interaction_evidence_retriever,
             )
             return await submit_patient_conversation_turn(
                 session,
@@ -631,6 +644,8 @@ async def post_patient_reply_draft(
                     session,
                     treatment_id,
                     draft,
+                    patient_message=body.patient_message,
+                    interaction_evidence_retriever=interaction_evidence_retriever,
                 ),
                 openai_api_key=settings.openai_api_key,
                 safety_provider=settings.safety_provider,
@@ -719,10 +734,19 @@ async def _patient_reply_safety_context(
     session: AsyncSession,
     treatment_id: UUID,
     draft: PatientReplyDraft,
+    *,
+    patient_message: str,
+    interaction_evidence_retriever: InteractionEvidenceRetriever | None = None,
 ) -> str:
     detail = await get_treatment(session, treatment_id)
     if detail is None:
         raise ReplyDraftTreatmentNotFound()
+    interaction_evidence = await lookup_patient_interaction_evidence(
+        patient_message=patient_message,
+        medication_names=[medication.name for medication in detail.medications],
+        treatment_id=treatment_id,
+        retriever=interaction_evidence_retriever,
+    )
     medications = "\n".join(
         (
             f"- {medication.name}; dosage={medication.dosage}; "
@@ -737,6 +761,8 @@ async def _patient_reply_safety_context(
             f"clinical_objective: {detail.treatment.clinical_objective or 'unavailable'}",
             "medications:",
             medications or "- none",
+            "interaction_evidence:",
+            format_interaction_evidence(interaction_evidence),
             (
                 "draft_metadata: "
                 f"requires_pharmacist_review={draft.requires_pharmacist_review}; "

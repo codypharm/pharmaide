@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.patient_reply import PatientReplyDraft
 from app.db.models import ConversationMessage, Medication, Patient, Treatment, TreatmentAnalysis
+from app.services.kb_retrieval import Citation
 from app.services.patient_reply_drafts import TreatmentNotFound, draft_patient_reply_for_treatment
 
 
@@ -74,6 +75,97 @@ async def test_draft_patient_reply_for_treatment_raises_for_unknown_treatment(
             patient_message="Hello",
             agent=Agent(FunctionModel(lambda *_: ModelResponse(parts=[]))),
         )
+
+
+async def test_draft_patient_reply_for_treatment_includes_interaction_evidence(
+    db_session: AsyncSession,
+) -> None:
+    seen: dict[str, str] = {}
+    treatment = await _persist_reply_context(db_session)
+
+    async def evidence_retriever(query: str, treatment_id):
+        assert "alcohol" in query.lower()
+        assert treatment_id == treatment.id
+        return [
+            Citation(
+                chunk_id=uuid4(),
+                document_id=uuid4(),
+                source_type="dailymed",
+                document_title="Metronidazole Label",
+                source_uri="dailymed://metronidazole",
+                text="Avoid alcoholic beverages during metronidazole therapy.",
+                score=0.93,
+            )
+        ]
+
+    def model_function(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        seen["prompt"] = _user_prompt(messages)
+        output_tool = info.output_tools[0]
+        return ModelResponse(
+            parts=[
+                ToolCallPart(
+                    output_tool.name,
+                    {
+                        "message": "I found label evidence and will ask the pharmacist to confirm.",
+                        "requires_pharmacist_review": True,
+                        "escalation_reason": "unclear_message",
+                        "confidence": 0.82,
+                    },
+                )
+            ],
+            model_name="patient-reply-interaction-evidence-test",
+        )
+
+    draft = await draft_patient_reply_for_treatment(
+        db_session,
+        treatment.id,
+        patient_message="Can I drink alcohol with this?",
+        agent=Agent(FunctionModel(model_function), output_type=PatientReplyDraft),
+        interaction_evidence_retriever=evidence_retriever,
+    )
+
+    assert draft.escalation_reason == "unclear_message"
+    assert "interaction_question_detected: true" in seen["prompt"]
+    assert "Avoid alcoholic beverages during metronidazole therapy." in seen["prompt"]
+    assert "dailymed://metronidazole" in seen["prompt"]
+
+
+async def test_draft_patient_reply_for_treatment_holds_interaction_question_without_evidence(
+    db_session: AsyncSession,
+) -> None:
+    treatment = await _persist_reply_context(db_session)
+
+    async def evidence_retriever(_query: str, _treatment_id):
+        return []
+
+    def model_function(_messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        output_tool = info.output_tools[0]
+        return ModelResponse(
+            parts=[
+                ToolCallPart(
+                    output_tool.name,
+                    {
+                        "message": "You can take this with alcohol.",
+                        "requires_pharmacist_review": False,
+                        "escalation_reason": "none",
+                        "confidence": 0.91,
+                    },
+                )
+            ],
+            model_name="patient-reply-interaction-no-evidence-test",
+        )
+
+    draft = await draft_patient_reply_for_treatment(
+        db_session,
+        treatment.id,
+        patient_message="Can I drink alcohol with this?",
+        agent=Agent(FunctionModel(model_function), output_type=PatientReplyDraft),
+        interaction_evidence_retriever=evidence_retriever,
+    )
+
+    assert draft.requires_pharmacist_review is True
+    assert draft.escalation_reason == "unclear_message"
+    assert "pharmacist to review that interaction question" in draft.message
 
 
 async def _persist_reply_context(session: AsyncSession) -> Treatment:

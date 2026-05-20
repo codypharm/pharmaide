@@ -47,6 +47,16 @@ class ConversationMessageContext(PatientReplyEnvelope):
     body: str = Field(min_length=1)
 
 
+class InteractionEvidenceContext(PatientReplyEnvelope):
+    """Retrieved clinic/DailyMed evidence for a patient interaction question."""
+
+    source_type: Literal["user_upload", "dailymed"]
+    document_title: str = Field(min_length=1)
+    source_uri: str = Field(min_length=1)
+    excerpt: str = Field(min_length=1)
+    score: float = Field(ge=0, le=1)
+
+
 class PatientReplyContext(PatientReplyEnvelope):
     treatment_id: UUID
     patient_message: str = Field(min_length=1)
@@ -54,6 +64,8 @@ class PatientReplyContext(PatientReplyEnvelope):
     medications: list[MedicationContext] = Field(min_length=1)
     recent_messages: list[ConversationMessageContext] = Field(default_factory=list)
     latest_analysis_summary: str | None = None
+    interaction_question_detected: bool = False
+    interaction_evidence: list[InteractionEvidenceContext] = Field(default_factory=list)
 
 
 class PatientReplyDraft(PatientReplyEnvelope):
@@ -78,6 +90,11 @@ PATIENT_REPLY_INSTRUCTIONS = """
 You are PharmaAide's patient-reply draft agent.
 Return a validated patient-reply draft, not a final sent message.
 Use only the treatment context, medication list, recent messages, and analysis summary provided.
+When interaction evidence is provided, use only that evidence for food, fruit, alcohol,
+or interaction claims.
+When the patient asks a food, fruit, alcohol, or interaction question and no interaction
+evidence is provided, do not answer the clinical question directly; briefly acknowledge it
+and set requires_pharmacist_review to true with escalation_reason `unclear_message`.
 Do not invent medications, diagnoses, lab values, patient facts, or clinical outcomes.
 Do not change medication doses, schedules, durations, or prescriber instructions.
 Do not tell the patient to start, stop, increase, decrease, or substitute medication.
@@ -128,6 +145,8 @@ def _patient_reply_prompt(context: PatientReplyContext) -> str:
             "recent_messages:",
             _recent_messages_section(context.recent_messages),
             f"latest_analysis_summary: {context.latest_analysis_summary or 'unavailable'}",
+            "interaction_evidence:",
+            _interaction_evidence_section(context),
         ]
     )
 
@@ -153,3 +172,26 @@ def _recent_messages_section(messages: list[ConversationMessageContext]) -> str:
         )
         for message in messages
     )
+
+
+def _interaction_evidence_section(context: PatientReplyContext) -> str:
+    lines = [
+        f"interaction_question_detected: {str(context.interaction_question_detected).lower()}",
+    ]
+    if not context.interaction_evidence:
+        lines.append("citations: none")
+        return "\n".join(lines)
+
+    lines.append("citations:")
+    for index, citation in enumerate(context.interaction_evidence, start=1):
+        lines.extend(
+            [
+                f"- citation_{index}:",
+                f"  source_type: {citation.source_type}",
+                f"  document_title: {citation.document_title}",
+                f"  source_uri: {citation.source_uri}",
+                f"  score: {citation.score:.4f}",
+                f"  excerpt: {citation.excerpt}",
+            ]
+        )
+    return "\n".join(lines)

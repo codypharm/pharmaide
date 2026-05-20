@@ -25,6 +25,12 @@ from app.config import Settings
 from app.db.models import AuditLogEntry
 from app.services import patient_message_buffer
 from app.services.conversation_messages import submit_buffered_patient_conversation_turn
+from app.services.patient_interaction_evidence import (
+    InteractionEvidenceRetriever,
+    build_patient_interaction_evidence_retriever,
+    format_interaction_evidence,
+    lookup_patient_interaction_evidence,
+)
 from app.services.patient_reply_drafts import (
     TreatmentNotFound as ReplyDraftTreatmentNotFound,
 )
@@ -61,11 +67,17 @@ async def process_buffered_patient_messages_for_treatment(
 
     async def handle_turn(turn: patient_message_buffer.BufferedPatientTurn) -> None:
         nonlocal assistant_message_id, assistant_status
+        interaction_evidence_retriever = build_patient_interaction_evidence_retriever(
+            session,
+            openai_api_key=settings.openai_api_key,
+            kb_scope_id=None,
+        )
         draft = await draft_patient_reply_for_treatment(
             session,
             turn.treatment_id,
             patient_message=turn.message_text,
             agent=_build_configured_patient_reply_agent(settings),
+            interaction_evidence_retriever=interaction_evidence_retriever,
         )
         record = await submit_buffered_patient_conversation_turn(
             session,
@@ -77,6 +89,8 @@ async def process_buffered_patient_messages_for_treatment(
                 session,
                 turn.treatment_id,
                 draft,
+                patient_message=turn.message_text,
+                interaction_evidence_retriever=interaction_evidence_retriever,
             ),
             openai_api_key=settings.openai_api_key,
             safety_provider=settings.safety_provider,
@@ -149,10 +163,19 @@ async def _patient_reply_safety_context(
     session: AsyncSession,
     treatment_id: UUID,
     draft: PatientReplyDraft,
+    *,
+    patient_message: str,
+    interaction_evidence_retriever: InteractionEvidenceRetriever | None = None,
 ) -> str:
     detail = await get_treatment(session, treatment_id)
     if detail is None:
         raise ReplyDraftTreatmentNotFound()
+    interaction_evidence = await lookup_patient_interaction_evidence(
+        patient_message=patient_message,
+        medication_names=[medication.name for medication in detail.medications],
+        treatment_id=treatment_id,
+        retriever=interaction_evidence_retriever,
+    )
     medications = "\n".join(
         (
             f"- {medication.name}; dosage={medication.dosage}; "
@@ -167,6 +190,8 @@ async def _patient_reply_safety_context(
             f"clinical_objective: {detail.treatment.clinical_objective or 'unavailable'}",
             "medications:",
             medications or "- none",
+            "interaction_evidence:",
+            format_interaction_evidence(interaction_evidence),
             (
                 "draft_metadata: "
                 f"requires_pharmacist_review={draft.requires_pharmacist_review}; "
