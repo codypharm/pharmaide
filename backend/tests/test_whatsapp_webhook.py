@@ -200,6 +200,59 @@ async def test_whatsapp_webhook_accepts_valid_signed_request(
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_whatsapp_webhook_ignores_events_for_unconfigured_business_phone_number(
+    test_app: FastAPI,
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    test_app.state.settings = Settings(
+        _env_file=None,
+        whatsapp_cloud_api_phone_number_id="configured-phone-id",
+    )
+    await _persist_active_treatment(db_session)
+    scheduled: list[task_runner.BackgroundJob] = []
+    monkeypatch.setattr(
+        task_runner,
+        "schedule_job",
+        lambda job, *args, **kwargs: scheduled.append(job),
+    )
+
+    response = await app_client.post(
+        "/webhooks/whatsapp",
+        json=_message_payload(
+            from_phone="18005551212",
+            message="I took it",
+            business_phone_number_id="other-phone-id",
+        ),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "accepted_count": 1,
+        "buffered_count": 0,
+        "scheduled_count": 0,
+        "ignored_count": 1,
+    }
+    assert await db_session.scalar(select(ConversationMessage)) is None
+    assert scheduled == []
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.event_type == "whatsapp_webhook_recipient_ignored"
+        )
+    )
+    assert audit is not None
+    assert audit.payload == {
+        "expected_phone_number_id": "configured-phone-id",
+        "provider_phone_number_id": "other-phone-id",
+        "ignored_event_count": 1,
+        "reason": "phone_number_id_mismatch",
+    }
+    assert "took" not in str(audit.payload).lower()
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_whatsapp_webhook_rejects_invalid_signature_without_buffering(
     test_app: FastAPI,
     app_client: AsyncClient,
@@ -473,6 +526,7 @@ def _message_payload(
     from_phone: str,
     message: str,
     message_id: str = "wamid.test-message-1",
+    business_phone_number_id: str = "test-business-phone-id",
 ) -> dict[str, object]:
     return {
         "object": "whatsapp_business_account",
@@ -481,6 +535,10 @@ def _message_payload(
                 "changes": [
                     {
                         "value": {
+                            "metadata": {
+                                "phone_number_id": business_phone_number_id,
+                                "display_phone_number": "15551234567",
+                            },
                             "messages": [
                                 {
                                     "from": from_phone,
@@ -502,6 +560,7 @@ def _status_payload(
     *,
     message_id: str,
     status: str,
+    business_phone_number_id: str = "test-business-phone-id",
     errors: list[dict[str, object]] | None = None,
 ) -> dict[str, object]:
     status_item: dict[str, object] = {
@@ -520,6 +579,10 @@ def _status_payload(
                 "changes": [
                     {
                         "value": {
+                            "metadata": {
+                                "phone_number_id": business_phone_number_id,
+                                "display_phone_number": "15551234567",
+                            },
                             "statuses": [status_item]
                         }
                     }

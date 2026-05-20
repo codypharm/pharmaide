@@ -61,9 +61,16 @@ class WhatsAppStatus(BaseModel):
     errors: list[WhatsAppStatusError] = Field(default_factory=list)
 
 
+class WhatsAppMetadata(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    phone_number_id: str | None = None
+
+
 class WhatsAppWebhookValue(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
+    metadata: WhatsAppMetadata | None = None
     messages: list[WhatsAppMessage] = Field(default_factory=list)
     statuses: list[WhatsAppStatus] = Field(default_factory=list)
 
@@ -122,9 +129,70 @@ async def process_whatsapp_webhook(
     buffered_count = 0
     scheduled_count = 0
     ignored_count = 0
-    messages = list(_text_messages(payload))
-    statuses = list(_delivery_statuses(payload))
+    accepted_count = 0
+    status_count = 0
 
+    for value in _webhook_values(payload):
+        messages = _text_messages(value)
+        statuses = list(value.statuses)
+        event_count = len(messages) + len(statuses)
+        accepted_count += event_count
+        status_count += len(statuses)
+
+        if not _matches_configured_phone_number(settings, value):
+            _audit_recipient_ignored(
+                session,
+                settings=settings,
+                value=value,
+                ignored_event_count=event_count,
+            )
+            ignored_count += event_count
+            continue
+
+        message_result = await _process_text_messages(
+            session,
+            session_factory,
+            settings,
+            messages,
+        )
+        buffered_count += message_result.buffered_count
+        scheduled_count += message_result.scheduled_count
+        ignored_count += message_result.ignored_count
+
+        ignored_count += await _process_status_callbacks(session, statuses)
+
+    log.info(
+        "whatsapp_webhook_processed",
+        accepted_count=accepted_count,
+        buffered_count=buffered_count,
+        status_count=status_count,
+        scheduled_count=scheduled_count,
+        ignored_count=ignored_count,
+    )
+    return WhatsAppWebhookResult(
+        accepted_count=accepted_count,
+        buffered_count=buffered_count,
+        scheduled_count=scheduled_count,
+        ignored_count=ignored_count,
+    )
+
+
+@dataclass(frozen=True)
+class TextMessageProcessResult:
+    buffered_count: int
+    scheduled_count: int
+    ignored_count: int
+
+
+async def _process_text_messages(
+    session: AsyncSession,
+    session_factory: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    messages: list[WhatsAppMessage],
+) -> TextMessageProcessResult:
+    buffered_count = 0
+    scheduled_count = 0
+    ignored_count = 0
     for message in messages:
         if await _inbound_message_already_buffered(session, message.provider_message_id):
             _audit_duplicate_message(session, external_message_id=message.provider_message_id)
@@ -149,7 +217,18 @@ async def process_whatsapp_webhook(
             treatment_id=treatment_id,
         )
         scheduled_count += 1
+    return TextMessageProcessResult(
+        buffered_count=buffered_count,
+        scheduled_count=scheduled_count,
+        ignored_count=ignored_count,
+    )
 
+
+async def _process_status_callbacks(
+    session: AsyncSession,
+    statuses: list[WhatsAppStatus],
+) -> int:
+    ignored_count = 0
     for status in statuses:
         result = await message_delivery.record_delivery_callback(
             session,
@@ -160,43 +239,64 @@ async def process_whatsapp_webhook(
         )
         if not result.accepted:
             ignored_count += 1
-
-    log.info(
-        "whatsapp_webhook_processed",
-        accepted_count=len(messages) + len(statuses),
-        buffered_count=buffered_count,
-        status_count=len(statuses),
-        scheduled_count=scheduled_count,
-        ignored_count=ignored_count,
-    )
-    return WhatsAppWebhookResult(
-        accepted_count=len(messages) + len(statuses),
-        buffered_count=buffered_count,
-        scheduled_count=scheduled_count,
-        ignored_count=ignored_count,
-    )
+    return ignored_count
 
 
-def _text_messages(payload: WhatsAppWebhookPayload) -> list[WhatsAppMessage]:
-    messages: list[WhatsAppMessage] = []
+def _webhook_values(payload: WhatsAppWebhookPayload) -> list[WhatsAppWebhookValue]:
+    values: list[WhatsAppWebhookValue] = []
     for entry in payload.entry:
         for change in entry.changes:
-            for message in change.value.messages:
-                if (
-                    message.type == "text"
-                    and message.text is not None
-                    and message.text.body.strip()
-                ):
-                    messages.append(message)
+            values.append(change.value)
+    return values
+
+
+def _text_messages(value: WhatsAppWebhookValue) -> list[WhatsAppMessage]:
+    messages: list[WhatsAppMessage] = []
+    for message in value.messages:
+        if (
+            message.type == "text"
+            and message.text is not None
+            and message.text.body.strip()
+        ):
+            messages.append(message)
     return messages
 
 
-def _delivery_statuses(payload: WhatsAppWebhookPayload) -> list[WhatsAppStatus]:
-    statuses: list[WhatsAppStatus] = []
-    for entry in payload.entry:
-        for change in entry.changes:
-            statuses.extend(change.value.statuses)
-    return statuses
+def _matches_configured_phone_number(settings: Settings, value: WhatsAppWebhookValue) -> bool:
+    configured_phone_number_id = settings.whatsapp_cloud_api_phone_number_id
+    if not configured_phone_number_id:
+        return True
+    return (
+        value.metadata is not None
+        and value.metadata.phone_number_id == configured_phone_number_id
+    )
+
+
+def _audit_recipient_ignored(
+    session: AsyncSession,
+    *,
+    settings: Settings,
+    value: WhatsAppWebhookValue,
+    ignored_event_count: int,
+) -> None:
+    provider_phone_number_id = (
+        value.metadata.phone_number_id if value.metadata is not None else None
+    )
+    session.add(
+        AuditLogEntry(
+            event_type="whatsapp_webhook_recipient_ignored",
+            resource_type="system",
+            resource_id=SYSTEM_RESOURCE_ID,
+            # This guards early multi-number deployments. Persist provider
+            # routing ids only, not patient phone numbers or message bodies.
+            payload={
+                "expected_phone_number_id": settings.whatsapp_cloud_api_phone_number_id,
+                "provider_phone_number_id": provider_phone_number_id,
+                "ignored_event_count": ignored_event_count,
+                "reason": "phone_number_id_mismatch",
+            },
+        )
+    )
 
 
 def _status_error_metadata(status: WhatsAppStatus) -> dict[str, object]:
