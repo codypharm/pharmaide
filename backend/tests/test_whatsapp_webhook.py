@@ -100,6 +100,7 @@ async def test_whatsapp_webhook_buffers_text_message_and_schedules_turn_processi
     assert message.channel == "whatsapp"
     assert message.status == "received"
     assert message.body == "I took it but I feel dizzy"
+    assert message.external_message_id == "wamid.test-message-1"
 
     assert len(scheduled) == 1
     job = scheduled[0]
@@ -109,6 +110,61 @@ async def test_whatsapp_webhook_buffers_text_message_and_schedules_turn_processi
         "schedule_delay_seconds": 5,
     }
     assert "dizzy" not in str(job.payload).lower()
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_whatsapp_webhook_ignores_duplicate_text_message_without_rescheduling(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _persist_active_treatment(db_session)
+    scheduled: list[task_runner.BackgroundJob] = []
+    monkeypatch.setattr(
+        task_runner,
+        "schedule_job",
+        lambda job, *args, **kwargs: scheduled.append(job),
+    )
+    payload = _message_payload(
+        from_phone="18005551212",
+        message="I took it but I feel dizzy",
+        message_id="wamid.duplicate-1",
+    )
+
+    first = await app_client.post("/webhooks/whatsapp", json=payload)
+    second = await app_client.post("/webhooks/whatsapp", json=payload)
+
+    assert first.status_code == 200, first.text
+    assert first.json() == {
+        "accepted_count": 1,
+        "buffered_count": 1,
+        "scheduled_count": 1,
+        "ignored_count": 0,
+    }
+    assert second.status_code == 200, second.text
+    assert second.json() == {
+        "accepted_count": 1,
+        "buffered_count": 0,
+        "scheduled_count": 0,
+        "ignored_count": 1,
+    }
+
+    messages = (await db_session.execute(select(ConversationMessage))).scalars().all()
+    assert len(messages) == 1
+    assert messages[0].external_message_id == "wamid.duplicate-1"
+    assert len(scheduled) == 1
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.event_type == "patient_message_duplicate_ignored"
+        )
+    )
+    assert audit is not None
+    assert audit.payload == {
+        "external_message_id": "wamid.duplicate-1",
+        "channel": "whatsapp",
+    }
+    assert "dizzy" not in str(audit.payload).lower()
 
 
 @pytest.mark.usefixtures("postgres_container")
@@ -412,7 +468,12 @@ async def _persist_active_treatment(
     return treatment
 
 
-def _message_payload(*, from_phone: str, message: str) -> dict[str, object]:
+def _message_payload(
+    *,
+    from_phone: str,
+    message: str,
+    message_id: str = "wamid.test-message-1",
+) -> dict[str, object]:
     return {
         "object": "whatsapp_business_account",
         "entry": [
@@ -423,7 +484,7 @@ def _message_payload(*, from_phone: str, message: str) -> dict[str, object]:
                             "messages": [
                                 {
                                     "from": from_phone,
-                                    "id": "wamid.test-message-1",
+                                    "id": message_id,
                                     "timestamp": "1710000000",
                                     "type": "text",
                                     "text": {"body": message},

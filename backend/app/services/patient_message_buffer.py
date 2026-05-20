@@ -44,6 +44,7 @@ async def buffer_patient_message(
     *,
     treatment_id: UUID,
     message: str,
+    external_message_id: str | None = None,
 ) -> ConversationMessage:
     """Store one inbound patient message for later turn aggregation."""
     treatment = await session.get(Treatment, treatment_id)
@@ -57,6 +58,7 @@ async def buffer_patient_message(
         channel="whatsapp",
         status="received",
         body=_required_text(message),
+        external_message_id=external_message_id,
     )
     session.add(inbound)
     await session.flush()

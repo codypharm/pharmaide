@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings
-from app.db.models import Patient, Treatment
+from app.db.models import AuditLogEntry, ConversationMessage, Patient, Treatment
 from app.services import message_delivery, patient_message_worker, task_runner
 from app.services.patient_message_buffer import (
     DEFAULT_BUFFER_MINIMUM_AGE,
@@ -28,6 +28,7 @@ from app.services.patient_message_buffer import (
 
 log = structlog.get_logger(__name__)
 _META_SIGNATURE_PREFIX = "sha256="
+SYSTEM_RESOURCE_ID = UUID("00000000-0000-0000-0000-000000000000")
 
 
 class WhatsAppText(BaseModel):
@@ -125,6 +126,11 @@ async def process_whatsapp_webhook(
     statuses = list(_delivery_statuses(payload))
 
     for message in messages:
+        if await _inbound_message_already_buffered(session, message.provider_message_id):
+            _audit_duplicate_message(session, external_message_id=message.provider_message_id)
+            ignored_count += 1
+            continue
+
         treatment_id = await _resolve_active_treatment_id(session, message.from_phone)
         if treatment_id is None:
             ignored_count += 1
@@ -134,6 +140,7 @@ async def process_whatsapp_webhook(
             session,
             treatment_id=treatment_id,
             message=message.text.body if message.text is not None else "",
+            external_message_id=message.provider_message_id,
         )
         buffered_count += 1
         _schedule_buffered_turn_processing(
@@ -204,6 +211,36 @@ def _status_error_metadata(status: WhatsAppStatus) -> dict[str, object]:
     if first_error.error_subcode is not None:
         metadata["provider_error_subcode"] = first_error.error_subcode
     return metadata
+
+
+async def _inbound_message_already_buffered(
+    session: AsyncSession,
+    external_message_id: str,
+) -> bool:
+    existing_id = await session.scalar(
+        select(ConversationMessage.id).where(
+            ConversationMessage.direction == "inbound",
+            ConversationMessage.channel == "whatsapp",
+            ConversationMessage.external_message_id == external_message_id,
+        )
+    )
+    return existing_id is not None
+
+
+def _audit_duplicate_message(session: AsyncSession, *, external_message_id: str) -> None:
+    session.add(
+        AuditLogEntry(
+            event_type="patient_message_duplicate_ignored",
+            resource_type="conversation_message",
+            resource_id=SYSTEM_RESOURCE_ID,
+            # Meta may retry webhooks. The provider message id is enough to
+            # prove idempotency without copying patient text.
+            payload={
+                "external_message_id": external_message_id,
+                "channel": "whatsapp",
+            },
+        )
+    )
 
 
 async def _resolve_active_treatment_id(

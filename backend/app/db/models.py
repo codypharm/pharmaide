@@ -289,6 +289,12 @@ class ConversationMessage(Base):
             "processed_at",
             postgresql_where=text("direction = 'inbound' AND sender_type = 'patient'"),
         ),
+        Index(
+            "uq_conversation_messages_external_message_id",
+            "external_message_id",
+            unique=True,
+            postgresql_where=text("external_message_id IS NOT NULL"),
+        ),
     )
 
 
