@@ -1661,6 +1661,18 @@ function deliveryStatusBadge(
       className: "border-emerald-200 bg-emerald-50 text-emerald-700",
     };
   }
+  if (status === "delivered") {
+    return {
+      label: "Delivered",
+      className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    };
+  }
+  if (status === "read") {
+    return {
+      label: "Read",
+      className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    };
+  }
   if (status === "failed") {
     return {
       label: "Send failed",

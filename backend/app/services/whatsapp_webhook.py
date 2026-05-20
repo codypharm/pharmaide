@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings
 from app.db.models import Patient, Treatment
-from app.services import patient_message_worker, task_runner
+from app.services import message_delivery, patient_message_worker, task_runner
 from app.services.patient_message_buffer import (
     DEFAULT_BUFFER_MINIMUM_AGE,
     buffer_patient_message,
@@ -45,10 +45,18 @@ class WhatsAppMessage(BaseModel):
     text: WhatsAppText | None = None
 
 
+class WhatsAppStatus(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    provider_message_id: Annotated[str, Field(alias="id")]
+    status: str = Field(min_length=1)
+
+
 class WhatsAppWebhookValue(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     messages: list[WhatsAppMessage] = Field(default_factory=list)
+    statuses: list[WhatsAppStatus] = Field(default_factory=list)
 
 
 class WhatsAppWebhookChange(BaseModel):
@@ -106,6 +114,7 @@ async def process_whatsapp_webhook(
     scheduled_count = 0
     ignored_count = 0
     messages = list(_text_messages(payload))
+    statuses = list(_delivery_statuses(payload))
 
     for message in messages:
         treatment_id = await _resolve_active_treatment_id(session, message.from_phone)
@@ -126,15 +135,26 @@ async def process_whatsapp_webhook(
         )
         scheduled_count += 1
 
+    for status in statuses:
+        result = await message_delivery.record_delivery_callback(
+            session,
+            provider=message_delivery.WHATSAPP_CLOUD_PROVIDER,
+            external_message_id=status.provider_message_id,
+            status=status.status,
+        )
+        if not result.accepted:
+            ignored_count += 1
+
     log.info(
         "whatsapp_webhook_processed",
-        accepted_count=len(messages),
+        accepted_count=len(messages) + len(statuses),
         buffered_count=buffered_count,
+        status_count=len(statuses),
         scheduled_count=scheduled_count,
         ignored_count=ignored_count,
     )
     return WhatsAppWebhookResult(
-        accepted_count=len(messages),
+        accepted_count=len(messages) + len(statuses),
         buffered_count=buffered_count,
         scheduled_count=scheduled_count,
         ignored_count=ignored_count,
@@ -153,6 +173,14 @@ def _text_messages(payload: WhatsAppWebhookPayload) -> list[WhatsAppMessage]:
                 ):
                     messages.append(message)
     return messages
+
+
+def _delivery_statuses(payload: WhatsAppWebhookPayload) -> list[WhatsAppStatus]:
+    statuses: list[WhatsAppStatus] = []
+    for entry in payload.entry:
+        for change in entry.changes:
+            statuses.extend(change.value.statuses)
+    return statuses
 
 
 async def _resolve_active_treatment_id(

@@ -38,6 +38,8 @@ ConversationMessageStatus = Literal[
     "queued",
     "cancelled",
     "sent",
+    "delivered",
+    "read",
     "failed",
 ]
 ChatResponseMode = Literal["ai_active", "pharmacist_takeover"]

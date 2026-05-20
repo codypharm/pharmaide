@@ -683,6 +683,8 @@ describe("PatientManagementPage", () => {
           ...MESSAGES.items,
           PHARMACIST_MESSAGE,
           SENT_ASSISTANT_MESSAGE,
+          { ...SENT_ASSISTANT_MESSAGE, id: "msg-delivered", status: "delivered" },
+          { ...SENT_ASSISTANT_MESSAGE, id: "msg-read", status: "read" },
           APPROVED_ASSISTANT_MESSAGE,
           FAILED_PHARMACIST_MESSAGE,
         ],
@@ -706,6 +708,8 @@ describe("PatientManagementPage", () => {
     expect(screen.getByText("Waiting to send")).toBeTruthy();
     expect(screen.getByText("Approved, not sent")).toBeTruthy();
     expect(screen.getByText("Sent")).toBeTruthy();
+    expect(screen.getByText("Delivered")).toBeTruthy();
+    expect(screen.getByText("Read")).toBeTruthy();
     expect(screen.getByText("Send failed")).toBeTruthy();
     expect(screen.getAllByRole("button", { name: /retry send/i })).toHaveLength(1);
     await user.click(screen.getByRole("button", { name: /retry send/i }));

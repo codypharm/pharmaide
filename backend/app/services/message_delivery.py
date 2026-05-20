@@ -19,6 +19,14 @@ PLACEHOLDER_PROVIDER = "internal-placeholder"
 WHATSAPP_CLOUD_PROVIDER = "whatsapp-cloud-api"
 DEFAULT_DELIVERY_LIMIT = 50
 SYSTEM_RESOURCE_ID = UUID("00000000-0000-0000-0000-000000000000")
+CALLBACK_PROVIDERS = {PLACEHOLDER_PROVIDER, WHATSAPP_CLOUD_PROVIDER}
+DELIVERY_STATUS_RANK = {
+    "queued": 10,
+    "sent": 20,
+    "delivered": 30,
+    "read": 40,
+    "failed": 100,
+}
 
 
 @dataclass(frozen=True)
@@ -207,7 +215,7 @@ async def record_delivery_callback(
         await session.flush()
         return DeliveryCallbackResult(accepted=False, reason="message_not_found")
 
-    if provider != PLACEHOLDER_PROVIDER:
+    if provider not in CALLBACK_PROVIDERS:
         _audit_callback_rejected(
             session,
             resource_id=message.id,
@@ -224,6 +232,34 @@ async def record_delivery_callback(
             message_id=message.id,
         )
 
+    old_status = message.status
+    if _is_status_regression(old_status, status):
+        _audit_callback_rejected(
+            session,
+            resource_id=message.id,
+            message=message,
+            provider=provider,
+            external_message_id=external_message_id,
+            status=status,
+            reason="status_regression",
+        )
+        await session.flush()
+        return DeliveryCallbackResult(
+            accepted=False,
+            reason="status_regression",
+            message_id=message.id,
+        )
+
+    message.status = status
+    _audit_callback_accepted(
+        session,
+        message=message,
+        provider=provider,
+        external_message_id=external_message_id,
+        callback_status=status,
+        old_status=old_status,
+    )
+    await session.flush()
     log.info(
         "message_delivery_callback_accepted",
         message_id=str(message.id),
@@ -283,6 +319,40 @@ def _audit_callback_rejected(
             payload=payload,
         )
     )
+
+
+def _audit_callback_accepted(
+    session: AsyncSession,
+    *,
+    message: ConversationMessage,
+    provider: str,
+    external_message_id: str,
+    callback_status: str,
+    old_status: str,
+) -> None:
+    session.add(
+        AuditLogEntry(
+            event_type="conversation_message_delivery_callback_accepted",
+            resource_type="conversation_message",
+            resource_id=message.id,
+            # Provider status webhooks are enough to reconcile transport state.
+            # Keep the clinical text in conversation_messages only.
+            payload={
+                "message_id": str(message.id),
+                "external_message_id": external_message_id,
+                "provider": provider,
+                "callback_status": callback_status,
+                "old_status": old_status,
+                "new_status": message.status,
+            },
+        )
+    )
+
+
+def _is_status_regression(current_status: str, callback_status: str) -> bool:
+    current_rank = DELIVERY_STATUS_RANK.get(current_status, 0)
+    callback_rank = DELIVERY_STATUS_RANK.get(callback_status, 0)
+    return callback_rank < current_rank
 
 
 def _mark_message_sent(

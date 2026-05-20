@@ -218,6 +218,8 @@ export type ConversationMessageStatus =
   | "queued"
   | "cancelled"
   | "sent"
+  | "delivered"
+  | "read"
   | "failed";
 
 export type ConversationMessageView = {

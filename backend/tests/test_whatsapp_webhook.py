@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
-from app.db.models import ConversationMessage, Patient, Treatment
+from app.db.models import AuditLogEntry, ConversationMessage, Patient, Treatment
 from app.services import task_runner
 
 
@@ -260,6 +260,84 @@ async def test_whatsapp_webhook_ignores_ambiguous_active_phone_match(
     assert scheduled == []
 
 
+@pytest.mark.usefixtures("postgres_container")
+async def test_whatsapp_webhook_records_delivery_status_callback(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    treatment = await _persist_active_treatment(db_session)
+    message = ConversationMessage(
+        treatment_id=treatment.id,
+        direction="outbound",
+        sender_type="pharmacist",
+        channel="whatsapp",
+        status="sent",
+        body="Please continue the current dose.",
+        external_message_id="wamid.status-1",
+    )
+    db_session.add(message)
+    await db_session.flush()
+    scheduled: list[task_runner.BackgroundJob] = []
+    monkeypatch.setattr(
+        task_runner,
+        "schedule_job",
+        lambda job, *args, **kwargs: scheduled.append(job),
+    )
+
+    response = await app_client.post(
+        "/webhooks/whatsapp",
+        json=_status_payload(message_id="wamid.status-1", status="delivered"),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "accepted_count": 1,
+        "buffered_count": 0,
+        "scheduled_count": 0,
+        "ignored_count": 0,
+    }
+    await db_session.refresh(message)
+    assert message.status == "delivered"
+    assert scheduled == []
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.event_type == "conversation_message_delivery_callback_accepted"
+        )
+    )
+    assert audit is not None
+    assert audit.payload == {
+        "message_id": str(message.id),
+        "external_message_id": "wamid.status-1",
+        "provider": "whatsapp-cloud-api",
+        "callback_status": "delivered",
+        "old_status": "sent",
+        "new_status": "delivered",
+    }
+    assert "continue" not in str(audit.payload).lower()
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_whatsapp_webhook_counts_unmatched_delivery_status_as_ignored(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    response = await app_client.post(
+        "/webhooks/whatsapp",
+        json=_status_payload(message_id="wamid.unknown", status="delivered"),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "accepted_count": 1,
+        "buffered_count": 0,
+        "scheduled_count": 0,
+        "ignored_count": 1,
+    }
+    assert await db_session.scalar(select(ConversationMessage)) is None
+
+
 async def _persist_active_treatment(
     session: AsyncSession,
     *,
@@ -297,6 +375,30 @@ def _message_payload(*, from_phone: str, message: str) -> dict[str, object]:
                                     "timestamp": "1710000000",
                                     "type": "text",
                                     "text": {"body": message},
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        ],
+    }
+
+
+def _status_payload(*, message_id: str, status: str) -> dict[str, object]:
+    return {
+        "object": "whatsapp_business_account",
+        "entry": [
+            {
+                "changes": [
+                    {
+                        "value": {
+                            "statuses": [
+                                {
+                                    "id": message_id,
+                                    "status": status,
+                                    "timestamp": "1710000001",
+                                    "recipient_id": "18005551212",
                                 }
                             ]
                         }

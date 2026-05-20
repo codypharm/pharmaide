@@ -364,6 +364,142 @@ async def test_delivery_callback_rejects_provider_mismatch_without_changing_mess
     assert "continue" not in str(audit.payload).lower()
 
 
+@pytest.mark.usefixtures("postgres_container")
+async def test_delivery_callback_marks_whatsapp_cloud_message_delivered_and_audits(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    treatment_id = await _create_treatment(app_client, "DELIVERY-007")
+    message = ConversationMessage(
+        treatment_id=treatment_id,
+        direction="outbound",
+        sender_type="pharmacist",
+        channel="whatsapp",
+        status="sent",
+        body="Please continue the current dose.",
+        external_message_id="wamid.delivered-1",
+    )
+    db_session.add(message)
+    await db_session.flush()
+
+    callback_response = await app_client.post(
+        "/internal/message-delivery/callback",
+        json={
+            "provider": "whatsapp-cloud-api",
+            "external_message_id": "wamid.delivered-1",
+            "status": "delivered",
+        },
+    )
+
+    assert callback_response.status_code == 200, callback_response.text
+    assert callback_response.json() == {
+        "accepted": True,
+        "reason": "accepted",
+        "message_id": str(message.id),
+    }
+
+    await db_session.refresh(message)
+    assert message.status == "delivered"
+    assert message.external_message_id == "wamid.delivered-1"
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.event_type == "conversation_message_delivery_callback_accepted"
+        )
+    )
+    assert audit is not None
+    assert audit.payload == {
+        "message_id": str(message.id),
+        "external_message_id": "wamid.delivered-1",
+        "provider": "whatsapp-cloud-api",
+        "callback_status": "delivered",
+        "old_status": "sent",
+        "new_status": "delivered",
+    }
+    assert "continue" not in str(audit.payload).lower()
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_delivery_callback_marks_whatsapp_cloud_message_failed_with_metadata(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    treatment_id = await _create_treatment(app_client, "DELIVERY-008")
+    message = ConversationMessage(
+        treatment_id=treatment_id,
+        direction="outbound",
+        sender_type="pharmacist",
+        channel="whatsapp",
+        status="sent",
+        body="Please continue the current dose.",
+        external_message_id="wamid.failed-1",
+    )
+    db_session.add(message)
+    await db_session.flush()
+
+    callback_response = await app_client.post(
+        "/internal/message-delivery/callback",
+        json={
+            "provider": "whatsapp-cloud-api",
+            "external_message_id": "wamid.failed-1",
+            "status": "failed",
+        },
+    )
+
+    assert callback_response.status_code == 200, callback_response.text
+    await db_session.refresh(message)
+    assert message.status == "failed"
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.event_type == "conversation_message_delivery_callback_accepted"
+        )
+    )
+    assert audit is not None
+    assert audit.payload["callback_status"] == "failed"
+    assert audit.payload["old_status"] == "sent"
+    assert audit.payload["new_status"] == "failed"
+    assert "dose" not in str(audit.payload).lower()
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_delivery_callback_rejects_status_regression_without_changing_message(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    treatment_id = await _create_treatment(app_client, "DELIVERY-009")
+    message = ConversationMessage(
+        treatment_id=treatment_id,
+        direction="outbound",
+        sender_type="pharmacist",
+        channel="whatsapp",
+        status="read",
+        body="Please continue the current dose.",
+        external_message_id="wamid.read-1",
+    )
+    db_session.add(message)
+    await db_session.flush()
+
+    callback_response = await app_client.post(
+        "/internal/message-delivery/callback",
+        json={
+            "provider": "whatsapp-cloud-api",
+            "external_message_id": "wamid.read-1",
+            "status": "delivered",
+        },
+    )
+
+    assert callback_response.status_code == 200, callback_response.text
+    assert callback_response.json() == {
+        "accepted": False,
+        "reason": "status_regression",
+        "message_id": str(message.id),
+    }
+
+    await db_session.refresh(message)
+    assert message.status == "read"
+
+
 class FailingDeliveryProvider:
     def __init__(self, error_code: str) -> None:
         self.error_code = error_code

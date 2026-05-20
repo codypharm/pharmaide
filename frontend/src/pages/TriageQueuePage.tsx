@@ -718,6 +718,8 @@ function getDraftStatusLabel(status: ConversationMessageView["status"] | undefin
   if (status === "rejected") return "Canceled, not sent";
   if (status === "queued") return "Queued for delivery";
   if (status === "sent") return "Sent";
+  if (status === "delivered") return "Delivered";
+  if (status === "read") return "Read";
   if (status === "failed") return "Delivery failed";
   return "Held for review";
 }
@@ -727,6 +729,8 @@ function getDraftActionLabel(status: ConversationMessageView["status"] | undefin
   if (status === "rejected") return "No action needed";
   if (status === "queued") return "Waiting for delivery provider";
   if (status === "sent") return "No action needed";
+  if (status === "delivered") return "No action needed";
+  if (status === "read") return "No action needed";
   if (status === "failed") return "Review delivery failure";
   return "Approve draft or resolve manually";
 }
@@ -853,12 +857,22 @@ function ConversationMessageRow({
               Sent
             </span>
           )}
+          {isHeldDraft && message.status === "delivered" && (
+            <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+              Delivered
+            </span>
+          )}
+          {isHeldDraft && message.status === "read" && (
+            <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+              Read
+            </span>
+          )}
           {isHeldDraft && message.status === "failed" && (
             <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-700">
               Failed
             </span>
           )}
-          {isHeldDraft && !["approved", "rejected", "queued", "sent", "failed"].includes(message.status) && (
+          {isHeldDraft && !["approved", "rejected", "queued", "sent", "delivered", "read", "failed"].includes(message.status) && (
             <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
               Held draft, not sent
             </span>
