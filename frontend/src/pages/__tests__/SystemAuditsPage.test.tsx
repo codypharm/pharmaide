@@ -101,6 +101,9 @@ describe("SystemAuditsPage", () => {
     expect(screen.getByRole("option", { name: "Message delivery retried" })).toBeTruthy();
     expect(screen.getByRole("option", { name: "Delivery callback accepted" })).toBeTruthy();
     expect(screen.getByRole("option", { name: "Delivery callback rejected" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "WhatsApp route ignored" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "WhatsApp recipient ignored" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Duplicate patient message ignored" })).toBeTruthy();
     expect(screen.getByRole("option", { name: "Treatment cycle started" })).toBeTruthy();
     expect(screen.getByRole("option", { name: "Medication edited" })).toBeTruthy();
     expect(screen.getByRole("option", { name: "Monitoring check-in queued" })).toBeTruthy();
