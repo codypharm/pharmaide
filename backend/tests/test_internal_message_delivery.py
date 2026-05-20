@@ -5,18 +5,27 @@ from uuid import UUID
 
 import httpx
 import pytest
+from fastapi import FastAPI
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import Settings, get_settings
 from app.db.models import AuditLogEntry, ConversationMessage
 from app.services import message_delivery, task_runner
 
 
 @pytest.fixture(autouse=True)
-def disable_analysis_schedule(monkeypatch: pytest.MonkeyPatch) -> None:
+def isolate_delivery_worker_tests(
+    test_app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Delivery tests create treatments as setup; analysis has separate coverage."""
     monkeypatch.setattr(task_runner, "schedule", lambda *args, **kwargs: None)
+    test_app.dependency_overrides[get_settings] = lambda: Settings(
+        _env_file=None,
+        whatsapp_delivery_provider="placeholder",
+    )
 
 
 @pytest.mark.usefixtures("postgres_container")
@@ -248,7 +257,20 @@ async def test_whatsapp_cloud_delivery_provider_marks_message_failed_on_api_erro
     message_id = UUID(queued.json()["id"])
 
     async with httpx.AsyncClient(
-        transport=httpx.MockTransport(lambda _request: httpx.Response(400, json={}))
+        transport=httpx.MockTransport(
+            lambda _request: httpx.Response(
+                400,
+                json={
+                    "error": {
+                        "message": "Recipient is not in the allowed test list.",
+                        "type": "OAuthException",
+                        "code": 131030,
+                        "error_subcode": 2494010,
+                        "fbtrace_id": "trace-123",
+                    }
+                },
+            )
+        )
     ) as client:
         result = await message_delivery.run_message_delivery_once(
             db_session,
@@ -280,6 +302,11 @@ async def test_whatsapp_cloud_delivery_provider_marks_message_failed_on_api_erro
     assert audit is not None
     assert audit.payload["provider"] == "whatsapp-cloud-api"
     assert audit.payload["error_code"] == "whatsapp_http_400"
+    assert audit.payload["provider_error_type"] == "OAuthException"
+    assert audit.payload["provider_error_code"] == 131030
+    assert audit.payload["provider_error_subcode"] == 2494010
+    assert audit.payload["provider_trace_id"] == "trace-123"
+    assert "allowed test list" not in str(audit.payload).lower()
     assert "dose" not in str(audit.payload).lower()
 
 

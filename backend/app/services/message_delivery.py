@@ -1,7 +1,7 @@
 """Delivery worker for queued WhatsApp conversation messages."""
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
 import httpx
@@ -34,6 +34,7 @@ class DeliveryAttemptResult:
     provider: str
     external_message_id: str | None = None
     error_code: str | None = None
+    error_metadata: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -97,6 +98,7 @@ class WhatsAppCloudDeliveryProvider:
                 ok=False,
                 provider=WHATSAPP_CLOUD_PROVIDER,
                 error_code=f"whatsapp_http_{response.status_code}",
+                error_metadata=_extract_provider_error_metadata(response),
             )
 
         provider_message_id = _extract_provider_message_id(response)
@@ -335,6 +337,7 @@ def _mark_message_failed(
                 "new_status": message.status,
                 "provider": attempt.provider,
                 "error_code": attempt.error_code or "unknown",
+                **(attempt.error_metadata or {}),
             },
         )
     )
@@ -405,6 +408,30 @@ def _extract_provider_message_id(response: httpx.Response) -> str | None:
         return None
     message_id = first.get("id")
     return message_id if isinstance(message_id, str) and message_id else None
+
+
+def _extract_provider_error_metadata(response: httpx.Response) -> dict[str, object]:
+    """Keep useful Graph API failure metadata without copying free-text errors."""
+    try:
+        body: Any = response.json()
+    except ValueError:
+        return {}
+
+    error = body.get("error") if isinstance(body, dict) else None
+    if not isinstance(error, dict):
+        return {}
+
+    metadata: dict[str, object] = {}
+    for source_key, target_key in (
+        ("type", "provider_error_type"),
+        ("code", "provider_error_code"),
+        ("error_subcode", "provider_error_subcode"),
+        ("fbtrace_id", "provider_trace_id"),
+    ):
+        value = error.get(source_key)
+        if isinstance(value, str | int):
+            metadata[target_key] = value
+    return metadata
 
 
 async def _load_message_by_external_id(
