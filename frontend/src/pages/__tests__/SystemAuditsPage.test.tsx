@@ -103,6 +103,7 @@ describe("SystemAuditsPage", () => {
     expect(screen.getByRole("option", { name: "Delivery callback rejected" })).toBeTruthy();
     expect(screen.getByRole("option", { name: "Treatment cycle started" })).toBeTruthy();
     expect(screen.getByRole("option", { name: "Medication edited" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Monitoring check-in queued" })).toBeTruthy();
     expect(screen.getByRole("option", { name: "Knowledge retrieval completed" })).toBeTruthy();
     expect(screen.getByRole("option", { name: "Checkpoints cleaned" })).toBeTruthy();
   });

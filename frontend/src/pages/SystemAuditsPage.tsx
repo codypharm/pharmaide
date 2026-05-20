@@ -77,6 +77,7 @@ const EVENT_TYPE_OPTIONS: AuditFilterOption[] = [
   { label: "Adherence event recorded", value: "adherence_event_recorded" },
   { label: "Patient adherence captured", value: "patient_reply_adherence_captured" },
   { label: "Monitoring message queued", value: "monitoring_message_queued" },
+  { label: "Monitoring check-in queued", value: "monitoring_check_in_message_queued" },
   { label: "Due monitoring run completed", value: "monitoring_due_run_completed" },
   { label: "Non-response recorded", value: "monitoring_non_response_recorded" },
   { label: "Patient message buffered", value: "patient_message_buffered" },
