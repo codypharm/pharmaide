@@ -98,6 +98,13 @@ const EVENT_TYPE_OPTIONS: AuditFilterOption[] = [
   { label: "Checkpoints cleaned", value: "checkpoints_cleaned" },
 ];
 
+const CUSTOM_EVENT_TYPE_LABELS: Record<string, string> = {
+  monitoring_check_in_message_queued: "Monitoring check-in queued",
+  patient_message_duplicate_ignored: "Duplicate patient message ignored",
+  whatsapp_webhook_patient_route_ignored: "WhatsApp route ignored",
+  whatsapp_webhook_recipient_ignored: "WhatsApp recipient ignored",
+};
+
 const RESOURCE_TYPE_OPTIONS: AuditFilterOption[] = [
   { label: "Any resource", value: "" },
   { label: "Treatment", value: "treatment" },
@@ -517,7 +524,7 @@ function AuditTable({ items }: { items: AuditLogEntryView[] }) {
               </td>
               <td className="px-6 py-4">
                 <span className="text-sm font-bold text-slate-900">
-                  {titleCase(log.event_type)}
+                  {eventTypeLabel(log.event_type)}
                 </span>
               </td>
               <td className="px-6 py-4">
@@ -665,6 +672,10 @@ function payloadSummary(payload: Record<string, unknown>): string {
   const entries = Object.entries(payload);
   if (entries.length === 0) return "No additional metadata";
   return entries.map(([key, value]) => `${key}: ${String(value)}`).join(" · ");
+}
+
+function eventTypeLabel(eventType: string): string {
+  return CUSTOM_EVENT_TYPE_LABELS[eventType] ?? titleCase(eventType);
 }
 
 function titleCase(value: string): string {

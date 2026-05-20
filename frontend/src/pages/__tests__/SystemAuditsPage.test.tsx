@@ -111,6 +111,27 @@ describe("SystemAuditsPage", () => {
     expect(screen.getByRole("option", { name: "Checkpoints cleaned" })).toBeTruthy();
   });
 
+  it("uses pharmacist-friendly labels for WhatsApp diagnostic audit rows", async () => {
+    vi.spyOn(auditsApi, "listAuditLogEntries").mockResolvedValue({
+      items: [
+        {
+          id: "88888888-8888-4888-8888-888888888888",
+          actor_id: null,
+          event_type: "whatsapp_webhook_patient_route_ignored",
+          resource_type: "system",
+          resource_id: "99999999-9999-4999-8999-999999999999",
+          payload: { reason: "no_active_treatment" },
+          created_at: "2026-05-15T12:30:00Z",
+        },
+      ],
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("WhatsApp route ignored")).toBeTruthy();
+    expect(screen.queryByText("Whatsapp Webhook Patient Route Ignored")).toBeNull();
+  });
+
   it("filters loaded audits by event or resource text", async () => {
     const user = userEvent.setup();
     vi.spyOn(auditsApi, "listAuditLogEntries").mockResolvedValue(AUDITS);
