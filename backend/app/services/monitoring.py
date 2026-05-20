@@ -38,6 +38,10 @@ ADHERENCE_NUDGE = (
     "Reply when taken, or tell us if you feel unwell, are unsure, "
     "or are having trouble with this dose."
 )
+DAILY_CHECK_IN_BODY = (
+    "Check-in: how are you feeling today? "
+    "Reply with any side effects, concerns, or if you are not feeling better."
+)
 
 
 class TreatmentNotFound(Exception):
@@ -162,6 +166,12 @@ async def run_due_monitoring_for_treatment(
             scheduled_for=scheduled_for,
         )
         queued_count += 1
+        if await _queue_daily_check_in_if_needed(
+            session,
+            treatment_id=treatment_id,
+            scheduled_for=scheduled_for,
+        ):
+            queued_count += 1
 
     await session.flush()
     await complete_treatment_course_if_finished(
@@ -287,6 +297,94 @@ def _audit_monitoring_message(
             },
         )
     )
+
+
+async def _queue_daily_check_in_if_needed(
+    session: AsyncSession,
+    *,
+    treatment_id: UUID,
+    scheduled_for: datetime,
+) -> bool:
+    check_in_key = _daily_check_in_key(scheduled_for)
+    if await _daily_check_in_already_queued(
+        session,
+        treatment_id=treatment_id,
+        check_in_key=check_in_key,
+    ):
+        return False
+
+    message = _build_daily_check_in_message(treatment_id=treatment_id)
+    session.add(message)
+    await session.flush()
+    _audit_daily_check_in_message(
+        session,
+        treatment_id=treatment_id,
+        message=message,
+        check_in_key=check_in_key,
+    )
+    return True
+
+
+def _build_daily_check_in_message(*, treatment_id: UUID) -> ConversationMessage:
+    return ConversationMessage(
+        treatment_id=treatment_id,
+        direction="outbound",
+        sender_type="assistant",
+        channel="whatsapp",
+        status="queued",
+        body=DAILY_CHECK_IN_BODY,
+    )
+
+
+def _audit_daily_check_in_message(
+    session: AsyncSession,
+    *,
+    treatment_id: UUID,
+    message: ConversationMessage,
+    check_in_key: str,
+) -> None:
+    session.add(
+        AuditLogEntry(
+            event_type="monitoring_check_in_message_queued",
+            resource_type="conversation_message",
+            resource_id=message.id,
+            # The check-in body is generic but still omitted so workflow audits
+            # remain metadata-only and consistent with reminder audits.
+            payload={
+                "treatment_id": str(treatment_id),
+                "message_id": str(message.id),
+                "check_in_key": check_in_key,
+                "channel": message.channel,
+                "status": message.status,
+            },
+        )
+    )
+
+
+async def _daily_check_in_already_queued(
+    session: AsyncSession,
+    *,
+    treatment_id: UUID,
+    check_in_key: str,
+) -> bool:
+    result = await session.execute(
+        select(AuditLogEntry.id)
+        .where(
+            AuditLogEntry.event_type == "monitoring_check_in_message_queued",
+            AuditLogEntry.payload.contains(
+                {
+                    "treatment_id": str(treatment_id),
+                    "check_in_key": check_in_key,
+                }
+            ),
+        )
+        .limit(1)
+    )
+    return result.scalar_one_or_none() is not None
+
+
+def _daily_check_in_key(scheduled_for: datetime) -> str:
+    return f"daily:{_aware_utc(scheduled_for).date().isoformat()}"
 
 
 async def _load_reminder_queue_marker(

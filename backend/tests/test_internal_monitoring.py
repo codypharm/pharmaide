@@ -49,7 +49,7 @@ async def test_run_treatment_monitoring_queues_due_reminder_message_and_audits(
     response = await app_client.post(f"/internal/treatments/{treatment_id}/run-due-monitoring")
 
     assert response.status_code == 200, response.text
-    assert response.json() == {"queued_count": 1, "skipped_count": 0}
+    assert response.json() == {"queued_count": 2, "skipped_count": 0}
 
     messages = (
         await db_session.execute(_reminder_messages_query())
@@ -64,6 +64,16 @@ async def test_run_treatment_monitoring_queues_due_reminder_message_and_audits(
     assert "Lisinopril" in message.body
     assert "Taking it close to the planned time helps you stay on track." in message.body
     assert "tell us if you feel unwell, are unsure" in message.body
+
+    check_in = await db_session.scalar(_daily_check_in_messages_query())
+    assert check_in is not None
+    assert check_in.treatment_id == treatment_id
+    assert check_in.direction == "outbound"
+    assert check_in.sender_type == "assistant"
+    assert check_in.channel == "whatsapp"
+    assert check_in.status == "queued"
+    assert check_in.body.startswith("Check-in:")
+    assert "side effects" in check_in.body
 
     audit = await db_session.scalar(
         select(AuditLogEntry).where(AuditLogEntry.event_type == "monitoring_message_queued")
@@ -81,6 +91,23 @@ async def test_run_treatment_monitoring_queues_due_reminder_message_and_audits(
     }
     assert "lisinopril" not in str(audit.payload).lower()
 
+    check_in_audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.event_type == "monitoring_check_in_message_queued"
+        )
+    )
+    assert check_in_audit is not None
+    assert check_in_audit.resource_type == "conversation_message"
+    assert check_in_audit.resource_id == check_in.id
+    assert check_in_audit.payload == {
+        "treatment_id": str(treatment_id),
+        "message_id": str(check_in.id),
+        "check_in_key": "daily:2020-01-01",
+        "channel": "whatsapp",
+        "status": "queued",
+    }
+    assert "side effects" not in str(check_in_audit.payload).lower()
+
 
 @pytest.mark.usefixtures("postgres_container")
 async def test_run_treatment_monitoring_completes_course_after_final_reminder_is_queued(
@@ -96,7 +123,7 @@ async def test_run_treatment_monitoring_completes_course_after_final_reminder_is
     response = await app_client.post(f"/internal/treatments/{treatment_id}/run-due-monitoring")
 
     assert response.status_code == 200, response.text
-    assert response.json() == {"queued_count": 1, "skipped_count": 0}
+    assert response.json() == {"queued_count": 2, "skipped_count": 0}
     treatment = await db_session.get(Treatment, treatment_id)
     assert treatment is not None
     assert treatment.status == "completed"
@@ -153,13 +180,39 @@ async def test_run_treatment_monitoring_does_not_duplicate_existing_reminder_mes
     second = await app_client.post(f"/internal/treatments/{treatment_id}/run-due-monitoring")
 
     assert first.status_code == 200, first.text
-    assert first.json() == {"queued_count": 1, "skipped_count": 0}
+    assert first.json() == {"queued_count": 2, "skipped_count": 0}
     assert second.status_code == 409
     assert second.json() == {"detail": {"error": "treatment_not_active"}}
     message_count = await db_session.scalar(
         select(func.count()).select_from(_reminder_messages_query().subquery())
     )
     assert message_count == 1
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_run_treatment_monitoring_queues_one_check_in_for_multiple_same_day_reminders(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    treatment_id = await _active_treatment_with_analysis(
+        app_client,
+        db_session,
+        mrn="MONITOR-CHECKIN-DEDUP",
+        analysis_builder=_analysis_result_with_two_same_day_reminders,
+    )
+
+    response = await app_client.post(f"/internal/treatments/{treatment_id}/run-due-monitoring")
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"queued_count": 3, "skipped_count": 0}
+    reminder_count = await db_session.scalar(
+        select(func.count()).select_from(_reminder_messages_query().subquery())
+    )
+    check_in_count = await db_session.scalar(
+        select(func.count()).select_from(_daily_check_in_messages_query().subquery())
+    )
+    assert reminder_count == 2
+    assert check_in_count == 1
 
 
 @pytest.mark.usefixtures("postgres_container")
@@ -205,7 +258,7 @@ async def test_run_due_monitoring_processes_active_automated_treatments_once(
     assert first.status_code == 200, first.text
     assert first.json() == {
         "processed_count": 1,
-        "queued_count": 1,
+        "queued_count": 2,
         "skipped_count": 0,
     }
     assert second.status_code == 200, second.text
@@ -589,6 +642,15 @@ def _reminder_messages_query():
     )
 
 
+def _daily_check_in_messages_query():
+    return select(ConversationMessage).where(
+        ConversationMessage.direction == "outbound",
+        ConversationMessage.sender_type == "assistant",
+        ConversationMessage.channel == "whatsapp",
+        ConversationMessage.body.like("Check-in:%"),
+    )
+
+
 def _analysis_result_with_future_reminder(medication_id: UUID) -> dict[str, object]:
     return AnalysisResult(
         groundings=[],
@@ -604,6 +666,30 @@ def _analysis_result_with_future_reminder(medication_id: UUID) -> dict[str, obje
                     medication_id=medication_id,
                     offset_from_start=timedelta(days=3650),
                     human_label="future dose",
+                ),
+            ]
+        ),
+        reasoning=None,
+        degraded=False,
+        completed_stages=["schedule"],
+    ).model_dump(mode="json")
+
+
+def _analysis_result_with_two_same_day_reminders(medication_id: UUID) -> dict[str, object]:
+    return AnalysisResult(
+        groundings=[],
+        ddi_warnings=[],
+        schedule=Schedule(
+            reminders=[
+                ReminderSlot(
+                    medication_id=medication_id,
+                    offset_from_start=timedelta(0),
+                    human_label="morning dose",
+                ),
+                ReminderSlot(
+                    medication_id=medication_id,
+                    offset_from_start=timedelta(hours=1),
+                    human_label="midday dose",
                 ),
             ]
         ),

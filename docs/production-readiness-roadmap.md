@@ -15,5 +15,4 @@ Keep each item as a small, reviewable slice.
 
 ## Product Completion
 
-- Real WhatsApp scheduled check-ins and adherence capture.
 - Licensed DDI provider replacement when Lexicomp, DrugBank, or another approved source is available.
