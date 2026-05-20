@@ -184,6 +184,13 @@ class TextMessageProcessResult:
     ignored_count: int
 
 
+@dataclass(frozen=True)
+class ActiveTreatmentRoute:
+    treatment_id: UUID | None
+    reason: str | None
+    active_treatment_match_count: int
+
+
 async def _process_text_messages(
     session: AsyncSession,
     session_factory: async_sessionmaker[AsyncSession],
@@ -199,14 +206,20 @@ async def _process_text_messages(
             ignored_count += 1
             continue
 
-        treatment_id = await _resolve_active_treatment_id(session, message.from_phone)
-        if treatment_id is None:
+        route = await _resolve_active_treatment_route(session, message.from_phone)
+        if route.treatment_id is None:
+            _audit_patient_route_ignored(
+                session,
+                external_message_id=message.provider_message_id,
+                reason=route.reason or "unknown",
+                active_treatment_match_count=route.active_treatment_match_count,
+            )
             ignored_count += 1
             continue
 
         await buffer_patient_message(
             session,
-            treatment_id=treatment_id,
+            treatment_id=route.treatment_id,
             message=message.text.body if message.text is not None else "",
             external_message_id=message.provider_message_id,
         )
@@ -214,7 +227,7 @@ async def _process_text_messages(
         _schedule_buffered_turn_processing(
             session_factory,
             settings,
-            treatment_id=treatment_id,
+            treatment_id=route.treatment_id,
         )
         scheduled_count += 1
     return TextMessageProcessResult(
@@ -343,10 +356,34 @@ def _audit_duplicate_message(session: AsyncSession, *, external_message_id: str)
     )
 
 
-async def _resolve_active_treatment_id(
+def _audit_patient_route_ignored(
+    session: AsyncSession,
+    *,
+    external_message_id: str,
+    reason: str,
+    active_treatment_match_count: int,
+) -> None:
+    session.add(
+        AuditLogEntry(
+            event_type="whatsapp_webhook_patient_route_ignored",
+            resource_type="conversation_message",
+            resource_id=SYSTEM_RESOURCE_ID,
+            # Keep this diagnostic PHI-free: provider message id and aggregate
+            # match count explain routing failures without storing phone/text.
+            payload={
+                "external_message_id": external_message_id,
+                "channel": "whatsapp",
+                "reason": reason,
+                "active_treatment_match_count": active_treatment_match_count,
+            },
+        )
+    )
+
+
+async def _resolve_active_treatment_route(
     session: AsyncSession,
     whatsapp_from: str,
-) -> UUID | None:
+) -> ActiveTreatmentRoute:
     phone = _normalise_whatsapp_phone(whatsapp_from)
     result = await session.execute(
         select(Treatment.id)
@@ -360,9 +397,23 @@ async def _resolve_active_treatment_id(
         .limit(2)
     )
     treatment_ids = list(result.scalars())
-    if len(treatment_ids) != 1:
-        return None
-    return treatment_ids[0]
+    match_count = len(treatment_ids)
+    if match_count == 1:
+        return ActiveTreatmentRoute(
+            treatment_id=treatment_ids[0],
+            reason=None,
+            active_treatment_match_count=match_count,
+        )
+    reason = (
+        "no_active_treatment"
+        if match_count == 0
+        else "ambiguous_active_treatment"
+    )
+    return ActiveTreatmentRoute(
+        treatment_id=None,
+        reason=reason,
+        active_treatment_match_count=match_count,
+    )
 
 
 def _normalise_whatsapp_phone(value: str) -> str:

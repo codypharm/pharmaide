@@ -307,6 +307,21 @@ async def test_whatsapp_webhook_acknowledges_unknown_patient_without_buffering(
     assert await db_session.scalar(select(ConversationMessage)) is None
     assert scheduled == []
 
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.event_type == "whatsapp_webhook_patient_route_ignored"
+        )
+    )
+    assert audit is not None
+    assert audit.payload == {
+        "external_message_id": "wamid.test-message-1",
+        "channel": "whatsapp",
+        "reason": "no_active_treatment",
+        "active_treatment_match_count": 0,
+    }
+    assert "hello" not in str(audit.payload).lower()
+    assert "18005550000" not in str(audit.payload)
+
 
 @pytest.mark.usefixtures("postgres_container")
 async def test_whatsapp_webhook_ignores_blank_text_without_buffering(
@@ -367,6 +382,21 @@ async def test_whatsapp_webhook_ignores_ambiguous_active_phone_match(
     }
     assert await db_session.scalar(select(ConversationMessage)) is None
     assert scheduled == []
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.event_type == "whatsapp_webhook_patient_route_ignored"
+        )
+    )
+    assert audit is not None
+    assert audit.payload == {
+        "external_message_id": "wamid.test-message-1",
+        "channel": "whatsapp",
+        "reason": "ambiguous_active_treatment",
+        "active_treatment_match_count": 2,
+    }
+    assert "hello" not in str(audit.payload).lower()
+    assert "18005551212" not in str(audit.payload)
 
 
 @pytest.mark.usefixtures("postgres_container")
