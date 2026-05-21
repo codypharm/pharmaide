@@ -1,8 +1,8 @@
+import { getFrontendConfig } from "../config";
+
 // Tiny typed fetch wrapper. Keeps base-URL handling, JSON encode/decode,
 // and X-Request-ID propagation in one place so route modules stay focused
 // on their endpoint contract.
-
-const DEFAULT_BASE_URL = "http://localhost:8000";
 
 export type AuthTokenProvider = () => Promise<string | null> | string | null;
 export type UnauthorizedHandler = (error: UnauthorizedError) => void;
@@ -19,9 +19,7 @@ export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): voi
 }
 
 function baseUrl(): string {
-  // Vite exposes import.meta.env at build time. Fall back to the local
-  // backend so first-clone dev works without a .env file
-  return import.meta.env.VITE_API_BASE_URL ?? DEFAULT_BASE_URL;
+  return getFrontendConfig().apiBaseUrl;
 }
 
 export type ValidationFieldError = {

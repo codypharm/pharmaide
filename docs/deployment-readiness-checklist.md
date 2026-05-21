@@ -73,6 +73,10 @@ Safety settings:
 ## Frontend Environment
 
 - `VITE_API_BASE_URL`: backend Cloud Run HTTPS base URL.
+- `VITE_AUTH_MODE=gcip`: enable browser sign-in flow once the GCIP adapter is
+  wired.
+- `VITE_GCIP_API_KEY`, `VITE_GCIP_AUTH_DOMAIN`, `VITE_GCIP_PROJECT_ID`:
+  browser-safe Firebase/GCIP client configuration.
 - Frontend builds must not contain secret values. Only browser-safe public
   configuration belongs in `VITE_*` variables.
 
