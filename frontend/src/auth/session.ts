@@ -1,5 +1,6 @@
 import { setAuthTokenProvider } from "../api/client";
 import { type FrontendConfig, getFrontendConfig } from "../config";
+import { createGcipAuthAdapter } from "./gcip";
 
 export type AuthSessionState =
   | { status: "disabled" }
@@ -12,7 +13,7 @@ export type AuthTokenAdapter = {
 
 export function configureAuthSession(
   config: FrontendConfig = getFrontendConfig(),
-  adapter: AuthTokenAdapter | null = null,
+  adapter: AuthTokenAdapter | null = config.gcip ? createGcipAuthAdapter(config.gcip) : null,
 ): AuthSessionState {
   if (config.authMode === "disabled") {
     setAuthTokenProvider(null);

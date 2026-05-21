@@ -4,6 +4,16 @@ import { getJson, setAuthTokenProvider } from "../../api/client";
 import { type FrontendConfig } from "../../config";
 import { configureAuthSession } from "../session";
 
+const mocks = vi.hoisted(() => ({
+  createGcipAuthAdapter: vi.fn(() => ({
+    getIdToken: () => "auto-id-token",
+  })),
+}));
+
+vi.mock("../gcip", () => ({
+  createGcipAuthAdapter: mocks.createGcipAuthAdapter,
+}));
+
 const DISABLED_CONFIG: FrontendConfig = {
   apiBaseUrl: "http://localhost:8000",
   authMode: "disabled",
@@ -31,6 +41,7 @@ function mockFetch() {
 
 afterEach(() => {
   setAuthTokenProvider(null);
+  mocks.createGcipAuthAdapter.mockClear();
   vi.restoreAllMocks();
 });
 
@@ -45,14 +56,17 @@ describe("configureAuthSession", () => {
     expect(fetchSpy.mock.calls[0][1]?.headers).toBeUndefined();
   });
 
-  it("reports missing GCIP adapter without registering a token provider", async () => {
+  it("creates the GCIP adapter from config when no adapter is injected", async () => {
     const fetchSpy = mockFetch();
 
     const state = configureAuthSession(GCIP_CONFIG);
     await getJson("/treatments");
 
-    expect(state).toEqual({ status: "missing_adapter", mode: "gcip" });
-    expect(fetchSpy.mock.calls[0][1]?.headers).toBeUndefined();
+    expect(state).toEqual({ status: "ready", mode: "gcip" });
+    expect(mocks.createGcipAuthAdapter).toHaveBeenCalledWith(GCIP_CONFIG.gcip);
+    expect(fetchSpy.mock.calls[0][1]?.headers).toEqual({
+      Authorization: "Bearer auto-id-token",
+    });
   });
 
   it("registers GCIP adapter token provider for API requests", async () => {
