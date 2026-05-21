@@ -78,18 +78,27 @@ STOPWORDS = {
 class GoldQuery:
     query: str
     expected_name: str
+    relevant_names: frozenset[str]
 
 
 @dataclass(frozen=True)
 class LiveQueryResult:
     query: str
     expected_name: str
+    relevant_names: tuple[str, ...]
     retrieved: tuple["LiveRetrievedCitation", ...]
 
     @property
-    def first_relevant_rank(self) -> int | None:
+    def first_exact_rank(self) -> int | None:
         for citation in self.retrieved:
-            if citation.relevant:
+            if citation.exact_match:
+                return citation.rank
+        return None
+
+    @property
+    def first_related_rank(self) -> int | None:
+        for citation in self.retrieved:
+            if citation.related_match:
                 return citation.rank
         return None
 
@@ -98,7 +107,8 @@ class LiveQueryResult:
 class LiveRetrievedCitation:
     rank: int
     name: str
-    relevant: bool
+    exact_match: bool
+    related_match: bool
     score: float
     document_title: str
     source_uri: str
@@ -205,7 +215,8 @@ async def _evaluate_live_query(
         LiveRetrievedCitation(
             rank=index,
             name=_name_from_chunk(citation.text),
-            relevant=_name_from_chunk(citation.text) == gold_query.expected_name,
+            exact_match=_name_from_chunk(citation.text) == gold_query.expected_name,
+            related_match=_name_from_chunk(citation.text) in gold_query.relevant_names,
             score=citation.score,
             document_title=citation.document_title,
             source_uri=citation.source_uri,
@@ -215,6 +226,7 @@ async def _evaluate_live_query(
     return LiveQueryResult(
         query=gold_query.query,
         expected_name=gold_query.expected_name,
+        relevant_names=tuple(sorted(gold_query.relevant_names)),
         retrieved=retrieved,
     )
 
@@ -233,6 +245,8 @@ def _cached_query_embedder(
 
 def _generated_gold_queries(limit: int) -> list[GoldQuery]:
     segments = parse_csv_segments(PRODUCTS_CSV.read_bytes(), title="products.csv")
+    product_names = [_product_name(segment) for segment in segments if _product_name(segment)]
+    related_names_by_product = _related_names_by_product(product_names)
     queries: list[GoldQuery] = []
     seen_names: set[str] = set()
     for segment in segments:
@@ -242,7 +256,13 @@ def _generated_gold_queries(limit: int) -> list[GoldQuery]:
         query = _query_from_product_name(name)
         if len(query.split()) < 3:
             continue
-        queries.append(GoldQuery(query=query, expected_name=name))
+        queries.append(
+            GoldQuery(
+                query=query,
+                expected_name=name,
+                relevant_names=related_names_by_product[name],
+            )
+        )
         seen_names.add(name)
         if len(queries) >= limit:
             return queries
@@ -259,6 +279,37 @@ def _query_from_product_name(name: str) -> str:
     return " ".join(selected[:8]) or name
 
 
+def _related_names_by_product(product_names: Sequence[str]) -> dict[str, frozenset[str]]:
+    token_sets = {name: _relevance_tokens(name) for name in product_names}
+    return {
+        name: frozenset(
+            candidate
+            for candidate, candidate_tokens in token_sets.items()
+            if _products_are_related(tokens, candidate_tokens)
+        )
+        for name, tokens in token_sets.items()
+    }
+
+
+def _relevance_tokens(name: str) -> frozenset[str]:
+    tokens = re.findall(r"[a-z0-9]+", name.lower())
+    return frozenset(
+        token
+        for token in tokens
+        if token not in STOPWORDS and (len(token) > 2 or any(char.isdigit() for char in token))
+    )
+
+
+def _products_are_related(
+    left: frozenset[str],
+    right: frozenset[str],
+) -> bool:
+    shared = left & right
+    if len(shared) >= 2:
+        return True
+    return len(shared) == 1 and any(any(char.isdigit() for char in token) for token in shared)
+
+
 def _live_metrics_summary(
     results: Sequence[LiveQueryResult],
     *,
@@ -267,15 +318,20 @@ def _live_metrics_summary(
     return {
         "query_count": len(results),
         "chunk_count": chunk_count,
-        "hit_rate_at_5": round(_hit_rate(results), 4),
+        "hit_rate_at_5": round(_exact_hit_rate(results), 4),
+        "related_hit_rate_at_5": round(_related_hit_rate(results), 4),
         "mrr": round(_mean_reciprocal_rank(results), 4),
         "precision_at_5": round(_mean_precision(results), 4),
-        "recall_at_5": round(_hit_rate(results), 4),
+        "recall_at_5": round(_mean_recall(results), 4),
     }
 
 
-def _hit_rate(results: Sequence[LiveQueryResult]) -> float:
-    return sum(result.first_relevant_rank is not None for result in results) / len(results)
+def _exact_hit_rate(results: Sequence[LiveQueryResult]) -> float:
+    return sum(result.first_exact_rank is not None for result in results) / len(results)
+
+
+def _related_hit_rate(results: Sequence[LiveQueryResult]) -> float:
+    return sum(result.first_related_rank is not None for result in results) / len(results)
 
 
 def _mean_reciprocal_rank(results: Sequence[LiveQueryResult]) -> float:
@@ -283,14 +339,31 @@ def _mean_reciprocal_rank(results: Sequence[LiveQueryResult]) -> float:
 
 
 def _reciprocal_rank(result: LiveQueryResult) -> float:
-    if result.first_relevant_rank is None:
+    if result.first_exact_rank is None:
         return 0
-    return 1 / result.first_relevant_rank
+    return 1 / result.first_exact_rank
 
 
 def _mean_precision(results: Sequence[LiveQueryResult]) -> float:
     return (
-        sum(sum(citation.relevant for citation in result.retrieved) / TOP_K for result in results)
+        sum(
+            sum(citation.related_match for citation in result.retrieved) / TOP_K
+            for result in results
+        )
+        / len(results)
+    )
+
+
+def _mean_recall(results: Sequence[LiveQueryResult]) -> float:
+    return (
+        sum(
+            min(
+                sum(citation.related_match for citation in result.retrieved),
+                len(result.relevant_names),
+            )
+            / min(TOP_K, len(result.relevant_names))
+            for result in results
+        )
         / len(results)
     )
 
@@ -334,12 +407,15 @@ def _live_report_payload(
             {
                 "query": result.query,
                 "expected": result.expected_name,
-                "first_relevant_rank": result.first_relevant_rank,
+                "related_expected": list(result.relevant_names),
+                "first_exact_rank": result.first_exact_rank,
+                "first_related_rank": result.first_related_rank,
                 "retrieved": [
                     {
                         "rank": citation.rank,
                         "name": citation.name,
-                        "relevant": citation.relevant,
+                        "exact_match": citation.exact_match,
+                        "related_match": citation.related_match,
                         "score": round(citation.score, 4),
                         "document_title": citation.document_title,
                         "source_uri": citation.source_uri,
@@ -356,7 +432,7 @@ def _rank_distribution(results: Sequence[LiveQueryResult]) -> dict[str, int]:
     distribution = {str(rank): 0 for rank in range(1, TOP_K + 1)}
     distribution["miss"] = 0
     for result in results:
-        rank = result.first_relevant_rank
+        rank = result.first_exact_rank
         if rank is None:
             distribution["miss"] += 1
         else:
@@ -413,7 +489,13 @@ def _summary_cards(summary: dict[object, object]) -> str:
 
 
 def _summary_bar_chart(summary: dict[object, object]) -> str:
-    metric_keys = ["hit_rate_at_5", "mrr", "precision_at_5", "recall_at_5"]
+    metric_keys = [
+        "hit_rate_at_5",
+        "related_hit_rate_at_5",
+        "mrr",
+        "precision_at_5",
+        "recall_at_5",
+    ]
     rows = []
     for key in metric_keys:
         value = float(summary[key])
@@ -429,7 +511,7 @@ def _rank_distribution_chart(rank_distribution: dict[object, object]) -> str:
         rows.append(_bar_row(f"Rank {label}", count / total, str(count)))
     return (
         "<section class=\"chart\">"
-        "<h2>First relevant result rank</h2>"
+        "<h2>First exact result rank</h2>"
         f"{''.join(rows)}"
         "</section>"
     )
@@ -455,7 +537,8 @@ def _query_result_table(queries: list[object]) -> str:
         "<h2>Query results</h2>"
         "<table>"
         "<thead>"
-        "<tr><th>Query</th><th>Expected</th><th>First Rank</th><th>Top Result</th></tr>"
+        "<tr><th>Query</th><th>Expected</th><th>Exact Rank</th><th>Related Rank</th>"
+        "<th>Top Result</th></tr>"
         "</thead>"
         f"<tbody>{rows}</tbody>"
         "</table>"
@@ -469,13 +552,15 @@ def _query_row(query: object) -> str:
     assert isinstance(retrieved, list)
     top = retrieved[0] if retrieved else {}
     assert isinstance(top, dict)
-    rank = query["first_relevant_rank"] or "miss"
-    class_name = "hit" if query["first_relevant_rank"] else "miss"
+    exact_rank = query["first_exact_rank"] or "miss"
+    related_rank = query["first_related_rank"] or "miss"
+    class_name = "hit" if query["first_exact_rank"] else "miss"
     return (
         f"<tr class=\"{class_name}\">"
         f"<td>{escape(str(query['query']))}</td>"
         f"<td>{escape(str(query['expected']))}</td>"
-        f"<td>{escape(str(rank))}</td>"
+        f"<td>{escape(str(exact_rank))}</td>"
+        f"<td>{escape(str(related_rank))}</td>"
         f"<td>{escape(str(top.get('name', 'none')))}</td>"
         "</tr>"
     )
