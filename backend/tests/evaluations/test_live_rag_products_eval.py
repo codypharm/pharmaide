@@ -36,6 +36,7 @@ pytestmark = [
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 PRODUCTS_CSV = Path(__file__).resolve().parents[3] / "test-data" / "products.csv"
+GOLD_FIXTURE = Path(__file__).with_name("fixtures") / "products_rag_gold.json"
 REPORT_DIR = BACKEND_ROOT / ".reports"
 REPORT_JSON = REPORT_DIR / "rag-live-products-report.json"
 REPORT_HTML = REPORT_DIR / "rag-live-products-report.html"
@@ -80,6 +81,7 @@ class GoldQuery:
     expected_name: str
     relevant_names: frozenset[str]
     relevance_source: str
+    relevance_type: str
 
 
 @dataclass(frozen=True)
@@ -88,6 +90,7 @@ class LiveQueryResult:
     expected_name: str
     relevant_names: tuple[str, ...]
     relevance_source: str
+    relevance_type: str
     retrieved: tuple["LiveRetrievedCitation", ...]
 
     @property
@@ -120,139 +123,8 @@ class LiveRetrievedCitation:
 class CuratedRelevanceGroup:
     query: str
     expected_name: str
+    relevance_type: str
     relevant_names: frozenset[str]
-
-
-CURATED_RELEVANCE_GROUPS = (
-    CuratedRelevanceGroup(
-        query="metronidazole flagyl tablets or suspension",
-        expected_name="Flagyl 500mg Metronidazole",
-        relevant_names=frozenset(
-            {
-                "Flagyl 500mg Metronidazole",
-                "Flagyl 125mg/5ml Metronidazole Pediatric Intestinal Antiseptic Suspension",
-            }
-        ),
-    ),
-    CuratedRelevanceGroup(
-        query="amoxicillin clavulanic acid augmentin antibiotic",
-        expected_name="Augmentin 875mg Amoxicillin & 125mg Clavulanic Acid",
-        relevant_names=frozenset(
-            {
-                "Augmentin 875mg Amoxicillin & 125mg Clavulanic Acid",
-                "Augmentin 500mg Amoxycillin & 125mg Clavulanic Acid",
-                "Augmentin 400mg/5ml Amoxicillin & 57mg/5ml Clavulanic Acid "
-                "Oral Suspension Powder Mixed Fruits Flavor",
-                "Augmentin ES-600 652.78mg Amoxicillin & 50.41mg Clavulanic Acid "
-                "Oral Suspension Powder Strawberry Cream Flavor",
-                "Augmentin 156mg/5ml Amoxicilin & Clavulanic Acid Oral Suspension Powder",
-                "Augmentin with 400mg/5ml Amoxicillin & 57mg/5ml Clavulanic Acid "
-                "Oral Suspension Powder Strawberry Flavor",
-                "Augmentin 312.5mg/5ml Amoxicillin & Clavulanic Acid Oral Suspension Powder",
-            }
-        ),
-    ),
-    CuratedRelevanceGroup(
-        query="paracetamol medicine for pain and fever",
-        expected_name="Panadol Advance 500mg Paracetamol for Pain & Fever Relief",
-        relevant_names=frozenset(
-            {
-                "Doliprane 1000mg Paracetamol for Pain Relief & Fever",
-                "Doliprane 1000mg Paracetamol Pain & Fever Treatment",
-                "Panadol Cold & Flu 500mg Paracetamol Day Pain Relief",
-                "Panadol Advance 500mg Paracetamol for Pain & Fever Relief",
-                "Cetal 250mg/5ml Paracetamol Analgesic & Antipyretic",
-                "Cetal 500mg Paracetamol Analgesic & Antipyretic",
-                "Adol 500mg Paracetamol Fever & Pain Relief",
-                "Paracetamol 500mg Analgesic & Antipyretic",
-                "Stopadol 500mg Paracetamol for Pain Relief & Fever",
-                "Paramol 500mg Paracetamol",
-            }
-        ),
-    ),
-    CuratedRelevanceGroup(
-        query="fexofenadine non drowsy antihistamine",
-        expected_name="Telfast 180mg Fexofenadine HCl Antihistamine",
-        relevant_names=frozenset(
-            {
-                "Telfast 180mg Fexofenadine HCl Antihistamine",
-                "Telfast 120mg Fexofenadine HCI Non-Drowsy Antihistamine",
-                "Telfast 30mg/5ml Fexofenadine Hydrochloride Non-Drowsy "
-                "Antihistamine Raspberry Flavor",
-            }
-        ),
-    ),
-    CuratedRelevanceGroup(
-        query="ibuprofen brufen pain fever inflammation",
-        expected_name="Brufen 400mg Ibuprofen",
-        relevant_names=frozenset(
-            {
-                "Brufen 100mg/5ml Ibuprofen Syrup Orange Flavor for Children (3+ Months)",
-                "Brufen 600mg Ibuprofen for Reducing Fever, Relieving Pain & "
-                "Treating Inflammations",
-                "Brufen 400mg Ibuprofen",
-                "Brufen 200mg Ibuprofen",
-                "Brufen 600mg Ibuprofen Analgesic, Anti-Inflammatory & Antipyretic "
-                "Effervescent Granule Sachets Orange Flavor",
-                "Brufen Retard 800mg Ibuprofen Anti-Inflammatory & Analgesic",
-            }
-        ),
-    ),
-    CuratedRelevanceGroup(
-        query="xylometazoline otrivin nasal drops congestion",
-        expected_name="Otrivin 0.1% Xylometazoline HCL Moisturizing Nasal Drops for Adults",
-        relevant_names=frozenset(
-            {
-                "Otrivin 0.1% Xylometazoline HCL Moisturizing Nasal Drops for Adults",
-                "Otrivin Child 0.05% Xylometazoline HCL Nasal Drops (1-11 Years)",
-            }
-        ),
-    ),
-    CuratedRelevanceGroup(
-        query="pantoprazole controloc gastro resistant",
-        expected_name="Controloc 40mg Pantoprazole Sodium Sesquihydrate Gastro-Resistant",
-        relevant_names=frozenset(
-            {
-                "Controloc 40mg Pantoprazole Sodium Sesquihydrate Gastro-Resistant",
-                "Controloc 20mg Pantoprazole Sodium Sesquihydrate",
-                "Controloc 42.3mg Pantoprazole Sodium Powder Vial for Intravenous "
-                "Injection Solution",
-            }
-        ),
-    ),
-    CuratedRelevanceGroup(
-        query="cerave cleanser dry skin ceramides hyaluronic acid",
-        expected_name=(
-            "CeraVe Hypoallergenic Hydrating Face & Body Cleanser with Ceramides & "
-            "Hyaluronic Acid for Normal to Dry Skin - fragrance free"
-        ),
-        relevant_names=frozenset(
-            {
-                "CeraVe Hypoallergenic Hydrating Face & Body Cleanser with Ceramides & "
-                "Hyaluronic Acid for Normal to Dry Skin - fragrance free",
-                "CeraVe Hypoallergenic SA Smoothing Facial Cleanser with Ceramides, "
-                "Salicylic & Hyaluronic Acid for Dry, Rough & Bumpy Skin - fragrance "
-                "free, non comedogenic",
-                "CeraVe Hypoallergenic Foaming Facial Gel Cleanser with Ceramides & "
-                "Hyaluronic Acid for Normal to Oily Skin - fragrance free",
-                "CeraVe Hypoallergenic SA Smoothing & Exfoliating Gel Facial Cleanser "
-                "with Ceramides, Salicylic & Hyaluronic Acid for Dry, Rough & Bumpy "
-                "Skin - non comedogenic, fragrance free",
-            }
-        ),
-    ),
-    CuratedRelevanceGroup(
-        query="diclofenac potassium anti inflammatory analgesic",
-        expected_name="Catafast 50mg Diclofenac Potassium Granules Analgesic & Anti-Inflammatory",
-        relevant_names=frozenset(
-            {
-                "Catafast 50mg Diclofenac Potassium Granules Analgesic & Anti-Inflammatory",
-                "Cataflam 50mg Diclofenac Potassium Anti-Inflammatory & Analgesic",
-                "Cataflam 75mg Diclofenac Potassium Ampoules",
-            }
-        ),
-    ),
-)
 
 
 @pytest.mark.skipif(
@@ -369,6 +241,7 @@ async def _evaluate_live_query(
         expected_name=gold_query.expected_name,
         relevant_names=tuple(sorted(gold_query.relevant_names)),
         relevance_source=gold_query.relevance_source,
+        relevance_type=gold_query.relevance_type,
         retrieved=retrieved,
     )
 
@@ -403,6 +276,7 @@ def _generated_gold_queries(limit: int) -> list[GoldQuery]:
                 expected_name=name,
                 relevant_names=frozenset({name}),
                 relevance_source="exact_product",
+                relevance_type="exact_product",
             )
         )
         seen_names.add(name)
@@ -428,7 +302,7 @@ def _curated_gold_queries(
     limit: int,
 ) -> list[GoldQuery]:
     queries: list[GoldQuery] = []
-    for group in CURATED_RELEVANCE_GROUPS:
+    for group in _load_curated_relevance_groups():
         relevant_names = group.relevant_names & available_names
         if group.expected_name not in available_names or not relevant_names:
             continue
@@ -438,11 +312,25 @@ def _curated_gold_queries(
                 expected_name=group.expected_name,
                 relevant_names=relevant_names,
                 relevance_source="curated",
+                relevance_type=group.relevance_type,
             )
         )
         if len(queries) >= limit:
             return queries
     return queries
+
+
+def _load_curated_relevance_groups() -> tuple[CuratedRelevanceGroup, ...]:
+    entries = json.loads(GOLD_FIXTURE.read_text(encoding="utf-8"))
+    return tuple(
+        CuratedRelevanceGroup(
+            query=entry["query"],
+            expected_name=entry["expected_name"],
+            relevance_type=entry["relevance_type"],
+            relevant_names=frozenset(entry["relevant_names"]),
+        )
+        for entry in entries
+    )
 
 
 def _query_from_product_name(name: str) -> str:
@@ -568,6 +456,7 @@ def _live_report_payload(
                 "query": result.query,
                 "expected": result.expected_name,
                 "relevance_source": result.relevance_source,
+                "relevance_type": result.relevance_type,
                 "related_expected": list(result.relevant_names),
                 "first_exact_rank": result.first_exact_rank,
                 "first_related_rank": result.first_related_rank,
@@ -737,7 +626,7 @@ def _query_row(query: object) -> str:
     return (
         f"<tr class=\"{class_name}\">"
         f"<td>{escape(str(query['query']))}</td>"
-        f"<td>{escape(str(query['relevance_source']).replace('_', ' '))}</td>"
+        f"<td>{escape(str(query['relevance_type']).replace('_', ' '))}</td>"
         f"<td>{escape(str(query['expected']))}</td>"
         f"<td>{escape(str(exact_rank))}</td>"
         f"<td>{escape(str(related_rank))}</td>"
