@@ -291,7 +291,7 @@ async def test_live_products_rag_eval_uses_existing_ingested_vectors() -> None:
                     DEFAULT_MIN_HIT_RATE_AT_5,
                 )
                 assert summary["mrr"] >= _threshold("PHARMAIDE_LIVE_RAG_MIN_MRR", DEFAULT_MIN_MRR)
-                assert summary["precision_at_5"] >= _threshold(
+                assert summary["strict_precision_at_5"] >= _threshold(
                     "PHARMAIDE_LIVE_RAG_MIN_PRECISION_AT_5",
                     DEFAULT_MIN_PRECISION_AT_5,
                 )
@@ -468,7 +468,7 @@ def _live_metrics_summary(
         "hit_rate_at_5": round(_exact_hit_rate(results), 4),
         "related_hit_rate_at_5": round(_related_hit_rate(results), 4),
         "mrr": round(_mean_reciprocal_rank(results), 4),
-        "precision_at_5": round(_mean_precision(results), 4),
+        "strict_precision_at_5": round(_mean_precision(results), 4),
         "recall_at_5": round(_mean_recall(results), 4),
         "curated_precision_at_5": round(_mean_precision(curated_results), 4),
         "curated_recall_at_5": round(_mean_recall(curated_results), 4),
@@ -552,7 +552,7 @@ def _live_report_payload(
                 DEFAULT_MIN_HIT_RATE_AT_5,
             ),
             "mrr": _threshold("PHARMAIDE_LIVE_RAG_MIN_MRR", DEFAULT_MIN_MRR),
-            "precision_at_5": _threshold(
+            "strict_precision_at_5": _threshold(
                 "PHARMAIDE_LIVE_RAG_MIN_PRECISION_AT_5",
                 DEFAULT_MIN_PRECISION_AT_5,
             ),
@@ -628,6 +628,7 @@ def _render_live_html(payload: dict[str, object]) -> str:
             f"      <p>{escape(str(payload['relevance_mode']).replace('_', ' '))}</p>",
             "    </header>",
             f"    {_summary_cards(summary)}",
+            f"    {_metric_notes()}",
             f"    {_summary_bar_chart(summary)}",
             f"    {_rank_distribution_chart(rank_distribution)}",
             f"    {_query_result_table(queries)}",
@@ -650,12 +651,26 @@ def _summary_cards(summary: dict[object, object]) -> str:
     return f"<div class=\"metrics\">{''.join(cards)}</div>"
 
 
+def _metric_notes() -> str:
+    return (
+        "<section class=\"notes\">"
+        "<h2>Metric notes</h2>"
+        "<p><strong>Strict Precision@5</strong> counts only explicitly accepted relevant "
+        "products. For generated exact-product queries, only one product is accepted, so a "
+        "perfect rank-1 exact hit can still score 0.2 precision at k=5.</p>"
+        "<p><strong>Curated Precision@5</strong> is the better product-family signal because "
+        "it uses manually curated relevant sets such as same active ingredient, same brand "
+        "family, or same product category.</p>"
+        "</section>"
+    )
+
+
 def _summary_bar_chart(summary: dict[object, object]) -> str:
     metric_keys = [
         "hit_rate_at_5",
         "related_hit_rate_at_5",
         "mrr",
-        "precision_at_5",
+        "strict_precision_at_5",
         "recall_at_5",
         "curated_precision_at_5",
         "curated_recall_at_5",
@@ -737,8 +752,8 @@ def _report_css() -> str:
             "body { margin: 0; background: #f8f9ff; color: #111827; "
             "font-family: Public Sans, Arial, sans-serif; }",
             "main { max-width: 1280px; margin: 0 auto; padding: 32px; }",
-            "header, .metric, .query, .chart { background: #fff; border: 1px solid #e2e8f0; "
-            "border-radius: 8px; }",
+            "header, .metric, .notes, .query, .chart { background: #fff; "
+            "border: 1px solid #e2e8f0; border-radius: 8px; }",
             "header { padding: 24px; margin-bottom: 16px; }",
             "h1, h2, p { margin: 0; }",
             "h1 { font-size: 28px; margin-top: 8px; }",
@@ -751,6 +766,8 @@ def _report_css() -> str:
             ".metric span { display: block; color: #64748b; font-size: 11px; "
             "font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }",
             ".metric strong { display: block; font-size: 26px; margin-top: 8px; }",
+            ".notes { padding: 18px; margin-bottom: 16px; }",
+            ".notes p { color: #334155; line-height: 1.6; margin-top: 8px; }",
             ".chart { padding: 18px; margin-bottom: 16px; }",
             ".bar-row { display: grid; grid-template-columns: 260px 1fr 80px; "
             "gap: 12px; align-items: center; margin-top: 12px; }",
