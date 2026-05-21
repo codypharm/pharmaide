@@ -1,4 +1,4 @@
-import { Activity, Bell, ClipboardList, FileText, Flame, Map, Search, ShieldCheck, Plus, ChevronRight } from "lucide-react";
+import { Activity, Bell, ClipboardList, FileText, Flame, Map, Search, ShieldCheck, Plus, ChevronRight, LogOut } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { Outlet, NavLink, Link } from "react-router-dom";
 import { UnauthorizedError, setUnauthorizedHandler } from "./api/client";
@@ -14,6 +14,7 @@ function DashboardApp({
   const [isPrivacyMode, setIsPrivacyMode] = useState(false);
   const [authError, setAuthError] = useState<UnauthorizedError | null>(null);
   const [signedInEmail, setSignedInEmail] = useState(() => currentSessionEmail(authSessionState));
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const hasMissingAuthAdapter = authSessionState.status === "missing_adapter";
   const interactiveGcipAdapter = authSessionState.status === "ready"
     && authSessionState.mode === "gcip"
@@ -30,6 +31,21 @@ function DashboardApp({
   useEffect(() => {
     setSignedInEmail(currentSessionEmail(authSessionState));
   }, [authSessionState]);
+
+  async function handleSignOut() {
+    if (typeof interactiveGcipAdapter?.signOut !== "function") {
+      return;
+    }
+
+    setIsSigningOut(true);
+    try {
+      await interactiveGcipAdapter.signOut();
+      setAuthError(null);
+      setSignedInEmail(null);
+    } finally {
+      setIsSigningOut(false);
+    }
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans text-slate-900">
@@ -185,6 +201,17 @@ function DashboardApp({
               <div className="w-8 h-8 bg-yellow-100 text-yellow-800 rounded-full flex items-center justify-center font-bold text-xs">
                 {initialsForUser(signedInEmail)}
               </div>
+              {signedInEmail && typeof interactiveGcipAdapter?.signOut === "function" ? (
+                <button
+                  aria-label="Sign out"
+                  className="rounded-lg border border-slate-200 p-2 text-slate-500 transition-colors hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={isSigningOut}
+                  onClick={handleSignOut}
+                  type="button"
+                >
+                  <LogOut size={16} />
+                </button>
+              ) : null}
             </div>
           </div>
         </header>

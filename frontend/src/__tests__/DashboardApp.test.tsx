@@ -103,4 +103,42 @@ describe("DashboardApp auth state", () => {
     );
     expect(await screen.findByText("Protected content")).toBeInTheDocument();
   });
+
+  it("returns to the GCIP sign-in gate after sign-out", async () => {
+    const user = userEvent.setup();
+    let signedInEmail: string | null = "pharmacist@example.com";
+    const adapter = {
+      getIdToken: vi.fn(() => (signedInEmail ? "id-token-123" : null)),
+      signInWithEmailPassword: vi.fn(async (email: string) => {
+        signedInEmail = email;
+      }),
+      signOut: vi.fn(async () => {
+        signedInEmail = null;
+      }),
+      currentUserEmail: vi.fn(() => signedInEmail),
+    };
+
+    render(
+      <MemoryRouter initialEntries={["/dashboard/protected"]}>
+        <Routes>
+          <Route
+            path="/dashboard"
+            element={
+              <DashboardApp authSessionState={{ status: "ready", mode: "gcip", adapter }} />
+            }
+          >
+            <Route path="protected" element={<div>Protected content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Protected content")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /sign out/i }));
+
+    expect(adapter.signOut).toHaveBeenCalled();
+    expect(await screen.findByText("Sign in to PharmaAide")).toBeInTheDocument();
+    expect(screen.queryByText("Protected content")).not.toBeInTheDocument();
+  });
 });
