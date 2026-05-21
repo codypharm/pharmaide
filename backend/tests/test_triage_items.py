@@ -3,7 +3,8 @@
 from uuid import UUID, uuid4
 
 import pytest
-from httpx import AsyncClient
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +14,7 @@ from app.agents.safety_schemas import (
     RefereeResult,
     SafetyReview,
 )
+from app.config import Settings
 from app.db.models import AuditLogEntry, ConversationMessage, TriageItem
 from app.services import task_runner
 
@@ -99,6 +101,24 @@ async def test_patch_triage_item_returns_404_for_unknown_item(app_client: AsyncC
 
     assert response.status_code == 404
     assert response.json() == {"detail": {"error": "triage_item_not_found"}}
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_get_triage_items_requires_bearer_token_in_gcip_mode(
+    test_app: FastAPI,
+) -> None:
+    test_app.state.settings = Settings(
+        _env_file=None,
+        auth_mode="gcip",
+        gcip_project_id="pharmaide-test",
+    )
+
+    transport = ASGITransport(app=test_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/triage/items")
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == {"error": "auth_token_required"}
 
 
 @pytest.mark.usefixtures("postgres_container")

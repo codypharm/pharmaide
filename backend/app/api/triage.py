@@ -14,6 +14,7 @@ from app.api.schemas import (
     TriageItemView,
     TriageRejectionView,
 )
+from app.auth import get_current_actor
 from app.db.engine import get_session
 from app.services.triage import (
     InvalidTriageTransition,
@@ -30,7 +31,7 @@ from app.services.triage import (
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
-router = APIRouter(prefix="/triage")
+router = APIRouter(prefix="/triage", dependencies=[Depends(get_current_actor)])
 
 
 @router.get(
