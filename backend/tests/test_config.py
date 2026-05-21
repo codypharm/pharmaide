@@ -213,6 +213,21 @@ def test_settings_requires_cloud_api_delivery_configuration(
     monkeypatch.setenv("PHARMAIDE_WHATSAPP_DELIVERY_PROVIDER", "cloud_api")
     monkeypatch.delenv("PHARMAIDE_WHATSAPP_CLOUD_API_ACCESS_TOKEN", raising=False)
     monkeypatch.delenv("PHARMAIDE_WHATSAPP_CLOUD_API_PHONE_NUMBER_ID", raising=False)
+    monkeypatch.delenv("PHARMAIDE_WHATSAPP_WEBHOOK_VERIFY_TOKEN", raising=False)
+    monkeypatch.delenv("PHARMAIDE_WHATSAPP_WEBHOOK_APP_SECRET", raising=False)
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+
+def test_settings_requires_signed_webhook_for_cloud_api_delivery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PHARMAIDE_WHATSAPP_DELIVERY_PROVIDER", "cloud_api")
+    monkeypatch.setenv("PHARMAIDE_WHATSAPP_CLOUD_API_ACCESS_TOKEN", "wa-token")
+    monkeypatch.setenv("PHARMAIDE_WHATSAPP_CLOUD_API_PHONE_NUMBER_ID", "phone-number-id")
+    monkeypatch.delenv("PHARMAIDE_WHATSAPP_WEBHOOK_VERIFY_TOKEN", raising=False)
+    monkeypatch.delenv("PHARMAIDE_WHATSAPP_WEBHOOK_APP_SECRET", raising=False)
 
     with pytest.raises(ValidationError):
         Settings(_env_file=None)

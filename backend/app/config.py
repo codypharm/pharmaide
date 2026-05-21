@@ -138,12 +138,17 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def require_whatsapp_cloud_api_configuration(self) -> "Settings":
-        """Real WhatsApp delivery needs provider credentials and sender metadata."""
+        """Real WhatsApp mode needs outbound credentials and signed inbound webhooks."""
         if self.whatsapp_delivery_provider == "cloud_api" and (
             not self.whatsapp_cloud_api_access_token
             or not self.whatsapp_cloud_api_phone_number_id
+            or not self.whatsapp_webhook_verify_token
+            or not self.whatsapp_webhook_app_secret
         ):
-            raise ValueError("cloud_api WhatsApp delivery requires token and phone number id")
+            raise ValueError(
+                "cloud_api WhatsApp delivery requires token, phone number id, "
+                "webhook verify token, and app secret"
+            )
         return self
 
     @model_validator(mode="after")
