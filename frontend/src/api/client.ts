@@ -5,11 +5,17 @@
 const DEFAULT_BASE_URL = "http://localhost:8000";
 
 export type AuthTokenProvider = () => Promise<string | null> | string | null;
+export type UnauthorizedHandler = (error: UnauthorizedError) => void;
 
 let authTokenProvider: AuthTokenProvider | null = null;
+let unauthorizedHandler: UnauthorizedHandler | null = null;
 
 export function setAuthTokenProvider(provider: AuthTokenProvider | null): void {
   authTokenProvider = provider;
+}
+
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): void {
+  unauthorizedHandler = handler;
 }
 
 function baseUrl(): string {
@@ -105,7 +111,7 @@ export async function postJson<TRequest, TResponse>(
   }
 
   if (response.status === 401 && isErrorEnvelope(parsed)) {
-    throw new UnauthorizedError(requestId, parsed, parsed.detail.error);
+    throw notifyUnauthorized(new UnauthorizedError(requestId, parsed, parsed.detail.error));
   }
 
   throw new ApiError(
@@ -167,7 +173,7 @@ export async function getText(
   }
 
   if (response.status === 401 && isErrorEnvelope(parsed)) {
-    throw new UnauthorizedError(requestId, parsed, parsed.detail.error);
+    throw notifyUnauthorized(new UnauthorizedError(requestId, parsed, parsed.detail.error));
   }
 
   throw new ApiError(
@@ -236,7 +242,7 @@ async function parseJsonResponse<TResponse>(response: Response): Promise<TRespon
   }
 
   if (response.status === 401 && isErrorEnvelope(parsed)) {
-    throw new UnauthorizedError(requestId, parsed, parsed.detail.error);
+    throw notifyUnauthorized(new UnauthorizedError(requestId, parsed, parsed.detail.error));
   }
 
   throw new ApiError(
@@ -255,6 +261,11 @@ function isPydanticErrorBody(
     body !== null &&
     Array.isArray((body as { detail?: unknown }).detail)
   );
+}
+
+function notifyUnauthorized(error: UnauthorizedError): UnauthorizedError {
+  unauthorizedHandler?.(error);
+  return error;
 }
 
 function isErrorEnvelope(body: unknown): body is { detail: { error: string } } {

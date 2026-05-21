@@ -1,9 +1,16 @@
 import { Activity, Bell, ClipboardList, FileText, Flame, Map, Search, ShieldCheck, Plus, ChevronRight } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Outlet, NavLink, Link } from "react-router-dom";
+import { UnauthorizedError, setUnauthorizedHandler } from "./api/client";
 
 function DashboardApp() {
   const [isPrivacyMode, setIsPrivacyMode] = useState(false);
+  const [authError, setAuthError] = useState<UnauthorizedError | null>(null);
+
+  useEffect(() => {
+    setUnauthorizedHandler(setAuthError);
+    return () => setUnauthorizedHandler(null);
+  }, []);
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans text-slate-900">
@@ -158,6 +165,19 @@ function DashboardApp() {
             </div>
           </div>
         </header>
+
+        {authError && (
+          <div
+            role="alert"
+            className="border-b border-amber-200 bg-amber-50 px-8 py-3 text-sm text-slate-800"
+          >
+            <span className="font-bold">Session needs attention.</span>{" "}
+            Sign in again to continue.
+            {authError.requestId ? (
+              <span className="ml-2 text-slate-500">Reference ID: {authError.requestId}</span>
+            ) : null}
+          </div>
+        )}
 
         <div className="flex-1 overflow-hidden">
           <Outlet context={{ isPrivacyMode }} />

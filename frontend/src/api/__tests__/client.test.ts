@@ -10,6 +10,7 @@ import {
   postJson,
   postMultipart,
   setAuthTokenProvider,
+  setUnauthorizedHandler,
 } from "../client";
 
 function mockFetch(response: {
@@ -30,6 +31,7 @@ function mockFetch(response: {
 
 afterEach(() => {
   setAuthTokenProvider(null);
+  setUnauthorizedHandler(null);
   vi.restoreAllMocks();
 });
 
@@ -129,6 +131,21 @@ describe("getJson", () => {
       status: 401,
       errorCode: "invalid_auth_token",
     });
+  });
+
+  it("notifies the registered unauthorized handler on 401", async () => {
+    const handler = vi.fn();
+    setUnauthorizedHandler(handler);
+    mockFetch({ status: 401, body: { detail: { error: "auth_token_required" } } });
+
+    await expect(getJson("/treatments")).rejects.toThrow(UnauthorizedError);
+
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 401,
+        errorCode: "auth_token_required",
+      }),
+    );
   });
 });
 
