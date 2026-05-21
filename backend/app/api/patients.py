@@ -6,12 +6,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas import PatientList
+from app.auth import get_current_actor
 from app.db.engine import get_session
 from app.services.patients import search_patients
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_actor)])
 
 
 @router.get("/patients", response_model=PatientList)

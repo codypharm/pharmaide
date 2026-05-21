@@ -1,8 +1,10 @@
 """GET /patients — existing-patient lookup for treatment attachment."""
 
 import pytest
-from httpx import AsyncClient
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 
+from app.config import Settings
 from app.services import task_runner
 
 
@@ -73,3 +75,21 @@ async def test_search_patients_rejects_blank_query(app_client: AsyncClient) -> N
     response = await app_client.get("/patients", params={"query": "   "})
 
     assert response.status_code == 422
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_search_patients_requires_bearer_token_in_gcip_mode(
+    test_app: FastAPI,
+) -> None:
+    test_app.state.settings = Settings(
+        _env_file=None,
+        auth_mode="gcip",
+        gcip_project_id="pharmaide-test",
+    )
+
+    transport = ASGITransport(app=test_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/patients", params={"query": "eleanor"})
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == {"error": "auth_token_required"}
