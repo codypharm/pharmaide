@@ -8,6 +8,7 @@ def test_settings_defaults_match_env_example(monkeypatch: pytest.MonkeyPatch) ->
     for var in (
         "PHARMAIDE_LOG_MODE",
         "PHARMAIDE_DEBUG_ROUTES_ENABLED",
+        "PHARMAIDE_CORS_ALLOWED_ORIGINS",
         "PHARMAIDE_CHECKPOINT_DB_PATH",
         "PHARMAIDE_RXNORM_BASE_URL",
         "PHARMAIDE_OPENAI_API_KEY",
@@ -42,6 +43,7 @@ def test_settings_defaults_match_env_example(monkeypatch: pytest.MonkeyPatch) ->
 
     assert settings.log_mode == "console"
     assert settings.debug_routes_enabled is False
+    assert settings.cors_allowed_origin_list == ("http://localhost:5173",)
     assert settings.checkpoint_db_path == "./pharmaide.db"
     assert settings.rxnorm_base_url == "https://rxnav.nlm.nih.gov/REST"
     assert settings.openai_api_key is None
@@ -74,6 +76,10 @@ def test_settings_defaults_match_env_example(monkeypatch: pytest.MonkeyPatch) ->
 def test_settings_reads_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PHARMAIDE_LOG_MODE", "json")
     monkeypatch.setenv("PHARMAIDE_DEBUG_ROUTES_ENABLED", "true")
+    monkeypatch.setenv(
+        "PHARMAIDE_CORS_ALLOWED_ORIGINS",
+        "https://app.example, https://admin.example",
+    )
     monkeypatch.setenv("PHARMAIDE_CHECKPOINT_DB_PATH", "/tmp/x.db")
     monkeypatch.setenv("PHARMAIDE_RXNORM_BASE_URL", "https://rxnav.test/REST")
     monkeypatch.setenv("PHARMAIDE_OPENAI_API_KEY", "sk-test")
@@ -112,6 +118,10 @@ def test_settings_reads_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert settings.log_mode == "json"
     assert settings.debug_routes_enabled is True
+    assert settings.cors_allowed_origin_list == (
+        "https://app.example",
+        "https://admin.example",
+    )
     assert settings.checkpoint_db_path == "/tmp/x.db"
     assert settings.rxnorm_base_url == "https://rxnav.test/REST"
     assert settings.openai_api_key is not None

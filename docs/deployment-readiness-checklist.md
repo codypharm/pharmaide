@@ -21,6 +21,7 @@ Required for staging:
 - `PHARMAIDE_DATABASE_URL`: async SQLAlchemy database URL.
 - `PHARMAIDE_OPENAI_API_KEY`: OpenAI key for agents, embeddings, and interim
   model safety checks.
+- `PHARMAIDE_CORS_ALLOWED_ORIGINS`: comma-separated deployed frontend origins.
 - `PHARMAIDE_LOG_MODE=json`: structured logs for Cloud Run.
 - `PHARMAIDE_DEBUG_ROUTES_ENABLED=false`: debug graph route must stay unmounted.
 - `PHARMAIDE_RXNORM_BASE_URL=https://rxnav.nlm.nih.gov/REST`.
@@ -120,8 +121,6 @@ Safety settings:
 
 ## Current Deployment Blockers
 
-- CORS is currently hard-coded to `http://localhost:5173` in the backend app
-  factory. Add a config-driven allowed-origin setting before staging.
 - GCIP authentication is not integrated. `X-Pharmaide-User-Id` remains
   development scaffolding.
 - Workspace/clinic scoping is not yet derived from authenticated membership.

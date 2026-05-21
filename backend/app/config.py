@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     # leaves the dev-only /debug/graph route unmounted, not exposed.
     debug_routes_enabled: bool = False
 
+    cors_allowed_origins: str = "http://localhost:5173"
+
     log_mode: Literal["console", "json"] = "console"
 
     rxnorm_base_url: str = "https://rxnav.nlm.nih.gov/REST"
@@ -97,6 +99,13 @@ class Settings(BaseSettings):
                 if number.isdigit():
                     return int(number) * multiplier
         return value
+
+    @property
+    def cors_allowed_origin_list(self) -> tuple[str, ...]:
+        """Parse comma-separated browser origins from deployment env."""
+        return tuple(
+            origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()
+        )
 
     @model_validator(mode="after")
     def require_remote_safety_urls(self) -> "Settings":
