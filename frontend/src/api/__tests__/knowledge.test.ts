@@ -31,7 +31,7 @@ describe("uploadKnowledgeDocument", () => {
       type: "text/csv",
     });
 
-    const result = await uploadKnowledgeDocument(file, { scopeId: "scope-123" });
+    const result = await uploadKnowledgeDocument(file);
 
     const calledUrl = spy.mock.calls[0]?.[0] as string;
     const init = spy.mock.calls[0]?.[1] as RequestInit;
@@ -68,11 +68,7 @@ describe("listKnowledgeDocuments", () => {
       },
     });
 
-    const result = await listKnowledgeDocuments({
-      scopeId: "scope-123",
-      limit: 25,
-      offset: 50,
-    });
+    const result = await listKnowledgeDocuments({ limit: 25, offset: 50 });
 
     const calledUrl = spy.mock.calls[0]?.[0] as string;
     const init = spy.mock.calls[0]?.[1] as RequestInit;
@@ -100,7 +96,7 @@ describe("getKnowledgeDocument", () => {
       },
     });
 
-    const result = await getKnowledgeDocument("doc1", { scopeId: "scope-123" });
+    const result = await getKnowledgeDocument("doc1");
 
     const calledUrl = spy.mock.calls[0]?.[0] as string;
     const init = spy.mock.calls[0]?.[1] as RequestInit;
@@ -114,7 +110,7 @@ describe("deleteKnowledgeDocument", () => {
   it("soft-deletes one document by id", async () => {
     const spy = mockFetch({ status: 204, body: null });
 
-    await deleteKnowledgeDocument("doc1", { scopeId: "scope-123" });
+    await deleteKnowledgeDocument("doc1");
 
     const calledUrl = spy.mock.calls[0]?.[0] as string;
     const init = spy.mock.calls[0]?.[1] as RequestInit;

@@ -4,7 +4,6 @@ import {
   getKnowledgeDocument,
   type KnowledgeDocumentStatus,
   type KnowledgeDocumentView,
-  type KnowledgeScope,
 } from "../api/knowledge";
 
 const POLL_DELAY_MS = 3_000;
@@ -24,9 +23,7 @@ function shouldPoll(status: DocumentIngestionHookStatus): boolean {
 
 export function useDocumentIngestionStatus(
   documentId: string | null,
-  scope: KnowledgeScope,
 ): UseDocumentIngestionStatusResult {
-  const scopeId = scope.scopeId;
   const [data, setData] = useState<KnowledgeDocumentView | null>(null);
   const [status, setStatus] = useState<DocumentIngestionHookStatus>(
     documentId ? "loading" : "idle",
@@ -53,7 +50,7 @@ export function useDocumentIngestionStatus(
 
     const requestVersion = ++requestVersionRef.current;
     try {
-      const next = await getKnowledgeDocument(documentId, { scopeId });
+      const next = await getKnowledgeDocument(documentId);
       if (requestVersion !== requestVersionRef.current) return;
 
       setData(next);
@@ -68,7 +65,7 @@ export function useDocumentIngestionStatus(
       setError(caught);
       setStatus("idle");
     }
-  }, [clearPollTimer, documentId, scopeId]);
+  }, [clearPollTimer, documentId]);
 
   const refresh = useCallback(async () => {
     await poll();

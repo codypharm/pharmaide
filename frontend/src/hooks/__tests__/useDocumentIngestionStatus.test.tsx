@@ -2,13 +2,10 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  PRE_AUTH_KB_SCOPE_ID,
   type KnowledgeDocumentStatus,
   type KnowledgeDocumentView,
 } from "../../api/knowledge";
 import { useDocumentIngestionStatus } from "../useDocumentIngestionStatus";
-
-const SCOPE = { scopeId: PRE_AUTH_KB_SCOPE_ID };
 
 function documentRow(status: KnowledgeDocumentStatus): KnowledgeDocumentView {
   return {
@@ -53,7 +50,7 @@ describe("useDocumentIngestionStatus", () => {
   it("polls while a document is ingesting and stops at ready", async () => {
     const spy = mockDocumentResponses([documentRow("ingesting"), documentRow("ready")]);
 
-    const { result } = renderHook(() => useDocumentIngestionStatus("doc-1", SCOPE));
+    const { result } = renderHook(() => useDocumentIngestionStatus("doc-1"));
 
     await flushHookWork();
     expect(result.current.status).toBe("ingesting");
@@ -73,7 +70,7 @@ describe("useDocumentIngestionStatus", () => {
   it("does not poll when no document id is provided", async () => {
     const spy = vi.spyOn(globalThis, "fetch");
 
-    const { result } = renderHook(() => useDocumentIngestionStatus(null, SCOPE));
+    const { result } = renderHook(() => useDocumentIngestionStatus(null));
 
     await flushHookWork();
     await act(async () => {
@@ -88,7 +85,7 @@ describe("useDocumentIngestionStatus", () => {
     const error = new Error("network down");
     const spy = vi.spyOn(globalThis, "fetch").mockRejectedValue(error);
 
-    const { result } = renderHook(() => useDocumentIngestionStatus("doc-1", SCOPE));
+    const { result } = renderHook(() => useDocumentIngestionStatus("doc-1"));
 
     await flushHookWork();
     expect(result.current.status).toBe("idle");

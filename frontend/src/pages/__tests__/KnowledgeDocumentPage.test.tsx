@@ -45,9 +45,7 @@ describe("KnowledgeDocumentPage", () => {
       "href",
       "/dashboard/knowledge",
     );
-    expect(spy).toHaveBeenCalledWith("doc-1", {
-      scopeId: knowledgeApi.PRE_AUTH_KB_SCOPE_ID,
-    });
+    expect(spy).toHaveBeenCalledWith("doc-1");
   });
 
   it("renders DailyMed references as verified material", async () => {

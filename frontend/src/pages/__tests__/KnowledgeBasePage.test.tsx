@@ -57,7 +57,6 @@ describe("KnowledgeBasePage", () => {
     expect(screen.getAllByText("File ready").length).toBeGreaterThan(0);
     expect(screen.queryByText(/chunks/i)).toBeNull();
     expect(spy).toHaveBeenCalledWith({
-      scopeId: knowledgeApi.PRE_AUTH_KB_SCOPE_ID,
       limit: 50,
       offset: 0,
     });
@@ -120,9 +119,7 @@ describe("KnowledgeBasePage", () => {
     const file = new File(["protocol"], "protocol.pdf", { type: "application/pdf" });
     await user.upload(screen.getByLabelText(/upload clinical asset/i), file);
 
-    await waitFor(() => expect(uploadSpy).toHaveBeenCalledWith(file, {
-      scopeId: knowledgeApi.PRE_AUTH_KB_SCOPE_ID,
-    }));
+    await waitFor(() => expect(uploadSpy).toHaveBeenCalledWith(file));
     await waitFor(() => expect(screen.getByText("Anticoagulation Protocol")).toBeTruthy());
   });
 
@@ -187,9 +184,7 @@ describe("KnowledgeBasePage", () => {
     expect(screen.getByRole("dialog", { name: /remove clinical asset/i })).toBeTruthy();
     await user.click(screen.getByRole("button", { name: /^remove$/i }));
 
-    await waitFor(() => expect(deleteSpy).toHaveBeenCalledWith("doc-1", {
-      scopeId: knowledgeApi.PRE_AUTH_KB_SCOPE_ID,
-    }));
+    await waitFor(() => expect(deleteSpy).toHaveBeenCalledWith("doc-1"));
     expect(toast.success).toHaveBeenCalledWith("Clinical asset removed", {
       description: "Anticoagulation Protocol",
     });

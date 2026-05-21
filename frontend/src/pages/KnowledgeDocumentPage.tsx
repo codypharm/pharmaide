@@ -4,12 +4,9 @@ import { Link, useParams } from "react-router-dom";
 
 import { ApiError, NotFoundError } from "../api/client";
 import {
-  PRE_AUTH_KB_SCOPE_ID,
   getKnowledgeDocument,
   type KnowledgeDocumentView,
 } from "../api/knowledge";
-
-const KB_SCOPE = { scopeId: PRE_AUTH_KB_SCOPE_ID };
 
 type FetchState =
   | { kind: "loading" }
@@ -25,7 +22,7 @@ export default function KnowledgeDocumentPage() {
     if (!id) return;
     let cancelled = false;
     setState({ kind: "loading" });
-    getKnowledgeDocument(id, KB_SCOPE)
+    getKnowledgeDocument(id)
       .then((document) => {
         if (!cancelled) setState({ kind: "ok", document });
       })

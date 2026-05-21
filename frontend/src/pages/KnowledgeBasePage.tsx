@@ -15,7 +15,6 @@ import { toast } from "sonner";
 
 import { ApiError, NotFoundError } from "../api/client";
 import {
-  PRE_AUTH_KB_SCOPE_ID,
   deleteKnowledgeDocument,
   listKnowledgeDocuments,
   uploadKnowledgeDocument,
@@ -24,7 +23,6 @@ import {
 import { useDocumentIngestionStatus } from "../hooks/useDocumentIngestionStatus";
 
 const PAGE_SIZE = 50;
-const KB_SCOPE = { scopeId: PRE_AUTH_KB_SCOPE_ID };
 
 type FetchState =
   | { kind: "loading" }
@@ -46,7 +44,6 @@ export default function KnowledgeBasePage() {
   const refresh = useCallback(async () => {
     try {
       const result = await listKnowledgeDocuments({
-        ...KB_SCOPE,
         limit: PAGE_SIZE,
         offset: 0,
       });
@@ -64,7 +61,7 @@ export default function KnowledgeBasePage() {
     if (!file || isUploading) return;
     setIsUploading(true);
     try {
-      await uploadKnowledgeDocument(file, KB_SCOPE);
+      await uploadKnowledgeDocument(file);
       await refresh();
       if (fileInputRef.current) fileInputRef.current.value = "";
     } finally {
@@ -75,7 +72,7 @@ export default function KnowledgeBasePage() {
   async function handleDelete(document: KnowledgeDocumentView) {
     setBusyDocumentId(document.id);
     try {
-      await deleteKnowledgeDocument(document.id, KB_SCOPE);
+      await deleteKnowledgeDocument(document.id);
       toast.success("Clinical asset removed", { description: document.title });
       setPendingDelete(null);
       await refresh();
@@ -147,7 +144,7 @@ function DocumentIngestionWatcher({
   document: KnowledgeDocumentView;
   onSettled: () => Promise<void>;
 }) {
-  const { data } = useDocumentIngestionStatus(document.id, KB_SCOPE);
+  const { data } = useDocumentIngestionStatus(document.id);
 
   useEffect(() => {
     if (data && data.status !== "ingesting") {
