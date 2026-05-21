@@ -7,6 +7,7 @@ import {
   getJson,
   postJson,
   postMultipart,
+  setAuthTokenProvider,
 } from "../client";
 
 function mockFetch(response: {
@@ -26,6 +27,7 @@ function mockFetch(response: {
 }
 
 afterEach(() => {
+  setAuthTokenProvider(null);
   vi.restoreAllMocks();
 });
 
@@ -34,6 +36,19 @@ describe("postJson", () => {
     mockFetch({ status: 201, body: { treatment_id: "t1", patient_id: "p1" } });
     const result = await postJson("/treatments", { foo: "bar" });
     expect(result).toEqual({ treatment_id: "t1", patient_id: "p1" });
+  });
+
+  it("adds the current bearer token when an auth provider is registered", async () => {
+    const fetchSpy = mockFetch({ status: 201, body: { ok: true } });
+    setAuthTokenProvider(async () => "id-token-123");
+
+    await postJson("/treatments", { foo: "bar" });
+
+    const [, init] = fetchSpy.mock.calls[0];
+    expect(init?.headers).toEqual({
+      "Content-Type": "application/json",
+      Authorization: "Bearer id-token-123",
+    });
   });
 
   it("throws ValidationError on 422 with the field errors attached", async () => {
@@ -164,5 +179,25 @@ describe("postMultipart", () => {
 
     const [, init] = fetchSpy.mock.calls[0];
     expect(init?.headers).toEqual({ "X-Pharmaide-User-Id": "scope1" });
+  });
+
+  it("merges bearer auth with explicit non-JSON headers", async () => {
+    const fetchSpy = mockFetch({
+      status: 202,
+      body: { document_id: "doc1", status: "ingesting" },
+    });
+    setAuthTokenProvider(() => "id-token-456");
+    const form = new FormData();
+    form.append("file", new File(["fake"], "protocol.csv", { type: "text/csv" }));
+
+    await postMultipart("/knowledge/documents", form, {
+      headers: { "X-Pharmaide-User-Id": "scope1" },
+    });
+
+    const [, init] = fetchSpy.mock.calls[0];
+    expect(init?.headers).toEqual({
+      "X-Pharmaide-User-Id": "scope1",
+      Authorization: "Bearer id-token-456",
+    });
   });
 });

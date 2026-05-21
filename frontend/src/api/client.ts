@@ -4,6 +4,14 @@
 
 const DEFAULT_BASE_URL = "http://localhost:8000";
 
+export type AuthTokenProvider = () => Promise<string | null> | string | null;
+
+let authTokenProvider: AuthTokenProvider | null = null;
+
+export function setAuthTokenProvider(provider: AuthTokenProvider | null): void {
+  authTokenProvider = provider;
+}
+
 function baseUrl(): string {
   // Vite exposes import.meta.env at build time. Fall back to the local
   // backend so first-clone dev works without a .env file
@@ -67,7 +75,7 @@ export async function postJson<TRequest, TResponse>(
 ): Promise<TResponse> {
   const response = await fetch(`${baseUrl()}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: await requestHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body),
   });
 
@@ -107,7 +115,7 @@ export async function postMultipart<TResponse>(
   const response = await fetch(`${baseUrl()}${path}`, {
     method: "POST",
     body,
-    headers: options.headers,
+    headers: await requestHeaders(options.headers),
   });
 
   return parseJsonResponse<TResponse>(response);
@@ -119,7 +127,7 @@ export async function getJson<TResponse>(
 ): Promise<TResponse> {
   const response = await fetch(`${baseUrl()}${path}`, {
     method: "GET",
-    headers: options.headers,
+    headers: await requestHeaders(options.headers),
   });
   return parseJsonResponse<TResponse>(response);
 }
@@ -130,7 +138,7 @@ export async function getText(
 ): Promise<string> {
   const response = await fetch(`${baseUrl()}${path}`, {
     method: "GET",
-    headers: options.headers,
+    headers: await requestHeaders(options.headers),
   });
   const requestId = response.headers.get("X-Request-ID");
   const text = await response.text();
@@ -158,7 +166,7 @@ export async function deleteJson<TResponse = null>(
 ): Promise<TResponse> {
   const response = await fetch(`${baseUrl()}${path}`, {
     method: "DELETE",
-    headers: options.headers,
+    headers: await requestHeaders(options.headers),
   });
   return parseJsonResponse<TResponse>(response);
 }
@@ -170,10 +178,22 @@ export async function patchJson<TRequest, TResponse>(
 ): Promise<TResponse> {
   const response = await fetch(`${baseUrl()}${path}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json", ...options.headers },
+    headers: await requestHeaders({ "Content-Type": "application/json", ...options.headers }),
     body: JSON.stringify(body),
   });
   return parseJsonResponse<TResponse>(response);
+}
+
+async function requestHeaders(
+  headers: Record<string, string> = {},
+): Promise<Record<string, string> | undefined> {
+  const nextHeaders = { ...headers };
+  const token = await authTokenProvider?.();
+  const normalizedToken = token?.trim();
+  if (normalizedToken && !nextHeaders.Authorization) {
+    nextHeaders.Authorization = `Bearer ${normalizedToken}`;
+  }
+  return Object.keys(nextHeaders).length > 0 ? nextHeaders : undefined;
 }
 
 async function parseJsonResponse<TResponse>(response: Response): Promise<TResponse> {
