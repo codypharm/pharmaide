@@ -69,6 +69,15 @@ export class NotFoundError extends ApiError {
   }
 }
 
+export class UnauthorizedError extends ApiError {
+  errorCode: string;
+
+  constructor(requestId: string | null, body: unknown, errorCode: string) {
+    super(401, requestId, body, errorCode);
+    this.errorCode = errorCode;
+  }
+}
+
 export async function postJson<TRequest, TResponse>(
   path: string,
   body: TRequest,
@@ -93,6 +102,10 @@ export async function postJson<TRequest, TResponse>(
 
   if (response.status === 409 && isErrorEnvelope(parsed)) {
     throw new ConflictError(requestId, parsed, parsed.detail.error);
+  }
+
+  if (response.status === 401 && isErrorEnvelope(parsed)) {
+    throw new UnauthorizedError(requestId, parsed, parsed.detail.error);
   }
 
   throw new ApiError(
@@ -152,6 +165,11 @@ export async function getText(
   } catch {
     parsed = text;
   }
+
+  if (response.status === 401 && isErrorEnvelope(parsed)) {
+    throw new UnauthorizedError(requestId, parsed, parsed.detail.error);
+  }
+
   throw new ApiError(
     response.status,
     requestId,
@@ -215,6 +233,10 @@ async function parseJsonResponse<TResponse>(response: Response): Promise<TRespon
 
   if (response.status === 404 && isErrorEnvelope(parsed)) {
     throw new NotFoundError(requestId, parsed, parsed.detail.error);
+  }
+
+  if (response.status === 401 && isErrorEnvelope(parsed)) {
+    throw new UnauthorizedError(requestId, parsed, parsed.detail.error);
   }
 
   throw new ApiError(

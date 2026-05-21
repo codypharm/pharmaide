@@ -3,7 +3,9 @@ import {
   ApiError,
   ConflictError,
   NotFoundError,
+  UnauthorizedError,
   deleteJson,
+  getText,
   getJson,
   postJson,
   postMultipart,
@@ -80,6 +82,19 @@ describe("postJson", () => {
       expect((err as ConflictError).requestId).toBe("req_test_123");
     }
   });
+
+  it("throws UnauthorizedError on 401 with the auth error code", async () => {
+    mockFetch({ status: 401, body: { detail: { error: "auth_token_required" } } });
+
+    await expect(postJson("/treatments", {})).rejects.toThrow(UnauthorizedError);
+    try {
+      await postJson("/treatments", {});
+    } catch (err) {
+      expect(err).toBeInstanceOf(UnauthorizedError);
+      expect((err as UnauthorizedError).errorCode).toBe("auth_token_required");
+      expect((err as UnauthorizedError).requestId).toBe("req_test_123");
+    }
+  });
 });
 
 describe("getJson", () => {
@@ -105,6 +120,23 @@ describe("getJson", () => {
   it("throws ApiError on 500", async () => {
     mockFetch({ status: 500, body: { error: "internal_error" } });
     await expect(getJson("/treatments/x")).rejects.toThrow(ApiError);
+  });
+
+  it("throws UnauthorizedError on 401", async () => {
+    mockFetch({ status: 401, body: { detail: { error: "invalid_auth_token" } } });
+
+    await expect(getJson("/treatments")).rejects.toMatchObject({
+      status: 401,
+      errorCode: "invalid_auth_token",
+    });
+  });
+});
+
+describe("getText", () => {
+  it("throws UnauthorizedError on 401", async () => {
+    mockFetch({ status: 401, body: { detail: { error: "auth_token_required" } } });
+
+    await expect(getText("/audits/export.csv")).rejects.toThrow(UnauthorizedError);
   });
 });
 
