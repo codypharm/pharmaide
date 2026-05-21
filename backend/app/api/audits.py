@@ -11,6 +11,7 @@ from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas import AuditLogEntryList
+from app.auth import get_current_actor
 from app.db.engine import get_session
 from app.db.models import AuditLogEntry
 from app.services.audits import list_audit_log_entries
@@ -18,7 +19,7 @@ from app.services.audits import list_audit_log_entries
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 AUDIT_EXPORT_FILENAME = "pharmaide-audit-trail.csv"
 
-router = APIRouter(prefix="/audits")
+router = APIRouter(prefix="/audits", dependencies=[Depends(get_current_actor)])
 
 
 @router.get("", response_model=AuditLogEntryList)

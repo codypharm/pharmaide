@@ -6,9 +6,11 @@ from io import StringIO
 from uuid import uuid4
 
 import pytest
-from httpx import AsyncClient
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import Settings
 from app.db.models import AuditLogEntry
 
 
@@ -177,3 +179,21 @@ async def test_export_audits_csv_uses_backend_filters(
     assert rows[0]["resource_type"] == "triage_item"
     assert rows[0]["actor_id"] == str(actor_id)
     assert "analysis_started" not in response.text
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_get_audits_requires_bearer_token_in_gcip_mode(
+    test_app: FastAPI,
+) -> None:
+    test_app.state.settings = Settings(
+        _env_file=None,
+        auth_mode="gcip",
+        gcip_project_id="pharmaide-test",
+    )
+
+    transport = ASGITransport(app=test_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/audits")
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == {"error": "auth_token_required"}
