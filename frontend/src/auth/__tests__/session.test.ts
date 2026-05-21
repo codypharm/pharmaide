@@ -4,11 +4,16 @@ import { getJson, setAuthTokenProvider } from "../../api/client";
 import { type FrontendConfig } from "../../config";
 import { configureAuthSession } from "../session";
 
-const mocks = vi.hoisted(() => ({
-  createGcipAuthAdapter: vi.fn(() => ({
-    getIdToken: () => "auto-id-token",
-  })),
-}));
+const mocks = vi.hoisted(() => {
+  const adapter = {
+    getIdToken: vi.fn(() => "auto-id-token"),
+  };
+
+  return {
+    adapter,
+    createGcipAuthAdapter: vi.fn(() => adapter),
+  };
+});
 
 vi.mock("../gcip", () => ({
   createGcipAuthAdapter: mocks.createGcipAuthAdapter,
@@ -62,7 +67,7 @@ describe("configureAuthSession", () => {
     const state = configureAuthSession(GCIP_CONFIG);
     await getJson("/treatments");
 
-    expect(state).toEqual({ status: "ready", mode: "gcip" });
+    expect(state).toEqual({ status: "ready", mode: "gcip", adapter: mocks.adapter });
     expect(mocks.createGcipAuthAdapter).toHaveBeenCalledWith(GCIP_CONFIG.gcip);
     expect(fetchSpy.mock.calls[0][1]?.headers).toEqual({
       Authorization: "Bearer auto-id-token",
@@ -71,13 +76,14 @@ describe("configureAuthSession", () => {
 
   it("registers GCIP adapter token provider for API requests", async () => {
     const fetchSpy = mockFetch();
-
-    const state = configureAuthSession(GCIP_CONFIG, {
+    const adapter = {
       getIdToken: () => "id-token-789",
-    });
+    };
+
+    const state = configureAuthSession(GCIP_CONFIG, adapter);
     await getJson("/treatments");
 
-    expect(state).toEqual({ status: "ready", mode: "gcip" });
+    expect(state).toEqual({ status: "ready", mode: "gcip", adapter });
     expect(fetchSpy.mock.calls[0][1]?.headers).toEqual({
       Authorization: "Bearer id-token-789",
     });

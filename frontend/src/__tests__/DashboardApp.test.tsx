@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import DashboardApp from "../DashboardApp";
 import { getJson, setUnauthorizedHandler } from "../api/client";
 
@@ -61,5 +62,45 @@ describe("DashboardApp auth state", () => {
 
     expect(screen.getByRole("alert")).toHaveTextContent("GCIP sign-in is not connected.");
     expect(screen.queryByText("Protected content")).not.toBeInTheDocument();
+  });
+
+  it("shows protected content after GCIP email sign-in succeeds", async () => {
+    const user = userEvent.setup();
+    let signedInEmail: string | null = null;
+    const adapter = {
+      getIdToken: vi.fn(() => (signedInEmail ? "id-token-123" : null)),
+      signInWithEmailPassword: vi.fn(async (email: string) => {
+        signedInEmail = email;
+      }),
+      currentUserEmail: vi.fn(() => signedInEmail),
+    };
+
+    render(
+      <MemoryRouter initialEntries={["/dashboard/protected"]}>
+        <Routes>
+          <Route
+            path="/dashboard"
+            element={
+              <DashboardApp authSessionState={{ status: "ready", mode: "gcip", adapter }} />
+            }
+          >
+            <Route path="protected" element={<div>Protected content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Sign in to PharmaAide")).toBeInTheDocument();
+    expect(screen.queryByText("Protected content")).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/email/i), "pharmacist@example.com");
+    await user.type(screen.getByLabelText(/password/i), "correct-password");
+    await user.click(screen.getByRole("button", { name: /sign in/i }));
+
+    expect(adapter.signInWithEmailPassword).toHaveBeenCalledWith(
+      "pharmacist@example.com",
+      "correct-password",
+    );
+    expect(await screen.findByText("Protected content")).toBeInTheDocument();
   });
 });

@@ -1,8 +1,8 @@
 import { Activity, Bell, ClipboardList, FileText, Flame, Map, Search, ShieldCheck, Plus, ChevronRight } from "lucide-react";
-import { useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { Outlet, NavLink, Link } from "react-router-dom";
 import { UnauthorizedError, setUnauthorizedHandler } from "./api/client";
-import type { AuthSessionState } from "./auth/session";
+import type { AuthSessionState, AuthTokenAdapter } from "./auth/session";
 
 type DashboardAppProps = {
   authSessionState?: AuthSessionState;
@@ -13,12 +13,23 @@ function DashboardApp({
 }: DashboardAppProps) {
   const [isPrivacyMode, setIsPrivacyMode] = useState(false);
   const [authError, setAuthError] = useState<UnauthorizedError | null>(null);
+  const [signedInEmail, setSignedInEmail] = useState(() => currentSessionEmail(authSessionState));
   const hasMissingAuthAdapter = authSessionState.status === "missing_adapter";
+  const interactiveGcipAdapter = authSessionState.status === "ready"
+    && authSessionState.mode === "gcip"
+    && hasInteractiveGcipAuth(authSessionState.adapter)
+    ? authSessionState.adapter
+    : null;
+  const needsGcipSignIn = interactiveGcipAdapter !== null && signedInEmail === null;
 
   useEffect(() => {
     setUnauthorizedHandler(setAuthError);
     return () => setUnauthorizedHandler(null);
   }, []);
+
+  useEffect(() => {
+    setSignedInEmail(currentSessionEmail(authSessionState));
+  }, [authSessionState]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans text-slate-900">
@@ -168,8 +179,12 @@ function DashboardApp({
               <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
             </button>
             <div className="pl-6 border-l border-slate-200 flex items-center gap-3">
-              <span className="text-sm font-semibold text-slate-700">Thomas F.</span>
-              <div className="w-8 h-8 bg-yellow-100 text-yellow-800 rounded-full flex items-center justify-center font-bold text-xs">TF</div>
+              <span className="max-w-48 truncate text-sm font-semibold text-slate-700">
+                {signedInEmail ?? "Thomas F."}
+              </span>
+              <div className="w-8 h-8 bg-yellow-100 text-yellow-800 rounded-full flex items-center justify-center font-bold text-xs">
+                {initialsForUser(signedInEmail)}
+              </div>
             </div>
           </div>
         </header>
@@ -190,11 +205,134 @@ function DashboardApp({
         <div className="flex-1 overflow-hidden">
           {hasMissingAuthAdapter ? (
             <MissingAuthAdapterPanel />
+          ) : needsGcipSignIn ? (
+            <GcipSignInPanel
+              adapter={interactiveGcipAdapter}
+              onSignedIn={(email) => {
+                setAuthError(null);
+                setSignedInEmail(email);
+              }}
+            />
           ) : (
             <Outlet context={{ isPrivacyMode }} />
           )}
         </div>
       </main>
+    </div>
+  );
+}
+
+function hasInteractiveGcipAuth(adapter: AuthTokenAdapter): adapter is AuthTokenAdapter & {
+  signInWithEmailPassword: (email: string, password: string) => Promise<void>;
+} {
+  return typeof adapter.signInWithEmailPassword === "function";
+}
+
+function currentSessionEmail(authSessionState: AuthSessionState): string | null {
+  if (authSessionState.status !== "ready") {
+    return null;
+  }
+
+  return authSessionState.adapter.currentUserEmail?.() ?? null;
+}
+
+function initialsForUser(email: string | null): string {
+  if (!email) {
+    return "TF";
+  }
+
+  return email.slice(0, 2).toUpperCase();
+}
+
+function GcipSignInPanel({
+  adapter,
+  onSignedIn,
+}: {
+  adapter: AuthTokenAdapter & {
+    signInWithEmailPassword: (email: string, password: string) => Promise<void>;
+  };
+  onSignedIn: (email: string | null) => void;
+}) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsSigningIn(true);
+    setErrorMessage(null);
+
+    try {
+      await adapter.signInWithEmailPassword(email.trim(), password);
+      onSignedIn(adapter.currentUserEmail?.() ?? email.trim());
+    } catch {
+      setErrorMessage("Sign-in failed. Check the email and password, then try again.");
+    } finally {
+      setIsSigningIn(false);
+    }
+  }
+
+  return (
+    <div className="h-full overflow-y-auto p-8">
+      <section className="mx-auto max-w-md rounded-xl border border-slate-200 bg-white p-6 text-slate-900">
+        <p className="text-xs font-bold uppercase tracking-wider text-[#5548E8]">
+          Secure access
+        </p>
+        <h2 className="mt-2 text-xl font-bold">Sign in to PharmaAide</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          Use your pharmacist account to access patient workflows.
+        </p>
+
+        <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
+          <label className="block">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              Email
+            </span>
+            <input
+              autoComplete="email"
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition-colors focus:border-[#5548E8] focus:ring-2 focus:ring-[#D9D5FB]"
+              name="email"
+              onChange={(event) => setEmail(event.target.value)}
+              required
+              type="email"
+              value={email}
+            />
+          </label>
+
+          <label className="block">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              Password
+            </span>
+            <input
+              autoComplete="current-password"
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition-colors focus:border-[#5548E8] focus:ring-2 focus:ring-[#D9D5FB]"
+              name="password"
+              onChange={(event) => setPassword(event.target.value)}
+              required
+              type="password"
+              value={password}
+            />
+          </label>
+
+          {errorMessage ? (
+            <div
+              className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-slate-800"
+              role="alert"
+            >
+              {errorMessage}
+            </div>
+          ) : null}
+
+          <button
+            className="w-full rounded-lg bg-[#5548E8] px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#463AD4] disabled:cursor-not-allowed disabled:bg-slate-300"
+            disabled={isSigningIn}
+            type="submit"
+          >
+            {isSigningIn ? "Signing in..." : "Sign in"}
+          </button>
+        </form>
+      </section>
     </div>
   );
 }

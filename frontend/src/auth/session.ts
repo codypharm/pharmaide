@@ -4,11 +4,14 @@ import { createGcipAuthAdapter } from "./gcip";
 
 export type AuthSessionState =
   | { status: "disabled" }
-  | { status: "ready"; mode: "gcip" }
+  | { status: "ready"; mode: "gcip"; adapter: AuthTokenAdapter }
   | { status: "missing_adapter"; mode: "gcip" };
 
 export type AuthTokenAdapter = {
   getIdToken: () => Promise<string | null> | string | null;
+  signInWithEmailPassword?: (email: string, password: string) => Promise<void>;
+  signOut?: () => Promise<void>;
+  currentUserEmail?: () => string | null;
 };
 
 export function configureAuthSession(
@@ -26,5 +29,5 @@ export function configureAuthSession(
   }
 
   setAuthTokenProvider(() => adapter.getIdToken());
-  return { status: "ready", mode: "gcip" };
+  return { status: "ready", mode: "gcip", adapter };
 }
