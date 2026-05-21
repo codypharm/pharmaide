@@ -79,6 +79,7 @@ class GoldQuery:
     query: str
     expected_name: str
     relevant_names: frozenset[str]
+    relevance_source: str
 
 
 @dataclass(frozen=True)
@@ -86,6 +87,7 @@ class LiveQueryResult:
     query: str
     expected_name: str
     relevant_names: tuple[str, ...]
+    relevance_source: str
     retrieved: tuple["LiveRetrievedCitation", ...]
 
     @property
@@ -112,6 +114,145 @@ class LiveRetrievedCitation:
     score: float
     document_title: str
     source_uri: str
+
+
+@dataclass(frozen=True)
+class CuratedRelevanceGroup:
+    query: str
+    expected_name: str
+    relevant_names: frozenset[str]
+
+
+CURATED_RELEVANCE_GROUPS = (
+    CuratedRelevanceGroup(
+        query="metronidazole flagyl tablets or suspension",
+        expected_name="Flagyl 500mg Metronidazole",
+        relevant_names=frozenset(
+            {
+                "Flagyl 500mg Metronidazole",
+                "Flagyl 125mg/5ml Metronidazole Pediatric Intestinal Antiseptic Suspension",
+            }
+        ),
+    ),
+    CuratedRelevanceGroup(
+        query="amoxicillin clavulanic acid augmentin antibiotic",
+        expected_name="Augmentin 875mg Amoxicillin & 125mg Clavulanic Acid",
+        relevant_names=frozenset(
+            {
+                "Augmentin 875mg Amoxicillin & 125mg Clavulanic Acid",
+                "Augmentin 500mg Amoxycillin & 125mg Clavulanic Acid",
+                "Augmentin 400mg/5ml Amoxicillin & 57mg/5ml Clavulanic Acid "
+                "Oral Suspension Powder Mixed Fruits Flavor",
+                "Augmentin ES-600 652.78mg Amoxicillin & 50.41mg Clavulanic Acid "
+                "Oral Suspension Powder Strawberry Cream Flavor",
+                "Augmentin 156mg/5ml Amoxicilin & Clavulanic Acid Oral Suspension Powder",
+                "Augmentin with 400mg/5ml Amoxicillin & 57mg/5ml Clavulanic Acid "
+                "Oral Suspension Powder Strawberry Flavor",
+                "Augmentin 312.5mg/5ml Amoxicillin & Clavulanic Acid Oral Suspension Powder",
+            }
+        ),
+    ),
+    CuratedRelevanceGroup(
+        query="paracetamol medicine for pain and fever",
+        expected_name="Panadol Advance 500mg Paracetamol for Pain & Fever Relief",
+        relevant_names=frozenset(
+            {
+                "Doliprane 1000mg Paracetamol for Pain Relief & Fever",
+                "Doliprane 1000mg Paracetamol Pain & Fever Treatment",
+                "Panadol Cold & Flu 500mg Paracetamol Day Pain Relief",
+                "Panadol Advance 500mg Paracetamol for Pain & Fever Relief",
+                "Cetal 250mg/5ml Paracetamol Analgesic & Antipyretic",
+                "Cetal 500mg Paracetamol Analgesic & Antipyretic",
+                "Adol 500mg Paracetamol Fever & Pain Relief",
+                "Paracetamol 500mg Analgesic & Antipyretic",
+                "Stopadol 500mg Paracetamol for Pain Relief & Fever",
+                "Paramol 500mg Paracetamol",
+            }
+        ),
+    ),
+    CuratedRelevanceGroup(
+        query="fexofenadine non drowsy antihistamine",
+        expected_name="Telfast 180mg Fexofenadine HCl Antihistamine",
+        relevant_names=frozenset(
+            {
+                "Telfast 180mg Fexofenadine HCl Antihistamine",
+                "Telfast 120mg Fexofenadine HCI Non-Drowsy Antihistamine",
+                "Telfast 30mg/5ml Fexofenadine Hydrochloride Non-Drowsy "
+                "Antihistamine Raspberry Flavor",
+            }
+        ),
+    ),
+    CuratedRelevanceGroup(
+        query="ibuprofen brufen pain fever inflammation",
+        expected_name="Brufen 400mg Ibuprofen",
+        relevant_names=frozenset(
+            {
+                "Brufen 100mg/5ml Ibuprofen Syrup Orange Flavor for Children (3+ Months)",
+                "Brufen 600mg Ibuprofen for Reducing Fever, Relieving Pain & "
+                "Treating Inflammations",
+                "Brufen 400mg Ibuprofen",
+                "Brufen 200mg Ibuprofen",
+                "Brufen 600mg Ibuprofen Analgesic, Anti-Inflammatory & Antipyretic "
+                "Effervescent Granule Sachets Orange Flavor",
+                "Brufen Retard 800mg Ibuprofen Anti-Inflammatory & Analgesic",
+            }
+        ),
+    ),
+    CuratedRelevanceGroup(
+        query="xylometazoline otrivin nasal drops congestion",
+        expected_name="Otrivin 0.1% Xylometazoline HCL Moisturizing Nasal Drops for Adults",
+        relevant_names=frozenset(
+            {
+                "Otrivin 0.1% Xylometazoline HCL Moisturizing Nasal Drops for Adults",
+                "Otrivin Child 0.05% Xylometazoline HCL Nasal Drops (1-11 Years)",
+            }
+        ),
+    ),
+    CuratedRelevanceGroup(
+        query="pantoprazole controloc gastro resistant",
+        expected_name="Controloc 40mg Pantoprazole Sodium Sesquihydrate Gastro-Resistant",
+        relevant_names=frozenset(
+            {
+                "Controloc 40mg Pantoprazole Sodium Sesquihydrate Gastro-Resistant",
+                "Controloc 20mg Pantoprazole Sodium Sesquihydrate",
+                "Controloc 42.3mg Pantoprazole Sodium Powder Vial for Intravenous "
+                "Injection Solution",
+            }
+        ),
+    ),
+    CuratedRelevanceGroup(
+        query="cerave cleanser dry skin ceramides hyaluronic acid",
+        expected_name=(
+            "CeraVe Hypoallergenic Hydrating Face & Body Cleanser with Ceramides & "
+            "Hyaluronic Acid for Normal to Dry Skin - fragrance free"
+        ),
+        relevant_names=frozenset(
+            {
+                "CeraVe Hypoallergenic Hydrating Face & Body Cleanser with Ceramides & "
+                "Hyaluronic Acid for Normal to Dry Skin - fragrance free",
+                "CeraVe Hypoallergenic SA Smoothing Facial Cleanser with Ceramides, "
+                "Salicylic & Hyaluronic Acid for Dry, Rough & Bumpy Skin - fragrance "
+                "free, non comedogenic",
+                "CeraVe Hypoallergenic Foaming Facial Gel Cleanser with Ceramides & "
+                "Hyaluronic Acid for Normal to Oily Skin - fragrance free",
+                "CeraVe Hypoallergenic SA Smoothing & Exfoliating Gel Facial Cleanser "
+                "with Ceramides, Salicylic & Hyaluronic Acid for Dry, Rough & Bumpy "
+                "Skin - non comedogenic, fragrance free",
+            }
+        ),
+    ),
+    CuratedRelevanceGroup(
+        query="diclofenac potassium anti inflammatory analgesic",
+        expected_name="Catafast 50mg Diclofenac Potassium Granules Analgesic & Anti-Inflammatory",
+        relevant_names=frozenset(
+            {
+                "Catafast 50mg Diclofenac Potassium Granules Analgesic & Anti-Inflammatory",
+                "Cataflam 50mg Diclofenac Potassium Anti-Inflammatory & Analgesic",
+                "Cataflam 75mg Diclofenac Potassium Ampoules",
+            }
+        ),
+    ),
+)
 
 
 @pytest.mark.skipif(
@@ -227,6 +368,7 @@ async def _evaluate_live_query(
         query=gold_query.query,
         expected_name=gold_query.expected_name,
         relevant_names=tuple(sorted(gold_query.relevant_names)),
+        relevance_source=gold_query.relevance_source,
         retrieved=retrieved,
     )
 
@@ -245,10 +387,9 @@ def _cached_query_embedder(
 
 def _generated_gold_queries(limit: int) -> list[GoldQuery]:
     segments = parse_csv_segments(PRODUCTS_CSV.read_bytes(), title="products.csv")
-    product_names = [_product_name(segment) for segment in segments if _product_name(segment)]
-    related_names_by_product = _related_names_by_product(product_names)
-    queries: list[GoldQuery] = []
-    seen_names: set[str] = set()
+    available_names = frozenset(_product_names(segments))
+    queries = _curated_gold_queries(available_names, limit=limit)
+    seen_names = {query.expected_name for query in queries}
     for segment in segments:
         name = _product_name(segment)
         if not name or name in seen_names:
@@ -260,10 +401,45 @@ def _generated_gold_queries(limit: int) -> list[GoldQuery]:
             GoldQuery(
                 query=query,
                 expected_name=name,
-                relevant_names=related_names_by_product[name],
+                relevant_names=frozenset({name}),
+                relevance_source="exact_product",
             )
         )
         seen_names.add(name)
+        if len(queries) >= limit:
+            return queries
+    return queries
+
+
+def _product_names(segments: Sequence[TextSegment]) -> list[str]:
+    names: list[str] = []
+    seen: set[str] = set()
+    for segment in segments:
+        name = _product_name(segment)
+        if name and name not in seen:
+            names.append(name)
+            seen.add(name)
+    return names
+
+
+def _curated_gold_queries(
+    available_names: frozenset[str],
+    *,
+    limit: int,
+) -> list[GoldQuery]:
+    queries: list[GoldQuery] = []
+    for group in CURATED_RELEVANCE_GROUPS:
+        relevant_names = group.relevant_names & available_names
+        if group.expected_name not in available_names or not relevant_names:
+            continue
+        queries.append(
+            GoldQuery(
+                query=group.query,
+                expected_name=group.expected_name,
+                relevant_names=relevant_names,
+                relevance_source="curated",
+            )
+        )
         if len(queries) >= limit:
             return queries
     return queries
@@ -279,62 +455,41 @@ def _query_from_product_name(name: str) -> str:
     return " ".join(selected[:8]) or name
 
 
-def _related_names_by_product(product_names: Sequence[str]) -> dict[str, frozenset[str]]:
-    token_sets = {name: _relevance_tokens(name) for name in product_names}
-    return {
-        name: frozenset(
-            candidate
-            for candidate, candidate_tokens in token_sets.items()
-            if _products_are_related(tokens, candidate_tokens)
-        )
-        for name, tokens in token_sets.items()
-    }
-
-
-def _relevance_tokens(name: str) -> frozenset[str]:
-    tokens = re.findall(r"[a-z0-9]+", name.lower())
-    return frozenset(
-        token
-        for token in tokens
-        if token not in STOPWORDS and (len(token) > 2 or any(char.isdigit() for char in token))
-    )
-
-
-def _products_are_related(
-    left: frozenset[str],
-    right: frozenset[str],
-) -> bool:
-    shared = left & right
-    if len(shared) >= 2:
-        return True
-    return len(shared) == 1 and any(any(char.isdigit() for char in token) for token in shared)
-
-
 def _live_metrics_summary(
     results: Sequence[LiveQueryResult],
     *,
     chunk_count: int,
 ) -> dict[str, float | int]:
+    curated_results = [result for result in results if result.relevance_source == "curated"]
     return {
         "query_count": len(results),
+        "curated_query_count": len(curated_results),
         "chunk_count": chunk_count,
         "hit_rate_at_5": round(_exact_hit_rate(results), 4),
         "related_hit_rate_at_5": round(_related_hit_rate(results), 4),
         "mrr": round(_mean_reciprocal_rank(results), 4),
         "precision_at_5": round(_mean_precision(results), 4),
         "recall_at_5": round(_mean_recall(results), 4),
+        "curated_precision_at_5": round(_mean_precision(curated_results), 4),
+        "curated_recall_at_5": round(_mean_recall(curated_results), 4),
     }
 
 
 def _exact_hit_rate(results: Sequence[LiveQueryResult]) -> float:
+    if not results:
+        return 0.0
     return sum(result.first_exact_rank is not None for result in results) / len(results)
 
 
 def _related_hit_rate(results: Sequence[LiveQueryResult]) -> float:
+    if not results:
+        return 0.0
     return sum(result.first_related_rank is not None for result in results) / len(results)
 
 
 def _mean_reciprocal_rank(results: Sequence[LiveQueryResult]) -> float:
+    if not results:
+        return 0.0
     return sum(_reciprocal_rank(result) for result in results) / len(results)
 
 
@@ -345,6 +500,8 @@ def _reciprocal_rank(result: LiveQueryResult) -> float:
 
 
 def _mean_precision(results: Sequence[LiveQueryResult]) -> float:
+    if not results:
+        return 0.0
     return (
         sum(
             sum(citation.related_match for citation in result.retrieved) / TOP_K
@@ -355,6 +512,8 @@ def _mean_precision(results: Sequence[LiveQueryResult]) -> float:
 
 
 def _mean_recall(results: Sequence[LiveQueryResult]) -> float:
+    if not results:
+        return 0.0
     return (
         sum(
             min(
@@ -385,6 +544,7 @@ def _live_report_payload(
     return {
         "dataset": "existing ingested products.csv",
         "mode": "live_embedding_existing_vectors",
+        "relevance_mode": "curated_groups_plus_exact_product_fallback",
         "k": TOP_K,
         "thresholds": {
             "hit_rate_at_5": _threshold(
@@ -407,6 +567,7 @@ def _live_report_payload(
             {
                 "query": result.query,
                 "expected": result.expected_name,
+                "relevance_source": result.relevance_source,
                 "related_expected": list(result.relevant_names),
                 "first_exact_rank": result.first_exact_rank,
                 "first_related_rank": result.first_related_rank,
@@ -464,6 +625,7 @@ def _render_live_html(payload: dict[str, object]) -> str:
             "      <p class=\"eyebrow\">Live RAG Evaluation</p>",
             "      <h1>Products retrieval quality</h1>",
             f"      <p>{escape(str(payload['dataset']))} · {escape(str(payload['mode']))}</p>",
+            f"      <p>{escape(str(payload['relevance_mode']).replace('_', ' '))}</p>",
             "    </header>",
             f"    {_summary_cards(summary)}",
             f"    {_summary_bar_chart(summary)}",
@@ -495,6 +657,8 @@ def _summary_bar_chart(summary: dict[object, object]) -> str:
         "mrr",
         "precision_at_5",
         "recall_at_5",
+        "curated_precision_at_5",
+        "curated_recall_at_5",
     ]
     rows = []
     for key in metric_keys:
@@ -537,7 +701,7 @@ def _query_result_table(queries: list[object]) -> str:
         "<h2>Query results</h2>"
         "<table>"
         "<thead>"
-        "<tr><th>Query</th><th>Expected</th><th>Exact Rank</th><th>Related Rank</th>"
+        "<tr><th>Query</th><th>Source</th><th>Expected</th><th>Exact Rank</th><th>Related Rank</th>"
         "<th>Top Result</th></tr>"
         "</thead>"
         f"<tbody>{rows}</tbody>"
@@ -558,6 +722,7 @@ def _query_row(query: object) -> str:
     return (
         f"<tr class=\"{class_name}\">"
         f"<td>{escape(str(query['query']))}</td>"
+        f"<td>{escape(str(query['relevance_source']).replace('_', ' '))}</td>"
         f"<td>{escape(str(query['expected']))}</td>"
         f"<td>{escape(str(exact_rank))}</td>"
         f"<td>{escape(str(related_rank))}</td>"
