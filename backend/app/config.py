@@ -30,6 +30,11 @@ class Settings(BaseSettings):
 
     log_mode: Literal["console", "json"] = "console"
 
+    # disabled keeps local/dev compatibility with X-Pharmaide-User-Id.
+    # gcip requires Authorization: Bearer <Firebase/GCIP ID token>.
+    auth_mode: Literal["disabled", "gcip"] = "disabled"
+    gcip_project_id: str | None = None
+
     rxnorm_base_url: str = "https://rxnav.nlm.nih.gov/REST"
 
     openai_api_key: SecretStr | None = None
@@ -146,6 +151,13 @@ class Settings(BaseSettings):
         """OIDC internal worker auth needs the expected token audience."""
         if self.internal_worker_auth == "oidc" and not self.internal_worker_audience:
             raise ValueError("oidc internal worker auth requires an audience")
+        return self
+
+    @model_validator(mode="after")
+    def require_gcip_project_id(self) -> "Settings":
+        """GCIP mode needs the project id used as the Firebase token audience."""
+        if self.auth_mode == "gcip" and not self.gcip_project_id:
+            raise ValueError("gcip auth mode requires a GCIP project id")
         return self
 
 

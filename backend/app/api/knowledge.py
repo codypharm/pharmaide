@@ -7,13 +7,14 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field, SecretStr
 from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.agents.knowledge_sources.user_upload import UserUploadSource
+from app.auth import get_current_actor_id
 from app.config import Settings, get_settings
 from app.db.engine import get_session, get_session_factory
 from app.db.models import AuditLogEntry, KnowledgeChunk, KnowledgeDocument
@@ -25,7 +26,7 @@ from app.services.kb_scope import GLOBAL_DAILYMED_SCOPE_ID
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 SessionFactoryDep = Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
-ActorDep = Annotated[UUID, Header(alias="X-Pharmaide-User-Id")]
+ActorDep = Annotated[UUID, Depends(get_current_actor_id)]
 
 ALLOWED_MIME_TYPES = {
     "application/pdf",

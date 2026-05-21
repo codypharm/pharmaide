@@ -22,6 +22,8 @@ Required for staging:
 - `PHARMAIDE_OPENAI_API_KEY`: OpenAI key for agents, embeddings, and interim
   model safety checks.
 - `PHARMAIDE_CORS_ALLOWED_ORIGINS`: comma-separated deployed frontend origins.
+- `PHARMAIDE_AUTH_MODE=gcip`: require GCIP/Firebase ID tokens.
+- `PHARMAIDE_GCIP_PROJECT_ID`: GCIP/Firebase project ID used as token audience.
 - `PHARMAIDE_LOG_MODE=json`: structured logs for Cloud Run.
 - `PHARMAIDE_DEBUG_ROUTES_ENABLED=false`: debug graph route must stay unmounted.
 - `PHARMAIDE_RXNORM_BASE_URL=https://rxnav.nlm.nih.gov/REST`.
@@ -121,8 +123,8 @@ Safety settings:
 
 ## Current Deployment Blockers
 
-- GCIP authentication is not integrated. `X-Pharmaide-User-Id` remains
-  development scaffolding.
+- GCIP backend token verification scaffold exists, but frontend login and
+  route-by-route enforcement are not complete.
 - Workspace/clinic scoping is not yet derived from authenticated membership.
 - Knowledge upload source files still use local disk storage.
 - Private Llama Guard / AgentDoG deployment is not yet live.
