@@ -8,7 +8,7 @@ here — the service owns the transaction; this module owns HTTP semantics
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIResponsesModel
@@ -48,6 +48,7 @@ from app.api.schemas import (
     TreatmentView,
     TriageReason,
 )
+from app.auth import CurrentActor, get_current_actor
 from app.config import Settings, get_settings
 from app.db.engine import get_session, get_session_factory
 from app.services import task_runner
@@ -142,8 +143,9 @@ from app.services.treatments import (
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 SessionFactoryDep = Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
+ActorDep = Annotated[CurrentActor, Depends(get_current_actor)]
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_actor)])
 
 
 @router.post(
@@ -155,7 +157,7 @@ async def post_treatment(
     body: CreateTreatmentRequest,
     session_factory: SessionFactoryDep,
     settings: SettingsDep,
-    user_id: Annotated[str, Header(alias="X-Pharmaide-User-Id", min_length=1)] = "anonymous",
+    actor: ActorDep,
 ) -> CreateTreatmentResponse:
     try:
         # Create the treatment and reserve its first analysis in one request
@@ -174,7 +176,7 @@ async def post_treatment(
             settings,
             analysis_id,
             timeout_seconds=timeout_seconds,
-            user_id=user_id,
+            user_id=str(actor.actor_id),
         )
     except task_runner.RateLimitExceeded:
         await mark_analysis_failed(session_factory, analysis_id, "analysis_rate_limited")
@@ -604,7 +606,7 @@ async def post_patient_reply_draft(
     body: PatientReplyDraftCreate,
     session_factory: SessionFactoryDep,
     settings: SettingsDep,
-    user_id: Annotated[str, Header(alias="X-Pharmaide-User-Id", min_length=1)] = "anonymous",
+    actor: ActorDep,
 ) -> ConversationTurnView:
     try:
         async with session_factory() as session, session.begin():
@@ -626,7 +628,7 @@ async def post_patient_reply_draft(
             interaction_evidence_retriever = build_patient_interaction_evidence_retriever(
                 session,
                 openai_api_key=settings.openai_api_key,
-                kb_scope_id=_parse_optional_uuid(user_id),
+                kb_scope_id=actor.actor_id,
             )
             draft = await draft_patient_reply_for_treatment(
                 session,
@@ -669,9 +671,9 @@ async def post_treatment_analysis(
     treatment_id: UUID,
     session_factory: SessionFactoryDep,
     settings: SettingsDep,
+    actor: ActorDep,
     timeout: Annotated[int | None, Query(gt=0, le=300)] = None,
     force: bool = False,
-    user_id: Annotated[str, Header(alias="X-Pharmaide-User-Id", min_length=1)] = "anonymous",
 ) -> AnalyzeTreatmentResponse:
     try:
         # Commit the pending row before scheduling. Otherwise the background
@@ -689,7 +691,7 @@ async def post_treatment_analysis(
             settings,
             analysis_id,
             timeout_seconds=timeout_seconds,
-            user_id=user_id,
+            user_id=str(actor.actor_id),
         )
     except task_runner.RateLimitExceeded as exc:
         await mark_analysis_failed(session_factory, analysis_id, "analysis_rate_limited")

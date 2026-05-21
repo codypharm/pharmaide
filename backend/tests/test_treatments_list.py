@@ -7,9 +7,11 @@ can render a queue/feed view without per-row roundtrips.
 from datetime import UTC, datetime
 
 import pytest
-from httpx import AsyncClient
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import Settings
 from app.db.models import Treatment
 from app.services import task_runner
 
@@ -167,3 +169,21 @@ async def test_list_returns_empty_items_when_no_treatments(app_client: AsyncClie
         "completed_count": 0,
         "archived_count": 0,
     }
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_list_treatments_requires_bearer_token_in_gcip_mode(
+    test_app: FastAPI,
+) -> None:
+    test_app.state.settings = Settings(
+        _env_file=None,
+        auth_mode="gcip",
+        gcip_project_id="pharmaide-test",
+    )
+
+    transport = ASGITransport(app=test_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/treatments")
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == {"error": "auth_token_required"}

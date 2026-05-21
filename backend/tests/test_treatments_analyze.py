@@ -102,17 +102,17 @@ async def test_post_treatment_analyze_starts_analysis(
     assert len(scheduled) == 1
     assert scheduled[0][0].name == "analysis.run"
     assert scheduled[0][0].idempotency_key == f"analysis:{analysis_id}"
-    assert scheduled[0][0].payload == {
-        "analysis_id": str(analysis_id),
-        "timeout_seconds": 60,
-        "kb_scope_id": None,
-    }
+    payload = scheduled[0][0].payload
+    assert payload["analysis_id"] == str(analysis_id)
+    assert payload["timeout_seconds"] == 60
+    assert payload["kb_scope_id"] is not None
+    kb_scope_id = UUID(str(payload["kb_scope_id"]))
     assert scheduled[0][2][1] == analysis_id
     assert scheduled[0][2][2] == 60
     assert scheduled[0][3]["checkpoint_db_path"] == "./pharmaide.db"
     assert scheduled[0][3]["rxnorm_base_url"] == "https://rxnav.nlm.nih.gov/REST"
     assert "openai_api_key" in scheduled[0][3]
-    assert scheduled[0][3]["kb_scope_id"] is None
+    assert scheduled[0][3]["kb_scope_id"] == kb_scope_id
 
 
 @pytest.mark.usefixtures("postgres_container")
