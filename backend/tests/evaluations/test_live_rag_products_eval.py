@@ -350,16 +350,34 @@ def _live_metrics_summary(
 ) -> dict[str, float | int]:
     curated_results = [result for result in results if result.relevance_source == "curated"]
     return {
-        "query_count": len(results),
         "curated_query_count": len(curated_results),
         "chunk_count": chunk_count,
+        **_metrics_for_results(results),
+        "curated_precision_at_5": round(_mean_precision(curated_results), 4),
+        "curated_recall_at_5": round(_mean_recall(curated_results), 4),
+    }
+
+
+def _metrics_for_results(results: Sequence[LiveQueryResult]) -> dict[str, float | int]:
+    return {
+        "query_count": len(results),
         "hit_rate_at_5": round(_exact_hit_rate(results), 4),
         "related_hit_rate_at_5": round(_related_hit_rate(results), 4),
         "mrr": round(_mean_reciprocal_rank(results), 4),
         "strict_precision_at_5": round(_mean_precision(results), 4),
         "recall_at_5": round(_mean_recall(results), 4),
-        "curated_precision_at_5": round(_mean_precision(curated_results), 4),
-        "curated_recall_at_5": round(_mean_recall(curated_results), 4),
+    }
+
+
+def _metrics_by_relevance_type(
+    results: Sequence[LiveQueryResult],
+) -> dict[str, dict[str, float | int]]:
+    grouped_results: dict[str, list[LiveQueryResult]] = {}
+    for result in results:
+        grouped_results.setdefault(result.relevance_type, []).append(result)
+    return {
+        relevance_type: _metrics_for_results(group_results)
+        for relevance_type, group_results in sorted(grouped_results.items())
     }
 
 
@@ -450,6 +468,7 @@ def _live_report_payload(
             ),
         },
         "summary": summary,
+        "metrics_by_relevance_type": _metrics_by_relevance_type(results),
         "rank_distribution": _rank_distribution(results),
         "queries": [
             {
@@ -492,9 +511,11 @@ def _rank_distribution(results: Sequence[LiveQueryResult]) -> dict[str, int]:
 
 def _render_live_html(payload: dict[str, object]) -> str:
     summary = payload["summary"]
+    metrics_by_relevance_type = payload["metrics_by_relevance_type"]
     rank_distribution = payload["rank_distribution"]
     queries = payload["queries"]
     assert isinstance(summary, dict)
+    assert isinstance(metrics_by_relevance_type, dict)
     assert isinstance(rank_distribution, dict)
     assert isinstance(queries, list)
     return "\n".join(
@@ -519,6 +540,7 @@ def _render_live_html(payload: dict[str, object]) -> str:
             f"    {_summary_cards(summary)}",
             f"    {_metric_notes()}",
             f"    {_summary_bar_chart(summary)}",
+            f"    {_relevance_type_metrics_table(metrics_by_relevance_type)}",
             f"    {_rank_distribution_chart(rank_distribution)}",
             f"    {_query_result_table(queries)}",
             "  </main>",
@@ -582,6 +604,39 @@ def _rank_distribution_chart(rank_distribution: dict[object, object]) -> str:
         "<h2>First exact result rank</h2>"
         f"{''.join(rows)}"
         "</section>"
+    )
+
+
+def _relevance_type_metrics_table(metrics_by_relevance_type: dict[object, object]) -> str:
+    rows = "".join(
+        _relevance_type_metrics_row(relevance_type, metrics)
+        for relevance_type, metrics in metrics_by_relevance_type.items()
+    )
+    return (
+        "<section class=\"query\">"
+        "<h2>Metrics by relevance type</h2>"
+        "<table>"
+        "<thead>"
+        "<tr><th>Type</th><th>Queries</th><th>Hit@5</th><th>MRR</th>"
+        "<th>Strict Precision@5</th><th>Recall@5</th></tr>"
+        "</thead>"
+        f"<tbody>{rows}</tbody>"
+        "</table>"
+        "</section>"
+    )
+
+
+def _relevance_type_metrics_row(relevance_type: object, metrics: object) -> str:
+    assert isinstance(metrics, dict)
+    return (
+        "<tr>"
+        f"<td>{escape(str(relevance_type).replace('_', ' '))}</td>"
+        f"<td>{escape(str(metrics['query_count']))}</td>"
+        f"<td>{escape(str(metrics['hit_rate_at_5']))}</td>"
+        f"<td>{escape(str(metrics['mrr']))}</td>"
+        f"<td>{escape(str(metrics['strict_precision_at_5']))}</td>"
+        f"<td>{escape(str(metrics['recall_at_5']))}</td>"
+        "</tr>"
     )
 
 
