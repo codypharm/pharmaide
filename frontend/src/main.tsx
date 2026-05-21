@@ -3,10 +3,10 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import { configureAuthSession } from "./auth/session";
 
-configureAuthSession();
+const authSessionState = configureAuthSession();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App />
+    <App authSessionState={authSessionState} />
   </StrictMode>,
 );

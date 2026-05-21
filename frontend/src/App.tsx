@@ -12,15 +12,22 @@ import NewTreatmentPage from "./pages/NewTreatmentPage";
 import IngestionsPage from "./pages/IngestionsPage";
 import TreatmentDetailPage from "./pages/TreatmentDetailPage";
 import PharmacistProfilePage from "./pages/PharmacistProfilePage";
+import type { AuthSessionState } from "./auth/session";
 import "./styles.css";
 
-function App() {
+type AppProps = {
+  authSessionState?: AuthSessionState;
+};
+
+const DEFAULT_AUTH_SESSION: AuthSessionState = { status: "disabled" };
+
+function App({ authSessionState = DEFAULT_AUTH_SESSION }: AppProps) {
   return (
     <BrowserRouter>
       <Toaster position="top-right" richColors closeButton expand />
       <Routes>
         <Route path="/" element={<LandingPage />} />
-        <Route path="/dashboard" element={<DashboardApp />}>
+        <Route path="/dashboard" element={<DashboardApp authSessionState={authSessionState} />}>
           <Route path="triage" element={<TriageQueuePage />} />
           <Route path="surveillance" element={<PatientManagementPage />} />
           <Route path="heatmaps" element={<AdherenceHeatmapsPage />} />

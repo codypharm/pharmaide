@@ -2,10 +2,18 @@ import { Activity, Bell, ClipboardList, FileText, Flame, Map, Search, ShieldChec
 import { useEffect, useState } from "react";
 import { Outlet, NavLink, Link } from "react-router-dom";
 import { UnauthorizedError, setUnauthorizedHandler } from "./api/client";
+import type { AuthSessionState } from "./auth/session";
 
-function DashboardApp() {
+type DashboardAppProps = {
+  authSessionState?: AuthSessionState;
+};
+
+function DashboardApp({
+  authSessionState = { status: "disabled" },
+}: DashboardAppProps) {
   const [isPrivacyMode, setIsPrivacyMode] = useState(false);
   const [authError, setAuthError] = useState<UnauthorizedError | null>(null);
+  const hasMissingAuthAdapter = authSessionState.status === "missing_adapter";
 
   useEffect(() => {
     setUnauthorizedHandler(setAuthError);
@@ -180,9 +188,33 @@ function DashboardApp() {
         )}
 
         <div className="flex-1 overflow-hidden">
-          <Outlet context={{ isPrivacyMode }} />
+          {hasMissingAuthAdapter ? (
+            <MissingAuthAdapterPanel />
+          ) : (
+            <Outlet context={{ isPrivacyMode }} />
+          )}
         </div>
       </main>
+    </div>
+  );
+}
+
+function MissingAuthAdapterPanel() {
+  return (
+    <div className="h-full overflow-y-auto p-8">
+      <section
+        role="alert"
+        className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-slate-900"
+      >
+        <p className="text-xs font-bold uppercase tracking-wider text-amber-700">
+          Sign-in setup required
+        </p>
+        <h2 className="mt-2 text-xl font-bold">GCIP sign-in is not connected.</h2>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-700">
+          Browser auth is set to GCIP, but the frontend sign-in adapter is not wired yet.
+          Complete the GCIP adapter before using protected dashboard workflows.
+        </p>
+      </section>
     </div>
   );
 }

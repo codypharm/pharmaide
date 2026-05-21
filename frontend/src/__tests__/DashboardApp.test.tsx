@@ -42,4 +42,24 @@ describe("DashboardApp auth state", () => {
     );
     expect(screen.getByText(/req_auth_123/i)).toBeInTheDocument();
   });
+
+  it("blocks protected content when GCIP is enabled without a sign-in adapter", () => {
+    render(
+      <MemoryRouter initialEntries={["/dashboard/protected"]}>
+        <Routes>
+          <Route
+            path="/dashboard"
+            element={
+              <DashboardApp authSessionState={{ status: "missing_adapter", mode: "gcip" }} />
+            }
+          >
+            <Route path="protected" element={<div>Protected content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("GCIP sign-in is not connected.");
+    expect(screen.queryByText("Protected content")).not.toBeInTheDocument();
+  });
 });

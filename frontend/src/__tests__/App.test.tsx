@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
@@ -81,15 +81,17 @@ describe("PharmaAide app shell", () => {
     expect(screen.getAllByText("88340000").length).toBeGreaterThan(0);
   });
 
-  it("blurs patient names when privacy mode is toggled on", async () => {
+  it("hides patient names when privacy mode is toggled on", async () => {
     const user = await openDashboard();
     await user.click(screen.getByRole("link", { name: /^surveillance$/i }));
 
-    const name = await screen.findByText("Thomas Miller");
-    expect(name.className).not.toMatch(/blur-sm/);
+    expect(await screen.findByText("Thomas Miller")).toBeTruthy();
 
     await user.click(screen.getByLabelText("Privacy Mode"));
 
-    expect(name.className).toMatch(/blur-sm/);
+    await waitFor(() => {
+      expect(screen.getAllByText("Patient hidden").length).toBeGreaterThan(0);
+    });
+    expect(screen.queryByText("Thomas Miller")).not.toBeInTheDocument();
   });
 });
