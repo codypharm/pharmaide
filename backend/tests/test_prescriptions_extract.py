@@ -4,7 +4,8 @@ import json
 from uuid import UUID
 
 import pytest
-from httpx import AsyncClient
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 from pydantic import SecretStr
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage, ModelResponse, ToolCallPart
@@ -16,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.extraction_schemas import ExtractedPrescription
 from app.api.prescriptions import build_configured_extraction_agent, get_extraction_agent
+from app.config import Settings
 from app.db.models import AuditLogEntry
 
 
@@ -119,6 +121,27 @@ async def test_extract_prescription_rejects_invalid_upload_and_audits_failure(
     assert audit.payload["error"] == "unsupported_image_type"
     assert audit.payload["declared_mime"] == "image/png"
     assert audit.payload["size_bytes"] == len(b"not an image")
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_extract_prescription_requires_bearer_token_in_gcip_mode(
+    test_app: FastAPI,
+) -> None:
+    test_app.state.settings = Settings(
+        _env_file=None,
+        auth_mode="gcip",
+        gcip_project_id="pharmaide-test",
+    )
+
+    transport = ASGITransport(app=test_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/prescriptions/extract",
+            files={"file": ("script.png", b"\x89PNG\r\n\x1a\nfake-body", "image/png")},
+        )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == {"error": "auth_token_required"}
 
 
 def _agent_with_output(output: dict[str, object]) -> Agent[None, ExtractedPrescription]:

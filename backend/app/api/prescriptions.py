@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.extraction import build_extraction_agent, extract_prescription_image
 from app.agents.extraction_schemas import ExtractedPrescription
+from app.auth import get_current_actor
 from app.config import Settings, get_settings
 from app.db.engine import get_session
 from app.db.models import AuditLogEntry
@@ -43,7 +44,7 @@ def build_configured_extraction_agent(
 
 ExtractionAgentDep = Annotated[Agent[None, ExtractedPrescription], Depends(get_extraction_agent)]
 
-router = APIRouter(prefix="/prescriptions")
+router = APIRouter(prefix="/prescriptions", dependencies=[Depends(get_current_actor)])
 
 
 @router.post(
