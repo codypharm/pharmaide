@@ -1,8 +1,8 @@
 import { deleteJson, getJson, postMultipart } from "./client";
 
-// Pre-auth scaffolding only. Once auth/workspaces land, the KB scope must
-// come from the signed-in workspace/clinic, not this dashboard-local constant.
-export const PRE_AUTH_KB_SCOPE_ID = "00000000-0000-4000-8000-000000000001";
+// Kept only while page code still passes an explicit scope object. The backend
+// now derives KB scope from the authenticated actor, matching treatment analysis.
+export const PRE_AUTH_KB_SCOPE_ID = "anonymous";
 
 export type KnowledgeDocumentStatus = "ingesting" | "ready" | "failed" | "removed";
 export type KnowledgeDocumentSourceType = "user_upload" | "dailymed";
@@ -40,43 +40,37 @@ export function uploadKnowledgeDocument(
   file: File,
   scope: KnowledgeScope,
 ): Promise<KnowledgeDocumentCreated> {
+  void scope;
   const body = new FormData();
   body.append("file", file);
-  return postMultipart<KnowledgeDocumentCreated>("/knowledge/documents", body, {
-    headers: scopeHeaders(scope),
-  });
+  return postMultipart<KnowledgeDocumentCreated>("/knowledge/documents", body);
 }
 
 export function listKnowledgeDocuments(
   params: ListKnowledgeDocumentsParams,
 ): Promise<KnowledgeDocumentList> {
   const query = new URLSearchParams();
+  void params.scopeId;
   if (params.limit !== undefined) query.set("limit", String(params.limit));
   if (params.offset !== undefined) query.set("offset", String(params.offset));
   const qs = query.toString();
-  return getJson<KnowledgeDocumentList>(qs ? `/knowledge/documents?${qs}` : "/knowledge/documents", {
-    headers: scopeHeaders(params),
-  });
+  return getJson<KnowledgeDocumentList>(
+    qs ? `/knowledge/documents?${qs}` : "/knowledge/documents",
+  );
 }
 
 export function getKnowledgeDocument(
   id: string,
   scope: KnowledgeScope,
 ): Promise<KnowledgeDocumentView> {
-  return getJson<KnowledgeDocumentView>(`/knowledge/documents/${id}`, {
-    headers: scopeHeaders(scope),
-  });
+  void scope;
+  return getJson<KnowledgeDocumentView>(`/knowledge/documents/${id}`);
 }
 
 export async function deleteKnowledgeDocument(
   id: string,
   scope: KnowledgeScope,
 ): Promise<void> {
-  await deleteJson(`/knowledge/documents/${id}`, {
-    headers: scopeHeaders(scope),
-  });
-}
-
-function scopeHeaders(scope: KnowledgeScope): Record<string, string> {
-  return { "X-Pharmaide-User-Id": scope.scopeId };
+  void scope;
+  await deleteJson(`/knowledge/documents/${id}`);
 }

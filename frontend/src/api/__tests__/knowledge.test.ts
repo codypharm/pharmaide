@@ -25,7 +25,7 @@ afterEach(() => {
 });
 
 describe("uploadKnowledgeDocument", () => {
-  it("uploads the file as multipart with the explicit KB scope header", async () => {
+  it("uploads the file as multipart without a stale dev scope header", async () => {
     const spy = mockFetch({ status: 202, body: { document_id: "doc1", status: "ingesting" } });
     const file = new File(["drug,dose\nWarfarin,5 mg"], "formulary.csv", {
       type: "text/csv",
@@ -38,7 +38,7 @@ describe("uploadKnowledgeDocument", () => {
     expect(calledUrl).toMatch(/\/knowledge\/documents$/);
     expect(init.method).toBe("POST");
     expect(init.body).toBeInstanceOf(FormData);
-    expect(init.headers).toEqual({ "X-Pharmaide-User-Id": "scope-123" });
+    expect(init.headers).toBeUndefined();
     expect(result).toEqual({
       document_id: "doc1",
       status: "ingesting",
@@ -49,7 +49,7 @@ describe("uploadKnowledgeDocument", () => {
 });
 
 describe("listKnowledgeDocuments", () => {
-  it("passes pagination and the explicit KB scope header", async () => {
+  it("passes pagination without a stale dev scope header", async () => {
     const spy = mockFetch({
       status: 200,
       body: {
@@ -79,7 +79,7 @@ describe("listKnowledgeDocuments", () => {
     expect(calledUrl).toContain("/knowledge/documents?");
     expect(calledUrl).toContain("limit=25");
     expect(calledUrl).toContain("offset=50");
-    expect(init.headers).toEqual({ "X-Pharmaide-User-Id": "scope-123" });
+    expect(init.headers).toBeUndefined();
     expect(result.items[0].chunk_count).toBe(4);
   });
 });
@@ -103,7 +103,9 @@ describe("getKnowledgeDocument", () => {
     const result = await getKnowledgeDocument("doc1", { scopeId: "scope-123" });
 
     const calledUrl = spy.mock.calls[0]?.[0] as string;
+    const init = spy.mock.calls[0]?.[1] as RequestInit;
     expect(calledUrl).toMatch(/\/knowledge\/documents\/doc1$/);
+    expect(init.headers).toBeUndefined();
     expect(result.title).toBe("Anticoagulation Protocol");
   });
 });
@@ -118,6 +120,6 @@ describe("deleteKnowledgeDocument", () => {
     const init = spy.mock.calls[0]?.[1] as RequestInit;
     expect(calledUrl).toMatch(/\/knowledge\/documents\/doc1$/);
     expect(init.method).toBe("DELETE");
-    expect(init.headers).toEqual({ "X-Pharmaide-User-Id": "scope-123" });
+    expect(init.headers).toBeUndefined();
   });
 });
