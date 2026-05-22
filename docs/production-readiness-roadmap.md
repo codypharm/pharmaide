@@ -6,8 +6,9 @@ Keep each item as a small, reviewable slice.
 ## Core Production Blockers
 
 - WhatsApp integration: workspace-aware phone routing once GCIP/workspaces land.
-- GCIP authentication: frontend login/session enforcement, MFA, user identity
-  propagation, and route-by-route replacement of pre-auth
+- GCIP authentication: frontend login/session enforcement is implemented.
+  Remaining work is MFA, user identity propagation, workspace membership
+  authorization, and route-by-route replacement of pre-auth
   `X-Pharmaide-User-Id` scaffolding.
 - Workspace scoping: derive clinical and knowledge-base scope from the pharmacist's clinic/workspace, not from the patient.
 - GCP deployment: Cloud Run containers, production environment variables,

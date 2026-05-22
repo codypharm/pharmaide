@@ -73,8 +73,8 @@ Safety settings:
 ## Frontend Environment
 
 - `VITE_API_BASE_URL`: backend Cloud Run HTTPS base URL.
-- `VITE_AUTH_MODE=gcip`: enable browser sign-in flow once the GCIP adapter is
-  wired.
+- `VITE_AUTH_MODE=gcip`: enable browser sign-in flow with Firebase/GCIP ID
+  tokens. Frontend sessions use memory-only Firebase persistence.
 - `VITE_GCIP_API_KEY`, `VITE_GCIP_AUTH_DOMAIN`, `VITE_GCIP_PROJECT_ID`:
   browser-safe Firebase/GCIP client configuration.
 - Frontend builds must not contain secret values. Only browser-safe public
@@ -127,8 +127,9 @@ Safety settings:
 
 ## Current Deployment Blockers
 
-- GCIP backend token verification scaffold exists, but frontend login and
-  route-by-route enforcement are not complete.
+- GCIP frontend login/session enforcement exists. Remaining auth blockers are
+  MFA, workspace membership authorization, and route-by-route removal of
+  pre-auth scaffolding.
 - Workspace/clinic scoping is not yet derived from authenticated membership.
 - Knowledge upload source files still use local disk storage.
 - Private Llama Guard / AgentDoG deployment is not yet live.

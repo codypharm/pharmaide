@@ -13,6 +13,8 @@ WhatsApp provider hardening.
 - Backend secrets are loaded through `Settings` and typed as `SecretStr` where
   they are used for OpenAI and safety-provider credentials.
 - Frontend API code does not store API keys or patient data in browser storage.
+- GCIP browser sessions use Firebase memory-only persistence so ID tokens are
+  not kept in durable browser storage.
 - Production must move secrets from local `.env` files to Google Secret Manager
   or Cloud Run secret bindings.
 
@@ -57,7 +59,7 @@ WhatsApp provider hardening.
 The review is complete for the current codebase, but these items remain tracked
 as production blockers:
 
-- GCIP authentication and authorization.
+- GCIP MFA, workspace membership authorization, and full route enforcement.
 - Workspace scoping from clinic/workspace membership.
 - HTTPS-only Cloud Run deployment.
 - Cloud Tasks/Pub/Sub worker replacement for in-process background work.
