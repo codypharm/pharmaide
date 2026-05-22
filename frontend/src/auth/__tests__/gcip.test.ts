@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => {
     getApp: vi.fn((): MockApp => ({ name: "pharmaide" })),
     getApps: vi.fn((): MockApp[] => []),
     getAuth: vi.fn(() => authState),
+    inMemoryPersistence: { type: "MEMORY" },
+    setPersistence: vi.fn(async () => undefined),
     signInWithEmailAndPassword: vi.fn(async () => undefined),
     signOut: vi.fn(async () => undefined),
   };
@@ -31,6 +33,8 @@ vi.mock("firebase/app", () => ({
 
 vi.mock("firebase/auth", () => ({
   getAuth: mocks.getAuth,
+  inMemoryPersistence: mocks.inMemoryPersistence,
+  setPersistence: mocks.setPersistence,
   signInWithEmailAndPassword: mocks.signInWithEmailAndPassword,
   signOut: mocks.signOut,
 }));
@@ -113,5 +117,23 @@ describe("createGcipAuthAdapter", () => {
       "secret",
     );
     expect(mocks.signOut).toHaveBeenCalledWith(mocks.authState);
+  });
+
+  it("uses memory-only Firebase auth persistence before sign-in", async () => {
+    const adapter = createGcipAuthAdapter({
+      apiKey: "api-key",
+      authDomain: "pharmaide.example",
+      projectId: "pharmaide-prod",
+    });
+
+    await adapter.signInWithEmailPassword("pharmacist@example.com", "secret");
+
+    expect(mocks.setPersistence).toHaveBeenCalledWith(
+      mocks.authState,
+      mocks.inMemoryPersistence,
+    );
+    expect(mocks.setPersistence.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.signInWithEmailAndPassword.mock.invocationCallOrder[0],
+    );
   });
 });

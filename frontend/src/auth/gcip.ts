@@ -1,6 +1,8 @@
 import { getApp, getApps, initializeApp, type FirebaseApp } from "firebase/app";
 import {
   getAuth,
+  inMemoryPersistence,
+  setPersistence,
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
   type Auth,
@@ -28,6 +30,8 @@ function authAdapter(auth: Auth): GcipAuthAdapter {
   return {
     getIdToken: async () => auth.currentUser?.getIdToken() ?? null,
     signInWithEmailPassword: async (email: string, password: string) => {
+      // Clinical workstations should not keep auth tokens in durable browser storage.
+      await setPersistence(auth, inMemoryPersistence);
       await signInWithEmailAndPassword(auth, email, password);
     },
     signOut: async () => {
