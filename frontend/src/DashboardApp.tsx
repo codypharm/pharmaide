@@ -24,9 +24,15 @@ function DashboardApp({
   const needsGcipSignIn = interactiveGcipAdapter !== null && signedInEmail === null;
 
   useEffect(() => {
-    setUnauthorizedHandler(setAuthError);
+    setUnauthorizedHandler((error) => {
+      setAuthError(error);
+      if (interactiveGcipAdapter !== null) {
+        setSignedInEmail(null);
+        void interactiveGcipAdapter.signOut?.().catch(() => undefined);
+      }
+    });
     return () => setUnauthorizedHandler(null);
-  }, []);
+  }, [interactiveGcipAdapter]);
 
   useEffect(() => {
     setSignedInEmail(currentSessionEmail(authSessionState));

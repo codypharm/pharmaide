@@ -141,4 +141,46 @@ describe("DashboardApp auth state", () => {
     expect(await screen.findByText("Sign in to PharmaAide")).toBeInTheDocument();
     expect(screen.queryByText("Protected content")).not.toBeInTheDocument();
   });
+
+  it("returns GCIP users to the sign-in gate after an unauthorized API response", async () => {
+    let signedInEmail: string | null = "pharmacist@example.com";
+    const adapter = {
+      getIdToken: vi.fn(() => (signedInEmail ? "expired-token" : null)),
+      signInWithEmailPassword: vi.fn(async (email: string) => {
+        signedInEmail = email;
+      }),
+      signOut: vi.fn(async () => {
+        signedInEmail = null;
+      }),
+      currentUserEmail: vi.fn(() => signedInEmail),
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ detail: { error: "invalid_auth_token" } }), {
+        status: 401,
+        headers: new Headers({ "X-Request-ID": "req_expired_123" }),
+      }),
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/dashboard/protected"]}>
+        <Routes>
+          <Route
+            path="/dashboard"
+            element={
+              <DashboardApp authSessionState={{ status: "ready", mode: "gcip", adapter }} />
+            }
+          >
+            <Route path="protected" element={<UnauthorizedProbe />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Protected content")).toBeInTheDocument();
+
+    expect(await screen.findByText("Sign in to PharmaAide")).toBeInTheDocument();
+    expect(adapter.signOut).toHaveBeenCalled();
+    expect(screen.queryByText("Protected content")).not.toBeInTheDocument();
+    expect(screen.getByText(/req_expired_123/i)).toBeInTheDocument();
+  });
 });
