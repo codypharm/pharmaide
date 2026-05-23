@@ -179,6 +179,38 @@ async def test_post_start_cycle_returns_404_for_missing_treatment(app_client: As
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_post_start_cycle_returns_404_for_other_actor_scope(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    actor_a = uuid4()
+    actor_b = uuid4()
+    create = await app_client.post(
+        "/treatments",
+        json=_treatment_body("START-CYCLE-SCOPE-001"),
+        headers={"X-Pharmaide-User-Id": str(actor_a)},
+    )
+    assert create.status_code == 201, create.text
+    treatment_id = UUID(create.json()["treatment_id"])
+    db_session.add(
+        TreatmentAnalysis(
+            treatment_id=treatment_id,
+            status="completed",
+            result={"clinical_summary": "Ready for monitoring."},
+        )
+    )
+    await db_session.flush()
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/start-cycle",
+        headers={"X-Pharmaide-User-Id": str(actor_b)},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": {"error": "treatment_not_found"}}
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_post_archive_completed_treatment_sets_archived_at_and_audits(
     app_client: AsyncClient, db_session: AsyncSession
 ) -> None:
@@ -275,6 +307,34 @@ async def test_post_archive_returns_404_for_missing_treatment(app_client: AsyncC
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_post_archive_returns_404_for_other_actor_scope(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    actor_a = uuid4()
+    actor_b = uuid4()
+    create = await app_client.post(
+        "/treatments",
+        json=_treatment_body("ARCHIVE-SCOPE-001"),
+        headers={"X-Pharmaide-User-Id": str(actor_a)},
+    )
+    assert create.status_code == 201, create.text
+    treatment_id = UUID(create.json()["treatment_id"])
+    treatment = await db_session.get(Treatment, treatment_id)
+    assert treatment is not None
+    treatment.status = "completed"
+    await db_session.flush()
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/archive",
+        headers={"X-Pharmaide-User-Id": str(actor_b)},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": {"error": "treatment_not_found"}}
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_post_terminate_active_treatment_sets_terminal_state_and_audits(
     app_client: AsyncClient, db_session: AsyncSession
 ) -> None:
@@ -362,6 +422,34 @@ async def test_post_terminate_rejects_completed_treatment(
 @pytest.mark.usefixtures("postgres_container")
 async def test_post_terminate_returns_404_for_missing_treatment(app_client: AsyncClient) -> None:
     response = await app_client.post(f"/treatments/{uuid4()}/terminate")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": {"error": "treatment_not_found"}}
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_terminate_returns_404_for_other_actor_scope(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    actor_a = uuid4()
+    actor_b = uuid4()
+    create = await app_client.post(
+        "/treatments",
+        json=_treatment_body("TERMINATE-SCOPE-001"),
+        headers={"X-Pharmaide-User-Id": str(actor_a)},
+    )
+    assert create.status_code == 201, create.text
+    treatment_id = UUID(create.json()["treatment_id"])
+    treatment = await db_session.get(Treatment, treatment_id)
+    assert treatment is not None
+    treatment.status = "active"
+    await db_session.flush()
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/terminate",
+        headers={"X-Pharmaide-User-Id": str(actor_b)},
+    )
 
     assert response.status_code == 404
     assert response.json() == {"detail": {"error": "treatment_not_found"}}

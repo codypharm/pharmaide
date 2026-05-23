@@ -269,6 +269,14 @@ def _scope_conditions(scope_id: UUID | None) -> tuple[object, ...]:
     return (Treatment.scope_id == scope_id,)
 
 
+async def _get_treatment_row(
+    session: AsyncSession, treatment_id: UUID, *, scope_id: UUID | None = None
+) -> Treatment | None:
+    """Load one treatment while preserving legacy unscoped service callers."""
+    statement = select(Treatment).where(Treatment.id == treatment_id, *_scope_conditions(scope_id))
+    return await session.scalar(statement)
+
+
 async def _count_treatments(session: AsyncSession, *conditions: object) -> int:
     result = await session.execute(
         select(func.count(Treatment.id)).select_from(Treatment).where(*conditions)
@@ -319,9 +327,11 @@ async def update_chat_response_mode(
     return TreatmentView.model_validate(treatment)
 
 
-async def start_treatment_cycle(session: AsyncSession, treatment_id: UUID) -> TreatmentView:
+async def start_treatment_cycle(
+    session: AsyncSession, treatment_id: UUID, *, scope_id: UUID | None = None
+) -> TreatmentView:
     """Activate monitoring for a treatment after pharmacist review."""
-    treatment = await session.get(Treatment, treatment_id)
+    treatment = await _get_treatment_row(session, treatment_id, scope_id=scope_id)
     if treatment is None:
         raise TreatmentNotFound()
 
@@ -415,9 +425,11 @@ def _build_cycle_onboarding_message(*, treatment_id: UUID) -> ConversationMessag
     )
 
 
-async def archive_treatment(session: AsyncSession, treatment_id: UUID) -> TreatmentView:
+async def archive_treatment(
+    session: AsyncSession, treatment_id: UUID, *, scope_id: UUID | None = None
+) -> TreatmentView:
     """Move a completed treatment out of active work queues."""
-    treatment = await session.get(Treatment, treatment_id)
+    treatment = await _get_treatment_row(session, treatment_id, scope_id=scope_id)
     if treatment is None:
         raise TreatmentNotFound()
     if treatment.status != "completed":
@@ -448,9 +460,11 @@ async def archive_treatment(session: AsyncSession, treatment_id: UUID) -> Treatm
     return TreatmentView.model_validate(treatment)
 
 
-async def terminate_treatment(session: AsyncSession, treatment_id: UUID) -> TreatmentView:
+async def terminate_treatment(
+    session: AsyncSession, treatment_id: UUID, *, scope_id: UUID | None = None
+) -> TreatmentView:
     """Stop monitoring for a pending or active treatment before normal completion."""
-    treatment = await session.get(Treatment, treatment_id)
+    treatment = await _get_treatment_row(session, treatment_id, scope_id=scope_id)
     if treatment is None:
         raise TreatmentNotFound()
     if treatment.status == "completed":

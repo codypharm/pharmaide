@@ -268,9 +268,10 @@ async def post_treatment_chat_response_mode(
 async def post_treatment_start_cycle(
     treatment_id: UUID,
     session: SessionDep,
+    actor: ActorDep,
 ) -> TreatmentView:
     try:
-        return await start_treatment_cycle(session, treatment_id)
+        return await start_treatment_cycle(session, treatment_id, scope_id=actor.kb_scope_id)
     except TreatmentCommandNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
     except AnalysisNotCompleted as exc:
@@ -289,9 +290,10 @@ async def post_treatment_start_cycle(
 async def post_treatment_archive(
     treatment_id: UUID,
     session: SessionDep,
+    actor: ActorDep,
 ) -> TreatmentView:
     try:
-        return await archive_treatment(session, treatment_id)
+        return await archive_treatment(session, treatment_id, scope_id=actor.kb_scope_id)
     except TreatmentCommandNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
     except TreatmentNotCompleted as exc:
@@ -305,9 +307,10 @@ async def post_treatment_archive(
 async def post_treatment_terminate(
     treatment_id: UUID,
     session: SessionDep,
+    actor: ActorDep,
 ) -> TreatmentView:
     try:
-        return await terminate_treatment(session, treatment_id)
+        return await terminate_treatment(session, treatment_id, scope_id=actor.kb_scope_id)
     except TreatmentCommandNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
     except TreatmentAlreadyCompleted as exc:
