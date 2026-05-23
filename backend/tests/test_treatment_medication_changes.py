@@ -1,6 +1,6 @@
 """Existing-treatment medication change commands."""
 
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from httpx import AsyncClient
@@ -151,6 +151,32 @@ async def test_add_medication_before_cycle_start_does_not_notify_patient(
     )
     assert audit is not None
     assert audit.payload["patient_notification_message_id"] is None
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_add_medication_returns_404_for_other_actor_scope(app_client: AsyncClient) -> None:
+    actor_a = uuid4()
+    actor_b = uuid4()
+    treatment_id = await _create_treatment(
+        app_client,
+        mrn="MED-CHANGE-SCOPE-ADD",
+        headers={"X-Pharmaide-User-Id": str(actor_a)},
+    )
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/medications",
+        json={
+            "name": "Amlodipine",
+            "dosage": "5 mg",
+            "frequency": "Once Daily (QD)",
+            "duration": "30 days",
+            "objective": None,
+        },
+        headers={"X-Pharmaide-User-Id": str(actor_b)},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": {"error": "treatment_not_found"}}
 
 
 @pytest.mark.usefixtures("postgres_container")
@@ -339,6 +365,36 @@ async def test_edit_medication_returns_404_for_wrong_treatment(
 
     assert response.status_code == 404
     assert response.json() == {"detail": {"error": "medication_not_found"}}
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_edit_medication_returns_404_for_other_actor_scope(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    actor_a = uuid4()
+    actor_b = uuid4()
+    treatment_id = await _create_treatment(
+        app_client,
+        mrn="MED-CHANGE-SCOPE-EDIT",
+        headers={"X-Pharmaide-User-Id": str(actor_a)},
+    )
+    medication = await _first_medication(db_session, treatment_id)
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/medications/{medication.id}/edit",
+        json={
+            "name": medication.name,
+            "dosage": "20 mg",
+            "frequency": medication.frequency,
+            "duration": medication.duration,
+            "objective": medication.objective,
+        },
+        headers={"X-Pharmaide-User-Id": str(actor_b)},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": {"error": "treatment_not_found"}}
 
 
 @pytest.mark.usefixtures("postgres_container")
@@ -574,6 +630,30 @@ async def test_discontinue_medication_returns_404_for_wrong_treatment(
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_discontinue_medication_returns_404_for_other_actor_scope(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    actor_a = uuid4()
+    actor_b = uuid4()
+    treatment_id = await _create_treatment(
+        app_client,
+        mrn="MED-CHANGE-SCOPE-DISCONTINUE",
+        medication_count=2,
+        headers={"X-Pharmaide-User-Id": str(actor_a)},
+    )
+    medication = await _first_medication(db_session, treatment_id)
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/medications/{medication.id}/discontinue",
+        headers={"X-Pharmaide-User-Id": str(actor_b)},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": {"error": "treatment_not_found"}}
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_discontinue_medication_is_idempotent_after_first_discontinue(
     app_client: AsyncClient,
     db_session: AsyncSession,
@@ -608,6 +688,7 @@ async def _create_treatment(
     *,
     mrn: str,
     medication_count: int = 1,
+    headers: dict[str, str] | None = None,
 ) -> UUID:
     medications = [
         {
@@ -645,6 +726,7 @@ async def _create_treatment(
             "medications": medications,
             "ingestion_method": "structured",
         },
+        headers=headers,
     )
     assert response.status_code == 201, response.text
     return UUID(response.json()["treatment_id"])

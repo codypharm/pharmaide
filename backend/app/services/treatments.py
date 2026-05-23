@@ -511,12 +511,13 @@ async def discontinue_medication(
     *,
     treatment_id: UUID,
     medication_id: UUID,
+    scope_id: UUID | None = None,
 ) -> MedicationView:
     """Discontinue one medication and require fresh analysis before monitoring resumes."""
-    medication = await _get_treatment_medication(session, treatment_id, medication_id)
-    treatment = await session.get(Treatment, treatment_id)
+    treatment = await _get_treatment_row(session, treatment_id, scope_id=scope_id)
     if treatment is None:
         raise TreatmentNotFound()
+    medication = await _get_treatment_medication(session, treatment_id, medication_id)
 
     already_discontinued = medication.discontinued_at is not None
     if already_discontinued:
@@ -578,9 +579,10 @@ async def add_medication_to_treatment(
     *,
     treatment_id: UUID,
     medication: MedicationCreate,
+    scope_id: UUID | None = None,
 ) -> MedicationView:
     """Add a medication and force pharmacist review before monitoring resumes."""
-    treatment = await session.get(Treatment, treatment_id)
+    treatment = await _get_treatment_row(session, treatment_id, scope_id=scope_id)
     if treatment is None:
         raise TreatmentNotFound()
     if treatment.status in {"completed", "terminated"}:
@@ -650,9 +652,10 @@ async def edit_medication(
     treatment_id: UUID,
     medication_id: UUID,
     medication_update: MedicationUpdate,
+    scope_id: UUID | None = None,
 ) -> MedicationView:
     """Edit active medication instructions and require fresh pharmacist review."""
-    treatment = await session.get(Treatment, treatment_id)
+    treatment = await _get_treatment_row(session, treatment_id, scope_id=scope_id)
     if treatment is None:
         raise TreatmentNotFound()
     if treatment.status in {"completed", "terminated"}:
