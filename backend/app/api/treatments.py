@@ -163,7 +163,7 @@ async def post_treatment(
         # Create the treatment and reserve its first analysis in one request
         # transaction so every client gets the same startup behavior.
         async with session_factory() as session, session.begin():
-            created = await create_treatment(session, body)
+            created = await create_treatment(session, body, scope_id=actor.kb_scope_id)
             analysis_id = await create_pending_analysis(session, created.treatment_id)
     except MRNConflict as exc:
         raise HTTPException(status_code=409, detail={"error": "mrn_already_exists"}) from exc
@@ -191,6 +191,7 @@ async def post_treatment(
 )
 async def list_treatments_route(
     session: SessionDep,
+    actor: ActorDep,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
     status: Annotated[Literal["pending", "active", "completed"] | None, Query()] = None,
@@ -200,6 +201,7 @@ async def list_treatments_route(
         session,
         limit=limit,
         offset=offset,
+        scope_id=actor.kb_scope_id,
         status=status,
         archived=archived,
     )
@@ -209,8 +211,10 @@ async def list_treatments_route(
     "/treatments/{treatment_id}",
     response_model=TreatmentDetail,
 )
-async def get_treatment_by_id(treatment_id: UUID, session: SessionDep) -> TreatmentDetail:
-    detail = await get_treatment(session, treatment_id)
+async def get_treatment_by_id(
+    treatment_id: UUID, session: SessionDep, actor: ActorDep
+) -> TreatmentDetail:
+    detail = await get_treatment(session, treatment_id, scope_id=actor.kb_scope_id)
     if detail is None:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"})
     return detail
@@ -611,7 +615,7 @@ async def post_patient_reply_draft(
 ) -> ConversationTurnView:
     try:
         async with session_factory() as session, session.begin():
-            detail = await get_treatment(session, treatment_id)
+            detail = await get_treatment(session, treatment_id, scope_id=actor.kb_scope_id)
             if detail is None:
                 raise ReplyDraftTreatmentNotFound()
             if detail.treatment.chat_response_mode == "pharmacist_takeover":

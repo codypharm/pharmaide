@@ -5,6 +5,7 @@ can render a queue/feed view without per-row roundtrips.
 """
 
 from datetime import UTC, datetime
+from uuid import uuid4
 
 import pytest
 from fastapi import FastAPI
@@ -187,3 +188,59 @@ async def test_list_treatments_requires_bearer_token_in_gcip_mode(
 
     assert response.status_code == 401
     assert response.json()["detail"] == {"error": "auth_token_required"}
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_list_treatments_only_returns_current_actor_scope(app_client: AsyncClient) -> None:
+    actor_a = uuid4()
+    actor_b = uuid4()
+
+    first = await app_client.post(
+        "/treatments",
+        json=_body("SCOPE-001", "Scope A", "Lisinopril"),
+        headers={"X-Pharmaide-User-Id": str(actor_a)},
+    )
+    second = await app_client.post(
+        "/treatments",
+        json=_body("SCOPE-002", "Scope B", "Amoxicillin"),
+        headers={"X-Pharmaide-User-Id": str(actor_b)},
+    )
+    assert first.status_code == 201
+    assert second.status_code == 201
+
+    response = await app_client.get(
+        "/treatments",
+        headers={"X-Pharmaide-User-Id": str(actor_a)},
+    )
+
+    assert response.status_code == 200
+    mrns = {item["patient"]["mrn"] for item in response.json()["items"]}
+    assert "SCOPE-001" in mrns
+    assert "SCOPE-002" not in mrns
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_get_treatment_returns_404_for_other_actor_scope(app_client: AsyncClient) -> None:
+    actor_a = uuid4()
+    actor_b = uuid4()
+
+    create = await app_client.post(
+        "/treatments",
+        json=_body("SCOPE-DETAIL-001", "Scope Detail", "Lisinopril"),
+        headers={"X-Pharmaide-User-Id": str(actor_a)},
+    )
+    assert create.status_code == 201
+    treatment_id = create.json()["treatment_id"]
+
+    same_actor = await app_client.get(
+        f"/treatments/{treatment_id}",
+        headers={"X-Pharmaide-User-Id": str(actor_a)},
+    )
+    other_actor = await app_client.get(
+        f"/treatments/{treatment_id}",
+        headers={"X-Pharmaide-User-Id": str(actor_b)},
+    )
+
+    assert same_actor.status_code == 200
+    assert other_actor.status_code == 404
+    assert other_actor.json()["detail"] == {"error": "treatment_not_found"}

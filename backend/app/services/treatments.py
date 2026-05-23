@@ -87,12 +87,13 @@ class MedicationAlreadyDiscontinued(Exception):
 
 
 async def create_treatment(
-    session: AsyncSession, request: CreateTreatmentRequest
+    session: AsyncSession, request: CreateTreatmentRequest, *, scope_id: UUID
 ) -> CreateTreatmentResponse:
     patient = await _resolve_treatment_patient(session, request)
 
     treatment = Treatment(
         patient_id=patient.id,
+        scope_id=scope_id,
         clinical_objective=request.treatment.clinical_objective,
         treatment_start_at=request.treatment.treatment_start_at,
     )
@@ -164,11 +165,14 @@ async def _resolve_treatment_patient(
     return patient
 
 
-async def get_treatment(session: AsyncSession, treatment_id: UUID) -> TreatmentDetail | None:
+async def get_treatment(
+    session: AsyncSession, treatment_id: UUID, *, scope_id: UUID | None = None
+) -> TreatmentDetail | None:
+    statement = select(Treatment).where(Treatment.id == treatment_id)
+    if scope_id is not None:
+        statement = statement.where(Treatment.scope_id == scope_id)
     result = await session.execute(
-        select(Treatment)
-        .where(Treatment.id == treatment_id)
-        .options(selectinload(Treatment.patient), selectinload(Treatment.medications))
+        statement.options(selectinload(Treatment.patient), selectinload(Treatment.medications))
     )
     treatment = result.scalar_one_or_none()
     if treatment is None:
@@ -190,12 +194,15 @@ async def list_treatments(
     limit: int,
     offset: int,
     *,
+    scope_id: UUID | None = None,
     status: str | None = None,
     archived: bool | None = None,
 ) -> TreatmentList:
     # selectinload pre-fetches patient + medications in batched queries so
     # the list-row mapping below stays sync — no N+1, no awaits in the loop.
     statement = select(Treatment)
+    scope_conditions = _scope_conditions(scope_id)
+    statement = statement.where(*scope_conditions)
     if status is not None:
         statement = statement.where(Treatment.status == status)
     if archived is True:
@@ -203,7 +210,9 @@ async def list_treatments(
     elif archived is False:
         statement = statement.where(Treatment.archived_at.is_(None))
 
-    active_count, completed_count, archived_count = await _count_treatment_directory(session)
+    active_count, completed_count, archived_count = await _count_treatment_directory(
+        session, scope_id=scope_id
+    )
 
     result = await session.execute(
         statement
@@ -231,20 +240,33 @@ async def list_treatments(
     )
 
 
-async def _count_treatment_directory(session: AsyncSession) -> tuple[int, int, int]:
+async def _count_treatment_directory(
+    session: AsyncSession, *, scope_id: UUID | None = None
+) -> tuple[int, int, int]:
     """Count operational treatment buckets independently of the current page."""
+    scope_conditions = _scope_conditions(scope_id)
     active_count = await _count_treatments(
         session,
+        *scope_conditions,
         Treatment.status != "completed",
         Treatment.archived_at.is_(None),
     )
     completed_count = await _count_treatments(
         session,
+        *scope_conditions,
         Treatment.status == "completed",
         Treatment.archived_at.is_(None),
     )
-    archived_count = await _count_treatments(session, Treatment.archived_at.is_not(None))
+    archived_count = await _count_treatments(
+        session, *scope_conditions, Treatment.archived_at.is_not(None)
+    )
     return active_count, completed_count, archived_count
+
+
+def _scope_conditions(scope_id: UUID | None) -> tuple[object, ...]:
+    if scope_id is None:
+        return ()
+    return (Treatment.scope_id == scope_id,)
 
 
 async def _count_treatments(session: AsyncSession, *conditions: object) -> int:

@@ -13,7 +13,7 @@ are nullable in this slice and get populated by later sprints.
 """
 
 from datetime import date, datetime
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, Text, Uuid, text
 from sqlalchemy.dialects.postgresql import JSONB
@@ -23,6 +23,7 @@ from sqlalchemy.types import UserDefinedType
 from app.db.base import Base
 
 EMBEDDING_DIMENSIONS = 3072
+DEFAULT_DEV_TREATMENT_SCOPE_ID = uuid5(NAMESPACE_URL, "pharmaide:dev:anonymous")
 
 
 class Vector(UserDefinedType[str]):
@@ -79,6 +80,11 @@ class Treatment(Base):
         ForeignKey("patients.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
+    )
+    # Tenant/workspace scope for pharmacist-facing access control. In local
+    # development this is the stable dev actor scope.
+    scope_id: Mapped[UUID] = mapped_column(
+        Uuid, nullable=False, index=True, default=DEFAULT_DEV_TREATMENT_SCOPE_ID
     )
     # Lifecycle: pending → active (after Start Cycle) → completed | terminated.
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'pending'"))
