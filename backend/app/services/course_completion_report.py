@@ -69,9 +69,10 @@ async def build_course_completion_report(
     session: AsyncSession,
     *,
     treatment_id: UUID,
+    scope_id: UUID | None = None,
 ) -> CourseCompletionReport:
     """Build a structured, PHI-minimised course report from persisted rows."""
-    treatment = await _load_treatment(session, treatment_id)
+    treatment = await _load_treatment(session, treatment_id, scope_id=scope_id)
     if treatment is None:
         raise TreatmentNotFound()
 
@@ -123,11 +124,14 @@ def audit_course_completion_report_viewed(
     )
 
 
-async def _load_treatment(session: AsyncSession, treatment_id: UUID) -> Treatment | None:
+async def _load_treatment(
+    session: AsyncSession, treatment_id: UUID, *, scope_id: UUID | None = None
+) -> Treatment | None:
+    statement = select(Treatment).where(Treatment.id == treatment_id)
+    if scope_id is not None:
+        statement = statement.where(Treatment.scope_id == scope_id)
     result = await session.execute(
-        select(Treatment)
-        .where(Treatment.id == treatment_id)
-        .options(selectinload(Treatment.medications))
+        statement.options(selectinload(Treatment.medications))
     )
     return result.scalar_one_or_none()
 

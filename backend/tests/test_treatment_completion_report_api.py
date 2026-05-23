@@ -1,7 +1,7 @@
 """GET /treatments/:id/completion-report API contract."""
 
 from datetime import UTC, date, datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from httpx import AsyncClient
@@ -113,6 +113,29 @@ async def test_completion_report_returns_409_before_course_completion(
     assert await _audit_count(db_session) == 0
 
 
+@pytest.mark.usefixtures("postgres_container")
+async def test_completion_report_returns_404_for_other_actor_scope(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    actor_a = uuid4()
+    actor_b = uuid4()
+    treatment, _ = await _persist_treatment(
+        db_session,
+        status="completed",
+        scope_id=actor_a,
+    )
+
+    response = await app_client.get(
+        f"/treatments/{treatment.id}/completion-report",
+        headers={"X-Pharmaide-User-Id": str(actor_b)},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": {"error": "treatment_not_found"}}
+    assert await _audit_count(db_session) == 0
+
+
 async def _audit_count(session: AsyncSession) -> int:
     return (
         await session.scalar(
@@ -128,6 +151,7 @@ async def _persist_treatment(
     session: AsyncSession,
     *,
     status: str,
+    scope_id: UUID | None = None,
 ) -> tuple[Treatment, Medication]:
     patient = Patient(
         name="Eleanor Vance",
@@ -141,6 +165,8 @@ async def _persist_treatment(
         clinical_objective="Monitor adherence",
         treatment_start_at=datetime(2026, 5, 17, 8, tzinfo=UTC),
     )
+    if scope_id is not None:
+        treatment.scope_id = scope_id
     medication = Medication(
         treatment=treatment,
         name="Lisinopril",

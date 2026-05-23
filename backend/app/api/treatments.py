@@ -227,9 +227,12 @@ async def get_treatment_by_id(
 async def get_treatment_completion_report(
     treatment_id: UUID,
     session: SessionDep,
+    actor: ActorDep,
 ) -> CourseCompletionReport:
     try:
-        report = await build_course_completion_report(session, treatment_id=treatment_id)
+        report = await build_course_completion_report(
+            session, treatment_id=treatment_id, scope_id=actor.kb_scope_id
+        )
     except CompletionReportTreatmentNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
 
@@ -721,7 +724,7 @@ async def post_treatment_analysis(
         # Commit the pending row before scheduling. Otherwise the background
         # task can race the request transaction and fail to see its work.
         async with session_factory() as session, session.begin():
-            if not await treatment_exists(session, treatment_id):
+            if not await treatment_exists(session, treatment_id, scope_id=actor.kb_scope_id):
                 raise HTTPException(status_code=404, detail={"error": "treatment_not_found"})
             analysis_id = await create_pending_analysis(session, treatment_id, force=force)
     except AnalysisInProgress as exc:
@@ -822,9 +825,9 @@ async def _patient_reply_safety_context(
     response_model=TreatmentAnalysisView,
 )
 async def get_treatment_analysis(
-    treatment_id: UUID, session: SessionDep
+    treatment_id: UUID, session: SessionDep, actor: ActorDep
 ) -> TreatmentAnalysisView | Response:
-    if not await treatment_exists(session, treatment_id):
+    if not await treatment_exists(session, treatment_id, scope_id=actor.kb_scope_id):
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"})
 
     analysis = await get_latest_analysis(session, treatment_id)

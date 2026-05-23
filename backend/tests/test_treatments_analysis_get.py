@@ -26,6 +26,15 @@ async def _create_treatment(db_session: AsyncSession, mrn: str) -> Treatment:
     return treatment
 
 
+async def _create_scoped_treatment(
+    db_session: AsyncSession, mrn: str, *, scope_id: UUID
+) -> Treatment:
+    treatment = await _create_treatment(db_session, mrn)
+    treatment.scope_id = scope_id
+    await db_session.flush()
+    return treatment
+
+
 @pytest.mark.usefixtures("postgres_container")
 async def test_get_treatment_analysis_returns_latest_analysis(
     app_client: AsyncClient, db_session: AsyncSession
@@ -79,6 +88,35 @@ async def test_get_treatment_analysis_returns_404_for_missing_treatment(
     app_client: AsyncClient,
 ) -> None:
     response = await app_client.get(f"/treatments/{uuid4()}/analysis")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": {"error": "treatment_not_found"}}
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_get_treatment_analysis_returns_404_for_other_actor_scope(
+    app_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    actor_a = uuid4()
+    actor_b = uuid4()
+    treatment = await _create_scoped_treatment(
+        db_session,
+        "ANALYSIS-GET-SCOPE-001",
+        scope_id=actor_a,
+    )
+    db_session.add(
+        TreatmentAnalysis(
+            treatment_id=treatment.id,
+            status="completed",
+            result={"degraded": False},
+        )
+    )
+    await db_session.flush()
+
+    response = await app_client.get(
+        f"/treatments/{treatment.id}/analysis",
+        headers={"X-Pharmaide-User-Id": str(actor_b)},
+    )
 
     assert response.status_code == 404
     assert response.json() == {"detail": {"error": "treatment_not_found"}}

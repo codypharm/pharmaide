@@ -184,8 +184,13 @@ async def get_treatment(
     )
 
 
-async def treatment_exists(session: AsyncSession, treatment_id: UUID) -> bool:
-    result = await session.execute(select(Treatment.id).where(Treatment.id == treatment_id))
+async def treatment_exists(
+    session: AsyncSession, treatment_id: UUID, *, scope_id: UUID | None = None
+) -> bool:
+    statement = select(Treatment.id).where(Treatment.id == treatment_id)
+    if scope_id is not None:
+        statement = statement.where(Treatment.scope_id == scope_id)
+    result = await session.execute(statement)
     return result.scalar_one_or_none() is not None
 
 

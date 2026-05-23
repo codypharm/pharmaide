@@ -40,6 +40,8 @@ def _treatment_body(mrn: str) -> dict[str, object]:
 async def _create_treatment_for_analysis_endpoint(
     db_session: AsyncSession,
     mrn: str,
+    *,
+    scope_id: UUID | None = None,
 ) -> UUID:
     patient = Patient(
         name="Eleanor Vance",
@@ -53,6 +55,8 @@ async def _create_treatment_for_analysis_endpoint(
         patient_id=patient.id,
         clinical_objective="Monitor for ACE-inhibitor cough",
     )
+    if scope_id is not None:
+        treatment.scope_id = scope_id
     db_session.add(treatment)
     await db_session.flush()
     db_session.add(
@@ -132,7 +136,9 @@ async def test_post_treatment_analyze_passes_uuid_user_header_as_kb_scope(
 
     monkeypatch.setattr(task_runner, "schedule_job", capture_schedule)
 
-    treatment_id = await _create_treatment_for_analysis_endpoint(db_session, "ANALYZE-006")
+    treatment_id = await _create_treatment_for_analysis_endpoint(
+        db_session, "ANALYZE-006", scope_id=scope_id
+    )
 
     response = await app_client.post(
         f"/treatments/{treatment_id}/analyze",
@@ -180,11 +186,14 @@ async def test_post_treatment_analyze_returns_429_when_user_is_rate_limited(
 
     monkeypatch.setattr(task_runner, "schedule_job", reject_schedule)
 
-    treatment_id = await _create_treatment_for_analysis_endpoint(db_session, "ANALYZE-005")
+    scope_id = uuid4()
+    treatment_id = await _create_treatment_for_analysis_endpoint(
+        db_session, "ANALYZE-005", scope_id=scope_id
+    )
 
     response = await app_client.post(
         f"/treatments/{treatment_id}/analyze",
-        headers={"X-Pharmaide-User-Id": "pharmacist-1"},
+        headers={"X-Pharmaide-User-Id": str(scope_id)},
     )
 
     assert response.status_code == 429
@@ -355,6 +364,34 @@ async def test_post_treatment_analyze_returns_404_for_missing_treatment(
     app_client: AsyncClient,
 ) -> None:
     response = await app_client.post(f"/treatments/{uuid4()}/analyze")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": {"error": "treatment_not_found"}}
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_treatment_analyze_returns_404_for_other_actor_scope(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_a = uuid4()
+    actor_b = uuid4()
+
+    def fail_if_scheduled(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("cross-scope analysis must not be scheduled")
+
+    monkeypatch.setattr(task_runner, "schedule_job", fail_if_scheduled)
+    treatment_id = await _create_treatment_for_analysis_endpoint(
+        db_session,
+        "ANALYZE-SCOPE-001",
+        scope_id=actor_a,
+    )
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/analyze",
+        headers={"X-Pharmaide-User-Id": str(actor_b)},
+    )
 
     assert response.status_code == 404
     assert response.json() == {"detail": {"error": "treatment_not_found"}}
