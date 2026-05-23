@@ -177,6 +177,7 @@ async def post_treatment(
             analysis_id,
             timeout_seconds=timeout_seconds,
             user_id=str(actor.actor_id),
+            kb_scope_id=actor.kb_scope_id,
         )
     except task_runner.RateLimitExceeded:
         await mark_analysis_failed(session_factory, analysis_id, "analysis_rate_limited")
@@ -628,7 +629,7 @@ async def post_patient_reply_draft(
             interaction_evidence_retriever = build_patient_interaction_evidence_retriever(
                 session,
                 openai_api_key=settings.openai_api_key,
-                kb_scope_id=actor.actor_id,
+                kb_scope_id=actor.kb_scope_id,
             )
             draft = await draft_patient_reply_for_treatment(
                 session,
@@ -692,6 +693,7 @@ async def post_treatment_analysis(
             analysis_id,
             timeout_seconds=timeout_seconds,
             user_id=str(actor.actor_id),
+            kb_scope_id=actor.kb_scope_id,
         )
     except task_runner.RateLimitExceeded as exc:
         await mark_analysis_failed(session_factory, analysis_id, "analysis_rate_limited")
@@ -795,14 +797,6 @@ async def get_treatment_analysis(
     return response
 
 
-def _parse_optional_uuid(value: str) -> UUID | None:
-    """Pre-auth user ids may be labels; only UUID actor ids can scope KB rows."""
-    try:
-        return UUID(value)
-    except ValueError:
-        return None
-
-
 def _schedule_analysis(
     session_factory: async_sessionmaker[AsyncSession],
     settings: Settings,
@@ -810,9 +804,9 @@ def _schedule_analysis(
     *,
     timeout_seconds: int,
     user_id: str,
+    kb_scope_id: UUID | None,
 ) -> None:
     """Schedule analysis with the same runtime options for create and rerun."""
-    kb_scope_id = _parse_optional_uuid(user_id)
     task_runner.schedule_job(
         task_runner.BackgroundJob(
             name="analysis.run",

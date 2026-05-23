@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     # gcip requires Authorization: Bearer <Firebase/GCIP ID token>.
     auth_mode: Literal["disabled", "gcip"] = "disabled"
     gcip_project_id: str | None = None
+    gcip_workspace_claim: str = "workspace_id"
+    gcip_require_workspace_claim: bool = False
 
     rxnorm_base_url: str = "https://rxnav.nlm.nih.gov/REST"
 

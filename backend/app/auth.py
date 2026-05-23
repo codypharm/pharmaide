@@ -26,6 +26,12 @@ class CurrentActor:
     subject: str
     auth_mode: Literal["disabled", "gcip"]
     email: str | None = None
+    workspace_id: UUID | None = None
+
+    @property
+    def kb_scope_id(self) -> UUID:
+        """Use workspace scope when auth claims provide it, else local actor scope."""
+        return self.workspace_id or self.actor_id
 
 
 async def get_current_actor(
@@ -46,6 +52,11 @@ ActorDep = Annotated[CurrentActor, Depends(get_current_actor)]
 async def get_current_actor_id(actor: ActorDep) -> UUID:
     """Compatibility dependency for routes still scoped by actor UUID."""
     return actor.actor_id
+
+
+async def get_current_kb_scope_id(actor: ActorDep) -> UUID:
+    """Resolve the scope used for clinic knowledge-base access."""
+    return actor.kb_scope_id
 
 
 def verify_gcip_id_token(token: str, *, project_id: str) -> dict[str, object]:
@@ -81,11 +92,16 @@ def _gcip_actor(settings: Settings, authorization: str | None) -> CurrentActor:
     if subject is None:
         raise HTTPException(status_code=401, detail={"error": "invalid_auth_token"})
 
+    workspace_id = _claim_uuid(claims, settings.gcip_workspace_claim)
+    if settings.gcip_require_workspace_claim and workspace_id is None:
+        raise HTTPException(status_code=403, detail={"error": "workspace_claim_required"})
+
     return CurrentActor(
         actor_id=_actor_uuid("gcip", f"{settings.gcip_project_id}:{subject}"),
         subject=subject,
         auth_mode="gcip",
         email=_claim_text(claims, "email"),
+        workspace_id=workspace_id,
     )
 
 
@@ -103,6 +119,16 @@ def _claim_text(claims: dict[str, object], key: str) -> str | None:
     if isinstance(value, str) and value.strip():
         return value.strip()
     return None
+
+
+def _claim_uuid(claims: dict[str, object], key: str) -> UUID | None:
+    value = _claim_text(claims, key)
+    if value is None:
+        return None
+    try:
+        return UUID(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail={"error": "invalid_auth_token"}) from exc
 
 
 def _actor_uuid(namespace: str, subject: str) -> UUID:

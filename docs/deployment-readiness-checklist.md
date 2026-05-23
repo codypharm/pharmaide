@@ -24,6 +24,10 @@ Required for staging:
 - `PHARMAIDE_CORS_ALLOWED_ORIGINS`: comma-separated deployed frontend origins.
 - `PHARMAIDE_AUTH_MODE=gcip`: require GCIP/Firebase ID tokens.
 - `PHARMAIDE_GCIP_PROJECT_ID`: GCIP/Firebase project ID used as token audience.
+- `PHARMAIDE_GCIP_WORKSPACE_CLAIM=workspace_id`: GCIP custom claim carrying the
+  pharmacist workspace/clinic UUID used for knowledge-base scope.
+- `PHARMAIDE_GCIP_REQUIRE_WORKSPACE_CLAIM=true`: enable after GCIP custom claims
+  are configured so production requests without workspace scope fail closed.
 - `PHARMAIDE_LOG_MODE=json`: structured logs for Cloud Run.
 - `PHARMAIDE_DEBUG_ROUTES_ENABLED=false`: debug graph route must stay unmounted.
 - `PHARMAIDE_RXNORM_BASE_URL=https://rxnav.nlm.nih.gov/REST`.

@@ -14,7 +14,7 @@ from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.agents.knowledge_sources.user_upload import UserUploadSource
-from app.auth import get_current_actor_id
+from app.auth import get_current_kb_scope_id
 from app.config import Settings, get_settings
 from app.db.engine import get_session, get_session_factory
 from app.db.models import AuditLogEntry, KnowledgeChunk, KnowledgeDocument
@@ -26,7 +26,7 @@ from app.services.kb_scope import GLOBAL_DAILYMED_SCOPE_ID
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 SessionFactoryDep = Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
-ActorDep = Annotated[UUID, Depends(get_current_actor_id)]
+KbScopeDep = Annotated[UUID, Depends(get_current_kb_scope_id)]
 
 ALLOWED_MIME_TYPES = {
     "application/pdf",
@@ -68,7 +68,7 @@ class KnowledgeDocumentList(BaseModel):
 async def upload_document(
     session_factory: SessionFactoryDep,
     settings: SettingsDep,
-    actor_id: ActorDep,
+    kb_scope_id: KbScopeDep,
     file: Annotated[UploadFile, File()],
 ) -> KnowledgeDocumentCreated:
     mime = _supported_mime(file.content_type)
@@ -83,7 +83,7 @@ async def upload_document(
             title=title,
             mime=mime,
             status="ingesting",
-            uploaded_by=actor_id,
+            uploaded_by=kb_scope_id,
         )
         session.add(document)
         await session.flush()
@@ -119,7 +119,7 @@ async def upload_document(
         document_id=str(document_id),
         mime=mime,
         size_bytes=len(data),
-        actor_id=str(actor_id),
+        kb_scope_id=str(kb_scope_id),
     )
     return KnowledgeDocumentCreated(document_id=document_id, status=status)
 
@@ -128,7 +128,7 @@ async def upload_document(
 async def list_documents(
     session: SessionDep,
     settings: SettingsDep,
-    actor_id: ActorDep,
+    kb_scope_id: KbScopeDep,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> KnowledgeDocumentList:
@@ -136,7 +136,7 @@ async def list_documents(
         session,
         stale_after_minutes=settings.knowledge_ingestion_stale_minutes,
     )
-    rows = await _document_rows(session, actor_id=actor_id, limit=limit, offset=offset)
+    rows = await _document_rows(session, actor_id=kb_scope_id, limit=limit, offset=offset)
     return KnowledgeDocumentList(items=[_document_view(row) for row in rows])
 
 
@@ -145,13 +145,13 @@ async def get_document(
     document_id: UUID,
     session: SessionDep,
     settings: SettingsDep,
-    actor_id: ActorDep,
+    kb_scope_id: KbScopeDep,
 ) -> KnowledgeDocumentView:
     await mark_stale_ingestions_failed(
         session,
         stale_after_minutes=settings.knowledge_ingestion_stale_minutes,
     )
-    row = await _document_row(session, document_id=document_id, actor_id=actor_id)
+    row = await _document_row(session, document_id=document_id, actor_id=kb_scope_id)
     if row is None:
         raise HTTPException(status_code=404, detail={"error": "knowledge_document_not_found"})
     return _document_view(row)
@@ -162,12 +162,12 @@ async def delete_document(
     document_id: UUID,
     session: SessionDep,
     settings: SettingsDep,
-    actor_id: ActorDep,
+    kb_scope_id: KbScopeDep,
 ) -> Response:
     row = await session.execute(
         select(KnowledgeDocument).where(
             KnowledgeDocument.id == document_id,
-            _visible_document_filter(actor_id),
+            _visible_document_filter(kb_scope_id),
             KnowledgeDocument.status != "removed",
         )
     )
@@ -196,7 +196,7 @@ async def delete_document(
     log.info(
         "kb_doc_removed",
         document_id=str(document_id),
-        actor_id=str(actor_id),
+        kb_scope_id=str(kb_scope_id),
         stored_file_removed=stored_file_removed,
         chunk_count_removed=chunk_count_removed,
     )
