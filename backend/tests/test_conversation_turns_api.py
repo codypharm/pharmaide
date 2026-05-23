@@ -213,6 +213,34 @@ async def test_post_conversation_turn_returns_404_for_unknown_treatment(
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_post_conversation_turn_returns_404_for_other_actor_scope(
+    app_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_a = uuid4()
+    actor_b = uuid4()
+    treatment_id = await _create_treatment(
+        app_client,
+        "CONV-API-SCOPE-TURN",
+        headers={"X-Pharmaide-User-Id": str(actor_a)},
+    )
+    _patch_safety_decision(monkeypatch, treatment_id, status="send")
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/conversation-turns",
+        json={
+            "patient_message": "Hello",
+            "assistant_draft": "Draft",
+            "prescription_context": "Amoxicillin 500 mg three times daily.",
+        },
+        headers={"X-Pharmaide-User-Id": str(actor_b)},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": {"error": "treatment_not_found"}}
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_post_patient_message_records_inbound_message_and_non_phi_audit(
     app_client: AsyncClient,
     db_session: AsyncSession,
@@ -266,6 +294,28 @@ async def test_post_patient_message_returns_404_for_unknown_treatment(
     response = await app_client.post(
         f"/treatments/{uuid4()}/patient-messages",
         json={"message": "Hello"},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": {"error": "treatment_not_found"}}
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_patient_message_returns_404_for_other_actor_scope(
+    app_client: AsyncClient,
+) -> None:
+    actor_a = uuid4()
+    actor_b = uuid4()
+    treatment_id = await _create_treatment(
+        app_client,
+        "CONV-API-SCOPE-PATIENT",
+        headers={"X-Pharmaide-User-Id": str(actor_a)},
+    )
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/patient-messages",
+        json={"message": "Hello"},
+        headers={"X-Pharmaide-User-Id": str(actor_b)},
     )
 
     assert response.status_code == 404
@@ -334,6 +384,28 @@ async def test_post_pharmacist_message_returns_404_for_unknown_treatment(
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_post_pharmacist_message_returns_404_for_other_actor_scope(
+    app_client: AsyncClient,
+) -> None:
+    actor_a = uuid4()
+    actor_b = uuid4()
+    treatment_id = await _create_treatment(
+        app_client,
+        "CONV-API-SCOPE-PHARMACIST",
+        headers={"X-Pharmaide-User-Id": str(actor_a)},
+    )
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/pharmacist-messages",
+        json={"message": "Hello"},
+        headers={"X-Pharmaide-User-Id": str(actor_b)},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": {"error": "treatment_not_found"}}
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_post_retry_delivery_requeues_failed_message_and_audits(
     app_client: AsyncClient,
     db_session: AsyncSession,
@@ -375,6 +447,39 @@ async def test_post_retry_delivery_requeues_failed_message_and_audits(
         "channel": "whatsapp",
     }
     assert "pharmacy" not in str(audit.payload).lower()
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_post_retry_delivery_returns_404_for_other_actor_scope(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    actor_a = uuid4()
+    actor_b = uuid4()
+    treatment_id = await _create_treatment(
+        app_client,
+        "CONV-API-SCOPE-RETRY",
+        headers={"X-Pharmaide-User-Id": str(actor_a)},
+    )
+    created = await app_client.post(
+        f"/treatments/{treatment_id}/pharmacist-messages",
+        json={"message": "Please call the pharmacy today."},
+        headers={"X-Pharmaide-User-Id": str(actor_a)},
+    )
+    assert created.status_code == 201, created.text
+    message_id = UUID(created.json()["id"])
+    message = await db_session.get(ConversationMessage, message_id)
+    assert message is not None
+    message.status = "failed"
+    await db_session.flush()
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/conversation-messages/{message_id}/retry-delivery",
+        headers={"X-Pharmaide-User-Id": str(actor_b)},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": {"error": "conversation_message_not_found"}}
 
 
 @pytest.mark.usefixtures("postgres_container")
@@ -434,6 +539,33 @@ async def test_list_conversation_messages_returns_404_for_unknown_treatment(
     app_client: AsyncClient,
 ) -> None:
     response = await app_client.get(f"/treatments/{uuid4()}/conversation-messages")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": {"error": "treatment_not_found"}}
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_list_conversation_messages_returns_404_for_other_actor_scope(
+    app_client: AsyncClient,
+) -> None:
+    actor_a = uuid4()
+    actor_b = uuid4()
+    treatment_id = await _create_treatment(
+        app_client,
+        "CONV-API-SCOPE-LIST",
+        headers={"X-Pharmaide-User-Id": str(actor_a)},
+    )
+    created = await app_client.post(
+        f"/treatments/{treatment_id}/patient-messages",
+        json={"message": "Hello"},
+        headers={"X-Pharmaide-User-Id": str(actor_a)},
+    )
+    assert created.status_code == 201, created.text
+
+    response = await app_client.get(
+        f"/treatments/{treatment_id}/conversation-messages",
+        headers={"X-Pharmaide-User-Id": str(actor_b)},
+    )
 
     assert response.status_code == 404
     assert response.json() == {"detail": {"error": "treatment_not_found"}}

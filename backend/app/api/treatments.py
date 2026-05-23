@@ -515,6 +515,7 @@ async def post_conversation_turn(
     body: ConversationTurnCreate,
     session_factory: SessionFactoryDep,
     settings: SettingsDep,
+    actor: ActorDep,
 ) -> ConversationTurnView:
     try:
         async with session_factory() as session, session.begin():
@@ -531,6 +532,7 @@ async def post_conversation_turn(
                 safety_provider_api_key=settings.safety_provider_api_key,
                 safety_provider_timeout_seconds=settings.safety_provider_timeout_seconds,
                 reply_classifier_agent=_build_configured_patient_reply_classifier_agent(settings),
+                scope_id=actor.kb_scope_id,
             )
     except ConversationTreatmentNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
@@ -546,6 +548,7 @@ async def post_patient_message(
     body: PatientConversationMessageCreate,
     session_factory: SessionFactoryDep,
     settings: SettingsDep,
+    actor: ActorDep,
 ) -> ConversationMessageView:
     try:
         async with session_factory() as session, session.begin():
@@ -554,6 +557,7 @@ async def post_patient_message(
                 treatment_id=treatment_id,
                 message=body.message,
                 reply_classifier_agent=_build_configured_patient_reply_classifier_agent(settings),
+                scope_id=actor.kb_scope_id,
             )
     except ConversationTreatmentNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
@@ -568,6 +572,7 @@ async def post_pharmacist_message(
     treatment_id: UUID,
     body: PharmacistConversationMessageCreate,
     session_factory: SessionFactoryDep,
+    actor: ActorDep,
 ) -> ConversationMessageView:
     try:
         async with session_factory() as session, session.begin():
@@ -575,6 +580,7 @@ async def post_pharmacist_message(
                 session,
                 treatment_id=treatment_id,
                 message=body.message,
+                scope_id=actor.kb_scope_id,
             )
     except ConversationTreatmentNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
@@ -588,6 +594,7 @@ async def post_retry_conversation_message_delivery(
     treatment_id: UUID,
     message_id: UUID,
     session_factory: SessionFactoryDep,
+    actor: ActorDep,
 ) -> ConversationMessageView:
     try:
         async with session_factory() as session, session.begin():
@@ -595,6 +602,7 @@ async def post_retry_conversation_message_delivery(
                 session,
                 treatment_id=treatment_id,
                 message_id=message_id,
+                scope_id=actor.kb_scope_id,
             )
     except ConversationTreatmentNotFound as exc:
         raise HTTPException(
@@ -612,6 +620,7 @@ async def post_retry_conversation_message_delivery(
 async def get_conversation_messages(
     treatment_id: UUID,
     session: SessionDep,
+    actor: ActorDep,
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> ConversationMessageList:
@@ -621,6 +630,7 @@ async def get_conversation_messages(
             treatment_id,
             limit=limit,
             offset=offset,
+            scope_id=actor.kb_scope_id,
         )
     except ConversationTreatmentNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
@@ -653,6 +663,7 @@ async def post_patient_reply_draft(
                     reply_classifier_agent=_build_configured_patient_reply_classifier_agent(
                         settings
                     ),
+                    scope_id=actor.kb_scope_id,
                 )
 
             interaction_evidence_retriever = build_patient_interaction_evidence_retriever(
@@ -687,6 +698,7 @@ async def post_patient_reply_draft(
                 safety_provider_timeout_seconds=settings.safety_provider_timeout_seconds,
                 draft_review_reason=_triage_reason_for_patient_reply_draft(draft),
                 reply_classifier_agent=_build_configured_patient_reply_classifier_agent(settings),
+                scope_id=actor.kb_scope_id,
             )
     except (ConversationTreatmentNotFound, ReplyDraftTreatmentNotFound) as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc

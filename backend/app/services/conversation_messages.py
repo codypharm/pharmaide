@@ -60,9 +60,10 @@ async def record_patient_conversation_message(
     treatment_id: UUID,
     message: str,
     reply_classifier_agent: Agent[None, PatientReplyClassification] | None = None,
+    scope_id: UUID | None = None,
 ) -> ConversationMessageView:
     """Store one inbound patient message without generating a reply."""
-    treatment = await session.get(Treatment, treatment_id)
+    treatment = await _get_treatment_row(session, treatment_id, scope_id=scope_id)
     if treatment is None:
         raise TreatmentNotFound()
 
@@ -96,9 +97,10 @@ async def record_pharmacist_conversation_message(
     *,
     treatment_id: UUID,
     message: str,
+    scope_id: UUID | None = None,
 ) -> ConversationMessageView:
     """Queue one pharmacist-authored outbound WhatsApp message."""
-    treatment = await session.get(Treatment, treatment_id)
+    treatment = await _get_treatment_row(session, treatment_id, scope_id=scope_id)
     if treatment is None:
         raise TreatmentNotFound()
 
@@ -131,8 +133,11 @@ async def retry_failed_conversation_message_delivery(
     *,
     treatment_id: UUID,
     message_id: UUID,
+    scope_id: UUID | None = None,
 ) -> ConversationMessageView:
     """Move a failed outbound WhatsApp message back to the delivery queue."""
+    if await _get_treatment_row(session, treatment_id, scope_id=scope_id) is None:
+        raise TreatmentNotFound()
     message = await _get_treatment_message(
         session,
         treatment_id=treatment_id,
@@ -187,9 +192,10 @@ async def list_conversation_messages(
     *,
     limit: int,
     offset: int,
+    scope_id: UUID | None = None,
 ) -> ConversationMessageList:
     """Return treatment conversation messages in chat display order."""
-    treatment = await session.get(Treatment, treatment_id)
+    treatment = await _get_treatment_row(session, treatment_id, scope_id=scope_id)
     if treatment is None:
         raise TreatmentNotFound()
 
@@ -230,9 +236,10 @@ async def submit_patient_conversation_turn(
     providers: ConfiguredSafetyProviders | None = None,
     draft_review_reason: TriageReason | None = None,
     reply_classifier_agent: Agent[None, PatientReplyClassification] | None = None,
+    scope_id: UUID | None = None,
 ) -> ConversationTurnView:
     """Record one patient turn and gate the assistant draft before delivery."""
-    treatment = await session.get(Treatment, treatment_id)
+    treatment = await _get_treatment_row(session, treatment_id, scope_id=scope_id)
     if treatment is None:
         raise TreatmentNotFound()
 
@@ -444,13 +451,14 @@ async def submit_pharmacist_takeover_holding_turn(
     patient_message: str,
     assistant_draft: str,
     reply_classifier_agent: Agent[None, PatientReplyClassification] | None = None,
+    scope_id: UUID | None = None,
 ) -> ConversationTurnView:
     """Record a deterministic acknowledgement while pharmacist owns the thread.
 
     The holding text is fixed application copy, not an LLM clinical answer. It
     stays fast so patients are not left waiting while manual review is active.
     """
-    treatment = await session.get(Treatment, treatment_id)
+    treatment = await _get_treatment_row(session, treatment_id, scope_id=scope_id)
     if treatment is None:
         raise TreatmentNotFound()
 
@@ -505,6 +513,15 @@ async def _get_treatment_message(
         )
     )
     return result.scalar_one_or_none()
+
+
+async def _get_treatment_row(
+    session: AsyncSession, treatment_id: UUID, *, scope_id: UUID | None = None
+) -> Treatment | None:
+    statement = select(Treatment).where(Treatment.id == treatment_id)
+    if scope_id is not None:
+        statement = statement.where(Treatment.scope_id == scope_id)
+    return await session.scalar(statement)
 
 
 def _allow_deterministic_holding_reply(
