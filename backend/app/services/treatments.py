@@ -289,9 +289,10 @@ async def update_chat_response_mode(
     treatment_id: UUID,
     *,
     chat_response_mode: ChatResponseMode,
+    scope_id: UUID | None = None,
 ) -> TreatmentView:
     """Let pharmacists hand patient replies between AI and manual control."""
-    treatment = await session.get(Treatment, treatment_id)
+    treatment = await _get_treatment_row(session, treatment_id, scope_id=scope_id)
     if treatment is None:
         raise TreatmentNotFound()
 
@@ -986,9 +987,10 @@ async def update_clinical_objective(
     treatment_id: UUID,
     *,
     clinical_objective: str | None,
+    scope_id: UUID | None = None,
 ) -> TreatmentView:
     """Update pharmacist-maintained monitoring intent without auditing the text."""
-    treatment = await session.get(Treatment, treatment_id)
+    treatment = await _get_treatment_row(session, treatment_id, scope_id=scope_id)
     if treatment is None:
         raise TreatmentNotFound()
 

@@ -813,6 +813,28 @@ async def test_post_chat_response_mode_resumes_ai_replies_and_audits_change(
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_post_chat_response_mode_returns_404_for_other_actor_scope(
+    app_client: AsyncClient,
+) -> None:
+    actor_a = uuid4()
+    actor_b = uuid4()
+    treatment_id = await _create_treatment(
+        app_client,
+        "CONV-API-SCOPE-CHAT",
+        headers={"X-Pharmaide-User-Id": str(actor_a)},
+    )
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/chat-response-mode",
+        json={"chat_response_mode": "pharmacist_takeover"},
+        headers={"X-Pharmaide-User-Id": str(actor_b)},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": {"error": "treatment_not_found"}}
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_post_treatment_clinical_objective_updates_objective_and_audits_metadata(
     app_client: AsyncClient,
     db_session: AsyncSession,
@@ -847,6 +869,28 @@ async def test_post_treatment_clinical_objective_updates_objective_and_audits_me
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_post_treatment_clinical_objective_returns_404_for_other_actor_scope(
+    app_client: AsyncClient,
+) -> None:
+    actor_a = uuid4()
+    actor_b = uuid4()
+    treatment_id = await _create_treatment(
+        app_client,
+        "CONV-API-SCOPE-OBJECTIVE",
+        headers={"X-Pharmaide-User-Id": str(actor_a)},
+    )
+
+    response = await app_client.post(
+        f"/treatments/{treatment_id}/clinical-objective",
+        json={"clinical_objective": "Monitor nausea"},
+        headers={"X-Pharmaide-User-Id": str(actor_b)},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": {"error": "treatment_not_found"}}
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_post_patient_reply_draft_returns_404_for_unknown_treatment(
     app_client: AsyncClient,
 ) -> None:
@@ -859,7 +903,9 @@ async def test_post_patient_reply_draft_returns_404_for_unknown_treatment(
     assert response.json() == {"detail": {"error": "treatment_not_found"}}
 
 
-async def _create_treatment(app_client: AsyncClient, mrn: str) -> UUID:
+async def _create_treatment(
+    app_client: AsyncClient, mrn: str, *, headers: dict[str, str] | None = None
+) -> UUID:
     response = await app_client.post(
         "/treatments",
         json={
@@ -881,6 +927,7 @@ async def _create_treatment(app_client: AsyncClient, mrn: str) -> UUID:
             ],
             "ingestion_method": "structured",
         },
+        headers=headers,
     )
     assert response.status_code == 201
     return UUID(response.json()["treatment_id"])

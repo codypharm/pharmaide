@@ -249,6 +249,7 @@ async def post_treatment_chat_response_mode(
     treatment_id: UUID,
     body: TreatmentChatResponseModeUpdate,
     session_factory: SessionFactoryDep,
+    actor: ActorDep,
 ) -> TreatmentView:
     try:
         async with session_factory() as session, session.begin():
@@ -256,6 +257,7 @@ async def post_treatment_chat_response_mode(
                 session,
                 treatment_id,
                 chat_response_mode=body.chat_response_mode,
+                scope_id=actor.kb_scope_id,
             )
     except TreatmentCommandNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
@@ -403,6 +405,7 @@ async def post_treatment_clinical_objective(
     treatment_id: UUID,
     body: TreatmentClinicalObjectiveUpdate,
     session_factory: SessionFactoryDep,
+    actor: ActorDep,
 ) -> TreatmentView:
     try:
         async with session_factory() as session, session.begin():
@@ -410,6 +413,7 @@ async def post_treatment_clinical_objective(
                 session,
                 treatment_id,
                 clinical_objective=body.clinical_objective,
+                scope_id=actor.kb_scope_id,
             )
     except TreatmentCommandNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
