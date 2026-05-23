@@ -17,7 +17,9 @@ def disable_analysis_schedule(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(task_runner, "schedule", lambda *args, **kwargs: None)
 
 
-async def _create_treatment(app_client: AsyncClient, mrn: str) -> UUID:
+async def _create_treatment(
+    app_client: AsyncClient, mrn: str, *, headers: dict[str, str] | None = None
+) -> UUID:
     response = await app_client.post(
         "/treatments",
         json={
@@ -42,6 +44,7 @@ async def _create_treatment(app_client: AsyncClient, mrn: str) -> UUID:
             ],
             "ingestion_method": "structured",
         },
+        headers=headers,
     )
     assert response.status_code == 201
     return UUID(response.json()["treatment_id"])
@@ -184,6 +187,36 @@ async def test_adherence_events_return_404_for_unknown_treatment(app_client: Asy
         json={"medication_id": str(uuid4()), "status": "taken", "source": "patient"},
     )
     listing = await app_client.get(f"/treatments/{missing_id}/adherence-events")
+
+    assert create.status_code == 404
+    assert create.json() == {"detail": {"error": "treatment_not_found"}}
+    assert listing.status_code == 404
+    assert listing.json() == {"detail": {"error": "treatment_not_found"}}
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_adherence_events_return_404_for_other_actor_scope(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    actor_a = uuid4()
+    actor_b = uuid4()
+    treatment_id = await _create_treatment(
+        app_client,
+        "ADH-SCOPE-001",
+        headers={"X-Pharmaide-User-Id": str(actor_a)},
+    )
+    medication_id = await _first_medication_id(db_session, treatment_id)
+
+    create = await app_client.post(
+        f"/treatments/{treatment_id}/adherence-events",
+        json={"medication_id": str(medication_id), "status": "taken", "source": "patient"},
+        headers={"X-Pharmaide-User-Id": str(actor_b)},
+    )
+    listing = await app_client.get(
+        f"/treatments/{treatment_id}/adherence-events",
+        headers={"X-Pharmaide-User-Id": str(actor_b)},
+    )
 
     assert create.status_code == 404
     assert create.json() == {"detail": {"error": "treatment_not_found"}}

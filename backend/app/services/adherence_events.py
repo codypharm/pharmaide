@@ -30,8 +30,10 @@ async def create_adherence_event(
     session: AsyncSession,
     treatment_id: UUID,
     request: AdherenceEventCreate,
+    *,
+    scope_id: UUID | None = None,
 ) -> AdherenceEventView:
-    treatment = await session.get(Treatment, treatment_id)
+    treatment = await _get_treatment_row(session, treatment_id, scope_id=scope_id)
     if treatment is None:
         raise TreatmentNotFound()
 
@@ -91,8 +93,9 @@ async def list_adherence_events(
     *,
     limit: int,
     offset: int,
+    scope_id: UUID | None = None,
 ) -> AdherenceEventList:
-    treatment = await session.get(Treatment, treatment_id)
+    treatment = await _get_treatment_row(session, treatment_id, scope_id=scope_id)
     if treatment is None:
         raise TreatmentNotFound()
 
@@ -127,3 +130,12 @@ async def _medication_for_treatment(
             Medication.treatment_id == treatment_id,
         )
     )
+
+
+async def _get_treatment_row(
+    session: AsyncSession, treatment_id: UUID, *, scope_id: UUID | None = None
+) -> Treatment | None:
+    statement = select(Treatment).where(Treatment.id == treatment_id)
+    if scope_id is not None:
+        statement = statement.where(Treatment.scope_id == scope_id)
+    return await session.scalar(statement)

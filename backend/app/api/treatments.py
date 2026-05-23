@@ -434,10 +434,13 @@ async def post_patient_check_in(
     treatment_id: UUID,
     body: PatientCheckInCreate,
     session_factory: SessionFactoryDep,
+    actor: ActorDep,
 ) -> PatientCheckInView:
     try:
         async with session_factory() as session, session.begin():
-            return await create_patient_check_in(session, treatment_id, body)
+            return await create_patient_check_in(
+                session, treatment_id, body, scope_id=actor.kb_scope_id
+            )
     except CheckInTreatmentNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
 
@@ -449,11 +452,14 @@ async def post_patient_check_in(
 async def get_patient_check_ins(
     treatment_id: UUID,
     session: SessionDep,
+    actor: ActorDep,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> PatientCheckInList:
     try:
-        return await list_patient_check_ins(session, treatment_id, limit=limit, offset=offset)
+        return await list_patient_check_ins(
+            session, treatment_id, limit=limit, offset=offset, scope_id=actor.kb_scope_id
+        )
     except CheckInTreatmentNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
 
@@ -467,10 +473,13 @@ async def post_adherence_event(
     treatment_id: UUID,
     body: AdherenceEventCreate,
     session_factory: SessionFactoryDep,
+    actor: ActorDep,
 ) -> AdherenceEventView:
     try:
         async with session_factory() as session, session.begin():
-            return await create_adherence_event(session, treatment_id, body)
+            return await create_adherence_event(
+                session, treatment_id, body, scope_id=actor.kb_scope_id
+            )
     except AdherenceTreatmentNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
     except AdherenceMedicationNotFound as exc:
@@ -484,11 +493,14 @@ async def post_adherence_event(
 async def get_adherence_events(
     treatment_id: UUID,
     session: SessionDep,
+    actor: ActorDep,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> AdherenceEventList:
     try:
-        return await list_adherence_events(session, treatment_id, limit=limit, offset=offset)
+        return await list_adherence_events(
+            session, treatment_id, limit=limit, offset=offset, scope_id=actor.kb_scope_id
+        )
     except AdherenceTreatmentNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
 
