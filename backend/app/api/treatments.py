@@ -627,6 +627,7 @@ async def post_retry_conversation_message_delivery(
                 treatment_id=treatment_id,
                 message_id=message_id,
                 scope_id=actor.kb_scope_id,
+                actor_id=actor.actor_id,
             )
     except ConversationTreatmentNotFound as exc:
         raise HTTPException(

@@ -135,6 +135,7 @@ async def retry_failed_conversation_message_delivery(
     treatment_id: UUID,
     message_id: UUID,
     scope_id: UUID | None = None,
+    actor_id: UUID | None = None,
 ) -> ConversationMessageView:
     """Move a failed outbound WhatsApp message back to the delivery queue."""
     if await _get_treatment_row(session, treatment_id, scope_id=scope_id) is None:
@@ -160,6 +161,7 @@ async def retry_failed_conversation_message_delivery(
 
     session.add(
         AuditLogEntry(
+            actor_id=actor_id,
             event_type="conversation_message_delivery_retried",
             resource_type="conversation_message",
             resource_id=message.id,

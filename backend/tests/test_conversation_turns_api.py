@@ -418,10 +418,17 @@ async def test_post_retry_delivery_requeues_failed_message_and_audits(
     app_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    treatment_id = await _create_treatment(app_client, "CONV-API-018")
+    actor_id = uuid4()
+    headers = {"X-Pharmaide-User-Id": str(actor_id)}
+    treatment_id = await _create_treatment(
+        app_client,
+        "CONV-API-018",
+        headers=headers,
+    )
     created = await app_client.post(
         f"/treatments/{treatment_id}/pharmacist-messages",
         json={"message": "Please call the pharmacy today."},
+        headers=headers,
     )
     assert created.status_code == 201, created.text
     message_id = UUID(created.json()["id"])
@@ -432,7 +439,8 @@ async def test_post_retry_delivery_requeues_failed_message_and_audits(
     await db_session.flush()
 
     response = await app_client.post(
-        f"/treatments/{treatment_id}/conversation-messages/{message_id}/retry-delivery"
+        f"/treatments/{treatment_id}/conversation-messages/{message_id}/retry-delivery",
+        headers=headers,
     )
 
     assert response.status_code == 200, response.text
@@ -447,6 +455,7 @@ async def test_post_retry_delivery_requeues_failed_message_and_audits(
         )
     )
     assert audit is not None
+    assert audit.actor_id == actor_id
     assert audit.payload == {
         "treatment_id": str(treatment_id),
         "message_id": str(message_id),
