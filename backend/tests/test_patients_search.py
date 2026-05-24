@@ -71,6 +71,44 @@ async def test_search_patients_by_name_mrn_or_phone(app_client: AsyncClient) -> 
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_search_patients_returns_only_current_actor_scope(
+    app_client: AsyncClient,
+) -> None:
+    actor_a = "00000000-0000-4000-8000-0000000000a1"
+    actor_b = "00000000-0000-4000-8000-0000000000b1"
+    actor_without_patients = "00000000-0000-4000-8000-0000000000c1"
+
+    first = await app_client.post(
+        "/treatments",
+        json=_body("PAT-SCOPE-001", "Eleanor Vance", "+18005550301"),
+        headers={"X-Pharmaide-User-Id": actor_a},
+    )
+    second = await app_client.post(
+        "/treatments",
+        json=_body("PAT-SCOPE-002", "Eleanor Vance", "+18005550302"),
+        headers={"X-Pharmaide-User-Id": actor_b},
+    )
+    assert first.status_code == 201, first.text
+    assert second.status_code == 201, second.text
+
+    scoped = await app_client.get(
+        "/patients",
+        params={"query": "eleanor"},
+        headers={"X-Pharmaide-User-Id": actor_b},
+    )
+    empty = await app_client.get(
+        "/patients",
+        params={"query": "eleanor"},
+        headers={"X-Pharmaide-User-Id": actor_without_patients},
+    )
+
+    assert scoped.status_code == 200, scoped.text
+    assert [item["mrn"] for item in scoped.json()["items"]] == ["PAT-SCOPE-002"]
+    assert empty.status_code == 200, empty.text
+    assert empty.json()["items"] == []
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_search_patients_rejects_blank_query(app_client: AsyncClient) -> None:
     response = await app_client.get("/patients", params={"query": "   "})
 
