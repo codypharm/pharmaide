@@ -15,6 +15,7 @@ function DashboardApp({
   const [authError, setAuthError] = useState<UnauthorizedError | null>(null);
   const [signedInEmail, setSignedInEmail] = useState(() => currentSessionEmail(authSessionState));
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const authDisplay = dashboardAuthDisplay(authSessionState, signedInEmail);
   const hasMissingAuthAdapter = authSessionState.status === "missing_adapter";
   const interactiveGcipAdapter = authSessionState.status === "ready"
     && authSessionState.mode === "gcip"
@@ -161,10 +162,14 @@ function DashboardApp({
         </nav>
 
         <Link to="/dashboard/profile" className="p-4 m-4 bg-slate-50 rounded-2xl flex items-center gap-3 hover:bg-slate-100 transition-all cursor-pointer border border-slate-100">
-          <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center font-bold text-slate-700 shadow-sm">PP</div>
+          <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center font-bold text-slate-700 shadow-sm">
+            {initialsForUser(authDisplay.email)}
+          </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold text-slate-900 truncate">Dr. E. Thorne</p>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Pharmacist</p>
+            <p className="text-xs font-bold text-slate-900 truncate">{authDisplay.name}</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              {authDisplay.statusLabel}
+            </p>
           </div>
           <ChevronRight size={14} className="text-slate-300" />
         </Link>
@@ -202,10 +207,10 @@ function DashboardApp({
             </button>
             <div className="pl-6 border-l border-slate-200 flex items-center gap-3">
               <span className="max-w-48 truncate text-sm font-semibold text-slate-700">
-                {signedInEmail ?? "Thomas F."}
+                {authDisplay.name}
               </span>
               <div className="w-8 h-8 bg-yellow-100 text-yellow-800 rounded-full flex items-center justify-center font-bold text-xs">
-                {initialsForUser(signedInEmail)}
+                {initialsForUser(authDisplay.email)}
               </div>
               {signedInEmail && typeof interactiveGcipAdapter?.signOut === "function" ? (
                 <button
@@ -269,9 +274,40 @@ function currentSessionEmail(authSessionState: AuthSessionState): string | null 
   return authSessionState.adapter.currentUserEmail?.() ?? null;
 }
 
+function dashboardAuthDisplay(
+  authSessionState: AuthSessionState,
+  signedInEmail: string | null,
+): {
+  email: string | null;
+  name: string;
+  statusLabel: string;
+} {
+  if (authSessionState.status === "missing_adapter") {
+    return {
+      email: null,
+      name: "GCIP setup needed",
+      statusLabel: "Auth setup",
+    };
+  }
+
+  if (authSessionState.status === "ready" && authSessionState.mode === "gcip") {
+    return {
+      email: signedInEmail,
+      name: signedInEmail ?? "Sign in required",
+      statusLabel: signedInEmail ? "GCIP active" : "GCIP sign-in",
+    };
+  }
+
+  return {
+    email: null,
+    name: "Local pharmacist",
+    statusLabel: "Local dev",
+  };
+}
+
 function initialsForUser(email: string | null): string {
   if (!email) {
-    return "TF";
+    return "PA";
   }
 
   return email.slice(0, 2).toUpperCase();

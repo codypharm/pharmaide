@@ -134,6 +134,8 @@ describe("DashboardApp auth state", () => {
     );
 
     expect(screen.getByText("Protected content")).toBeInTheDocument();
+    expect(screen.getAllByText("pharmacist@example.com").length).toBeGreaterThan(0);
+    expect(screen.getByText("GCIP active")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /sign out/i }));
 

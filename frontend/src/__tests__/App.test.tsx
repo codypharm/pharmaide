@@ -63,6 +63,24 @@ describe("PharmaAide app shell", () => {
     expect(screen.queryByRole("link", { name: /surveillance/i })).not.toBeInTheDocument();
   });
 
+  it("uses a sign-in CTA on the landing page when GCIP auth is enabled", () => {
+    render(
+      <App
+        authSessionState={{
+          status: "ready",
+          mode: "gcip",
+          adapter: {
+            getIdToken: () => null,
+            currentUserEmail: () => null,
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getAllByRole("button", { name: /sign in/i }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /review triage/i })).not.toBeInTheDocument();
+  });
+
   it("navigates into the dashboard when Get Started is clicked", async () => {
     await openDashboard();
 
@@ -79,6 +97,27 @@ describe("PharmaAide app shell", () => {
     expect(screen.getByText("Patient Directory")).toBeTruthy();
     expect(await screen.findByText("Thomas Miller")).toBeTruthy();
     expect(screen.getAllByText("88340000").length).toBeGreaterThan(0);
+  });
+
+  it("shows the signed-in pharmacist in dashboard chrome and profile", async () => {
+    window.history.pushState({}, "", "/dashboard/profile");
+
+    render(
+      <App
+        authSessionState={{
+          status: "ready",
+          mode: "gcip",
+          adapter: {
+            getIdToken: () => "id-token",
+            currentUserEmail: () => "pharmacist@example.com",
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getAllByText("pharmacist@example.com").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("GCIP session active").length).toBeGreaterThan(0);
+    expect(screen.getByText("Workspace access is controlled by authenticated claims.")).toBeInTheDocument();
   });
 
   it("hides patient names when privacy mode is toggled on", async () => {

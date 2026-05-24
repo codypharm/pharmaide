@@ -10,6 +10,7 @@ import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 
 import landingHeroImage from "../assets/landing-hero.jpg";
+import type { AuthSessionState } from "../auth/session";
 
 const capabilities: Array<{
   icon: LucideIcon;
@@ -39,8 +40,15 @@ const workflow = [
   "Pharmacists approve, reject, or take over the conversation",
 ];
 
-export default function LandingPage() {
+type LandingPageProps = {
+  authSessionState?: AuthSessionState;
+};
+
+export default function LandingPage({
+  authSessionState = { status: "disabled" },
+}: LandingPageProps) {
   const navigate = useNavigate();
+  const authUi = landingAuthUi(authSessionState);
 
   return (
     <div className="min-h-screen bg-[#F5F5F6] font-['Public_Sans'] text-slate-950">
@@ -81,7 +89,7 @@ export default function LandingPage() {
             onClick={() => navigate("/dashboard/triage")}
             className="inline-flex items-center gap-2 rounded-lg border border-[#5548E8] bg-[#5548E8] px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-[#463AD4] cursor-pointer"
           >
-            Review Triage
+            {authUi.primaryLabel}
             <ArrowRight size={15} />
           </button>
         </div>
@@ -109,7 +117,7 @@ export default function LandingPage() {
                   onClick={() => navigate("/dashboard/triage")}
                   className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#5548E8] bg-[#5548E8] px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-[#463AD4] cursor-pointer"
                 >
-                  Review Triage
+                  {authUi.primaryLabel}
                   <MessageSquareWarning size={16} />
                 </button>
                 <button
@@ -192,7 +200,7 @@ export default function LandingPage() {
                 onClick={() => navigate("/dashboard/triage")}
                 className="inline-flex w-fit items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-900 transition-colors hover:bg-slate-50 cursor-pointer"
               >
-                Review flagged drafts
+                {authUi.reviewLabel}
                 <ArrowRight size={15} />
               </button>
             </div>
@@ -216,6 +224,25 @@ export default function LandingPage() {
       </main>
     </div>
   );
+}
+
+function landingAuthUi(authSessionState: AuthSessionState): {
+  primaryLabel: string;
+  reviewLabel: string;
+} {
+  if (authSessionState.status === "disabled") {
+    return { primaryLabel: "Review Triage", reviewLabel: "Review flagged drafts" };
+  }
+
+  const email = authSessionState.status === "ready"
+    ? authSessionState.adapter.currentUserEmail?.() ?? null
+    : null;
+
+  if (email) {
+    return { primaryLabel: "Open Triage", reviewLabel: "Review flagged drafts" };
+  }
+
+  return { primaryLabel: "Sign in", reviewLabel: "Sign in to review drafts" };
 }
 
 function CapabilityCard({

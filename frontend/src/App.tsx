@@ -26,7 +26,7 @@ function App({ authSessionState = DEFAULT_AUTH_SESSION }: AppProps) {
     <BrowserRouter>
       <Toaster position="top-right" richColors closeButton expand />
       <Routes>
-        <Route path="/" element={<LandingPage />} />
+        <Route path="/" element={<LandingPage authSessionState={authSessionState} />} />
         <Route path="/dashboard" element={<DashboardApp authSessionState={authSessionState} />}>
           <Route path="triage" element={<TriageQueuePage />} />
           <Route path="surveillance" element={<PatientManagementPage />} />
@@ -37,7 +37,10 @@ function App({ authSessionState = DEFAULT_AUTH_SESSION }: AppProps) {
           <Route path="new-treatment" element={<NewTreatmentPage />} />
           <Route path="ingestions" element={<IngestionsPage />} />
           <Route path="treatments/:id" element={<TreatmentDetailPage />} />
-          <Route path="profile" element={<PharmacistProfilePage />} />
+          <Route
+            path="profile"
+            element={<PharmacistProfilePage authSessionState={authSessionState} />}
+          />
         </Route>
       </Routes>
     </BrowserRouter>

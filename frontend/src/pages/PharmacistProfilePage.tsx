@@ -1,24 +1,51 @@
-import { User, Shield, Key, Mail, Phone, MapPin, Award, History, Settings } from "lucide-react";
+import { Award, History, Key, Mail, Settings, Shield } from "lucide-react";
+import type { AuthSessionState } from "../auth/session";
 
-export default function PharmacistProfilePage() {
+type PharmacistProfilePageProps = {
+  authSessionState?: AuthSessionState;
+};
+
+type ProfileAuthSummary = {
+  avatarText: string;
+  displayName: string;
+  email: string;
+  sessionTitle: string;
+  sessionText: string;
+  authModeLabel: string;
+  workspaceLabel: string;
+};
+
+export default function PharmacistProfilePage({
+  authSessionState = { status: "disabled" },
+}: PharmacistProfilePageProps) {
+  const profile = profileAuthSummary(authSessionState);
+
   return (
     <div className="h-full overflow-y-auto p-8">
-      <div className="max-w-4xl mx-auto space-y-8">
-        <div className="flex items-center justify-between">
+      <div className="mx-auto max-w-4xl space-y-8">
+        <div className="flex items-center justify-between gap-6">
           <div className="flex items-center gap-6">
-            <div className="w-24 h-24 rounded-full bg-slate-900 border-4 border-white shadow-xl flex items-center justify-center text-white text-3xl font-bold">
-              PP
+            <div className="flex h-24 w-24 items-center justify-center rounded-full border-4 border-white bg-slate-900 text-3xl font-bold text-white">
+              {profile.avatarText}
             </div>
             <div>
-              <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Dr. Elizabeth Thorne</h2>
-              <p className="text-lg text-slate-500 font-medium">Senior Clinical Pharmacist • ID: PH-99281</p>
-              <div className="flex gap-4 mt-2">
-                <span className="flex items-center gap-1.5 text-xs font-bold text-slate-400 uppercase tracking-widest"><Mail size={14} /> e.thorne@pharmaide.com</span>
-                <span className="flex items-center gap-1.5 text-xs font-bold text-slate-400 uppercase tracking-widest"><Phone size={14} /> +1 (555) 012-3344</span>
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Pharmacist account
+              </p>
+              <h2 className="mt-1 text-3xl font-bold tracking-tight text-slate-900">
+                {profile.displayName}
+              </h2>
+              <div className="mt-3 flex flex-wrap gap-3">
+                <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-500">
+                  <Mail size={14} /> {profile.email}
+                </span>
+                <span className="rounded-md bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                  {profile.authModeLabel}
+                </span>
               </div>
             </div>
           </div>
-          <button className="px-6 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 transition-all shadow-sm flex items-center gap-2 cursor-pointer">
+          <button className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-6 py-2.5 font-bold text-slate-700 transition-colors hover:bg-slate-50">
             <Settings size={18} />
             Account Settings
           </button>
@@ -26,101 +53,173 @@ export default function PharmacistProfilePage() {
 
         <div className="grid grid-cols-3 gap-6">
           <div className="col-span-2 space-y-6">
-            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+            <section className="rounded-2xl border border-slate-200 bg-white p-6">
+              <h3 className="mb-4 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-500">
                 <Award size={16} /> Professional Credentials
               </h3>
               <div className="grid grid-cols-2 gap-6">
-                <div>
-                  <p className="text-xs font-bold text-slate-400 uppercase mb-1">Licensure</p>
-                  <p className="text-sm font-bold text-slate-900">Registered Pharmacist (RPh)</p>
-                  <p className="text-xs text-slate-500">Board of Pharmacy • Exp: Oct 2025</p>
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-slate-400 uppercase mb-1">Specialization</p>
-                  <p className="text-sm font-bold text-slate-900">Cardiovascular Pharmacotherapy</p>
-                  <p className="text-xs text-slate-500">BPS Certified</p>
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-slate-400 uppercase mb-1">Affiliation</p>
-                  <p className="text-sm font-bold text-slate-900">St. Jude Medical Center</p>
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-slate-400 uppercase mb-1">Languages</p>
-                  <p className="text-sm font-bold text-slate-900">English, Spanish</p>
-                </div>
+                <ProfileField label="Role" value="Clinical Pharmacist" detail="Medication follow-up workspace" />
+                <ProfileField label="Workspace" value={profile.workspaceLabel} detail="Used for treatment and knowledge scope" />
+                <ProfileField label="Session" value={profile.sessionTitle} detail="Browser session state" />
+                <ProfileField label="Audit Trail" value="Enabled" detail="Pharmacist actions are attributable" />
               </div>
-            </div>
+            </section>
 
-            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+            <section className="rounded-2xl border border-slate-200 bg-white p-6">
+              <h3 className="mb-4 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-500">
                 <History size={16} /> Recent Activity
               </h3>
               <div className="space-y-4">
                 {[
-                  { action: "Resolved Escalation", details: "Adverse event flagged for P-7219 (Lisinopril)", time: "2h ago" },
-                  { action: "Updated Protocol", details: "Modified 'Neuro-04' safety guard thresholds", time: "5h ago" },
-                  { action: "Session Login", details: "Secure terminal access from 192.168.1.45", time: "8h ago" }
-                ].map((act, i) => (
-                  <div key={i} className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-xl transition-colors">
+                  {
+                    action: "Authentication status checked",
+                    details: profile.sessionText,
+                    time: "Now",
+                  },
+                  {
+                    action: "Audit access ready",
+                    details: "System audit entries are filtered by authenticated scope.",
+                    time: "System",
+                  },
+                  {
+                    action: "Privacy controls available",
+                    details: "Use privacy mode in the dashboard header when working in shared spaces.",
+                    time: "System",
+                  },
+                ].map((activity) => (
+                  <div
+                    key={activity.action}
+                    className="flex items-center justify-between rounded-xl p-3 transition-colors hover:bg-slate-50"
+                  >
                     <div>
-                      <p className="text-sm font-bold text-slate-900">{act.action}</p>
-                      <p className="text-xs text-slate-500">{act.details}</p>
+                      <p className="text-sm font-bold text-slate-900">{activity.action}</p>
+                      <p className="text-xs text-slate-500">{activity.details}</p>
                     </div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{act.time}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      {activity.time}
+                    </span>
                   </div>
                 ))}
               </div>
-            </div>
+            </section>
           </div>
 
           <div className="space-y-6">
-            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+            <section className="rounded-2xl border border-slate-200 bg-white p-6">
+              <h3 className="mb-4 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-500">
                 <Shield size={16} /> System Access
               </h3>
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-slate-600 font-medium">Clinical Override</span>
-                  <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded uppercase">Active</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-slate-600 font-medium">Audit Logs View</span>
-                  <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded uppercase">Granted</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-slate-600 font-medium">PII Access</span>
-                  <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-bold rounded uppercase">Restricted</span>
-                </div>
-                <div className="pt-4 border-t border-slate-100 mt-2">
-                  <button className="w-full py-2 bg-slate-50 text-slate-400 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-slate-100 transition-all cursor-pointer">
-                    Request Elevation
-                  </button>
-                </div>
+                <AccessRow label="Workspace scope" value={profile.workspaceLabel} tone="neutral" />
+                <AccessRow label="Audit logs" value="Granted" tone="success" />
+                <AccessRow label="Patient data" value="Scoped" tone="warning" />
+                <AccessRow label="PHI storage" value="Server only" tone="neutral" />
               </div>
-            </div>
+            </section>
 
-            <div className="bg-slate-900 rounded-2xl p-6 shadow-lg shadow-slate-200 text-white">
-              <div className="flex items-center gap-2 mb-4">
-                <Key size={18} className="text-blue-400" />
-                <h3 className="font-bold">Security Status</h3>
+            <section className="rounded-2xl bg-slate-900 p-6 text-white">
+              <div className="mb-4 flex items-center gap-2">
+                <Key size={18} className="text-[#A9A2F6]" />
+                <h3 className="font-bold">{profile.sessionTitle}</h3>
               </div>
-              <p className="text-xs text-slate-400 leading-relaxed mb-4">
-                Your session is protected by multi-factor authentication and clinical-grade encryption.
+              <p className="mb-4 text-xs leading-6 text-slate-300">{profile.sessionText}</p>
+              <p className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-200">
+                Workspace access is controlled by authenticated claims.
               </p>
-              <div className="flex flex-col gap-2">
-                <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest">
-                  <span>Session TTL</span>
-                  <span>04:42:12</span>
-                </div>
-                <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
-                  <div className="w-3/4 h-full bg-blue-500" />
-                </div>
-              </div>
-            </div>
+            </section>
           </div>
         </div>
       </div>
     </div>
   );
+}
+
+function ProfileField({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+}) {
+  return (
+    <div>
+      <p className="mb-1 text-xs font-bold uppercase text-slate-400">{label}</p>
+      <p className="text-sm font-bold text-slate-900">{value}</p>
+      <p className="text-xs text-slate-500">{detail}</p>
+    </div>
+  );
+}
+
+function AccessRow({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "neutral" | "success" | "warning";
+}) {
+  const toneClass = {
+    neutral: "bg-slate-100 text-slate-700",
+    success: "bg-emerald-100 text-emerald-700",
+    warning: "bg-amber-100 text-amber-700",
+  }[tone];
+
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-sm font-medium text-slate-600">{label}</span>
+      <span className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase ${toneClass}`}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function profileAuthSummary(authSessionState: AuthSessionState): ProfileAuthSummary {
+  if (authSessionState.status === "missing_adapter") {
+    return {
+      avatarText: "PA",
+      displayName: "Sign-in setup required",
+      email: "GCIP adapter missing",
+      sessionTitle: "GCIP setup required",
+      sessionText: "Browser auth is enabled, but the frontend sign-in adapter is not available.",
+      authModeLabel: "GCIP setup",
+      workspaceLabel: "Unavailable",
+    };
+  }
+
+  if (authSessionState.status === "ready" && authSessionState.mode === "gcip") {
+    const email = authSessionState.adapter.currentUserEmail?.() ?? "Not signed in";
+    return {
+      avatarText: initialsForEmail(email),
+      displayName: email,
+      email,
+      sessionTitle: "GCIP session active",
+      sessionText:
+        "This browser session uses GCIP ID tokens. Tokens are kept in memory and sent as bearer auth on API requests.",
+      authModeLabel: "GCIP active",
+      workspaceLabel: "Claim scoped",
+    };
+  }
+
+  return {
+    avatarText: "PA",
+    displayName: "Local pharmacist",
+    email: "Local development session",
+    sessionTitle: "Local auth disabled",
+    sessionText:
+      "This environment uses the development auth scaffold. Production should run with GCIP enabled.",
+    authModeLabel: "Local dev",
+    workspaceLabel: "Dev actor scoped",
+  };
+}
+
+function initialsForEmail(email: string): string {
+  if (!email.includes("@")) {
+    return "PA";
+  }
+
+  return email.slice(0, 2).toUpperCase();
 }
