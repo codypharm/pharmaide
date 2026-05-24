@@ -14,7 +14,7 @@ from app.api.schemas import (
     TriageItemView,
     TriageRejectionView,
 )
-from app.auth import get_current_actor
+from app.auth import CurrentActor, get_current_actor
 from app.db.engine import get_session
 from app.services.triage import (
     InvalidTriageTransition,
@@ -30,6 +30,7 @@ from app.services.triage import (
 )
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+ActorDep = Annotated[CurrentActor, Depends(get_current_actor)]
 
 router = APIRouter(prefix="/triage", dependencies=[Depends(get_current_actor)])
 
@@ -40,10 +41,13 @@ router = APIRouter(prefix="/triage", dependencies=[Depends(get_current_actor)])
 )
 async def get_triage_items(
     session: SessionDep,
+    actor: ActorDep,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> TriageItemList:
-    return await list_triage_items(session, limit=limit, offset=offset)
+    return await list_triage_items(
+        session, limit=limit, offset=offset, scope_id=actor.kb_scope_id
+    )
 
 
 @router.patch(
@@ -54,9 +58,12 @@ async def patch_triage_item(
     item_id: UUID,
     body: TriageItemUpdate,
     session: SessionDep,
+    actor: ActorDep,
 ) -> TriageItemView:
     try:
-        return await update_triage_item_status(session, item_id, status=body.status)
+        return await update_triage_item_status(
+            session, item_id, status=body.status, scope_id=actor.kb_scope_id
+        )
     except TriageItemNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "triage_item_not_found"}) from exc
     except InvalidTriageTransition as exc:
@@ -70,9 +77,10 @@ async def patch_triage_item(
 async def approve_triage_item(
     item_id: UUID,
     session: SessionDep,
+    actor: ActorDep,
 ) -> TriageApprovalView:
     try:
-        return await approve_triage_item_draft(session, item_id)
+        return await approve_triage_item_draft(session, item_id, scope_id=actor.kb_scope_id)
     except TriageItemNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "triage_item_not_found"}) from exc
     except InvalidTriageTransition as exc:
@@ -91,9 +99,10 @@ async def approve_triage_item(
 async def reject_triage_item(
     item_id: UUID,
     session: SessionDep,
+    actor: ActorDep,
 ) -> TriageRejectionView:
     try:
-        return await reject_triage_item_draft(session, item_id)
+        return await reject_triage_item_draft(session, item_id, scope_id=actor.kb_scope_id)
     except TriageItemNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "triage_item_not_found"}) from exc
     except InvalidTriageTransition as exc:
@@ -112,9 +121,10 @@ async def reject_triage_item(
 async def queue_triage_item_for_delivery(
     item_id: UUID,
     session: SessionDep,
+    actor: ActorDep,
 ) -> TriageDeliveryView:
     try:
-        return await queue_triage_item_delivery(session, item_id)
+        return await queue_triage_item_delivery(session, item_id, scope_id=actor.kb_scope_id)
     except TriageItemNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "triage_item_not_found"}) from exc
     except TriageDraftNotQueueable as exc:

@@ -122,6 +122,88 @@ async def test_get_triage_items_requires_bearer_token_in_gcip_mode(
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_get_triage_items_hides_other_actor_scope(
+    app_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_a = uuid4()
+    actor_b = uuid4()
+    item_id = await _create_open_triage_item(
+        app_client,
+        monkeypatch,
+        "TRIAGE-SCOPE-LIST",
+        headers={"X-Pharmaide-User-Id": str(actor_a)},
+    )
+
+    response = await app_client.get(
+        "/triage/items",
+        headers={"X-Pharmaide-User-Id": str(actor_b)},
+    )
+
+    assert response.status_code == 200, response.text
+    assert all(item["id"] != str(item_id) for item in response.json()["items"])
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_patch_triage_item_returns_404_for_other_actor_scope(
+    app_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_a = uuid4()
+    actor_b = uuid4()
+    item_id = await _create_open_triage_item(
+        app_client,
+        monkeypatch,
+        "TRIAGE-SCOPE-PATCH",
+        headers={"X-Pharmaide-User-Id": str(actor_a)},
+    )
+
+    response = await app_client.patch(
+        f"/triage/items/{item_id}",
+        json={"status": "acknowledged"},
+        headers={"X-Pharmaide-User-Id": str(actor_b)},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": {"error": "triage_item_not_found"}}
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_triage_draft_actions_return_404_for_other_actor_scope(
+    app_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_a = uuid4()
+    actor_b = uuid4()
+    item_id = await _create_open_triage_item(
+        app_client,
+        monkeypatch,
+        "TRIAGE-SCOPE-ACTIONS",
+        headers={"X-Pharmaide-User-Id": str(actor_a)},
+    )
+
+    approve = await app_client.post(
+        f"/triage/items/{item_id}/approve",
+        headers={"X-Pharmaide-User-Id": str(actor_b)},
+    )
+    reject = await app_client.post(
+        f"/triage/items/{item_id}/reject",
+        headers={"X-Pharmaide-User-Id": str(actor_b)},
+    )
+    queue = await app_client.post(
+        f"/triage/items/{item_id}/queue-delivery",
+        headers={"X-Pharmaide-User-Id": str(actor_b)},
+    )
+
+    assert approve.status_code == 404
+    assert approve.json() == {"detail": {"error": "triage_item_not_found"}}
+    assert reject.status_code == 404
+    assert reject.json() == {"detail": {"error": "triage_item_not_found"}}
+    assert queue.status_code == 404
+    assert queue.json() == {"detail": {"error": "triage_item_not_found"}}
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_post_triage_item_approve_marks_held_draft_approved_and_resolves(
     app_client: AsyncClient,
     db_session: AsyncSession,
@@ -297,8 +379,10 @@ async def _create_open_triage_item(
     app_client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
     mrn: str,
+    *,
+    headers: dict[str, str] | None = None,
 ) -> UUID:
-    treatment_id = await _create_treatment(app_client, mrn)
+    treatment_id = await _create_treatment(app_client, mrn, headers=headers)
     _patch_safety_decision(monkeypatch, treatment_id, status="hold_for_pharmacist")
     response = await app_client.post(
         f"/treatments/{treatment_id}/conversation-turns",
@@ -307,14 +391,17 @@ async def _create_open_triage_item(
             "assistant_draft": "This draft must be reviewed.",
             "prescription_context": "Amoxicillin 500 mg three times daily.",
         },
+        headers=headers,
     )
     assert response.status_code == 201, response.text
-    triage = await app_client.get("/triage/items")
+    triage = await app_client.get("/triage/items", headers=headers)
     assert triage.status_code == 200, triage.text
     return UUID(triage.json()["items"][0]["id"])
 
 
-async def _create_treatment(app_client: AsyncClient, mrn: str) -> UUID:
+async def _create_treatment(
+    app_client: AsyncClient, mrn: str, *, headers: dict[str, str] | None = None
+) -> UUID:
     response = await app_client.post(
         "/treatments",
         json={
@@ -336,6 +423,7 @@ async def _create_treatment(app_client: AsyncClient, mrn: str) -> UUID:
             ],
             "ingestion_method": "structured",
         },
+        headers=headers,
     )
     assert response.status_code == 201
     return UUID(response.json()["treatment_id"])

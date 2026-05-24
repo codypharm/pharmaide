@@ -137,10 +137,16 @@ async def list_triage_items(
     *,
     limit: int,
     offset: int,
+    scope_id: UUID | None = None,
 ) -> TriageItemList:
     """Return pharmacist triage items newest-first."""
+    statement = select(TriageItem)
+    if scope_id is not None:
+        statement = statement.join(Treatment, TriageItem.treatment_id == Treatment.id).where(
+            Treatment.scope_id == scope_id
+        )
     result = await session.execute(
-        select(TriageItem)
+        statement
         .order_by(TriageItem.created_at.desc(), TriageItem.id.desc())
         .limit(limit)
         .offset(offset)
@@ -160,9 +166,10 @@ async def update_triage_item_status(
     item_id: UUID,
     *,
     status: TriageStatus,
+    scope_id: UUID | None = None,
 ) -> TriageItemView:
     """Move a triage item through the pharmacist review lifecycle."""
-    item = await session.get(TriageItem, item_id)
+    item = await _get_triage_item(session, item_id, scope_id=scope_id)
     if item is None:
         raise TriageItemNotFound()
 
@@ -198,9 +205,11 @@ async def update_triage_item_status(
 async def approve_triage_item_draft(
     session: AsyncSession,
     item_id: UUID,
+    *,
+    scope_id: UUID | None = None,
 ) -> TriageApprovalView:
     """Approve a held assistant draft and resolve its pharmacist review item."""
-    item = await session.get(TriageItem, item_id)
+    item = await _get_triage_item(session, item_id, scope_id=scope_id)
     if item is None:
         raise TriageItemNotFound()
     if item.status == "resolved":
@@ -250,9 +259,11 @@ async def approve_triage_item_draft(
 async def reject_triage_item_draft(
     session: AsyncSession,
     item_id: UUID,
+    *,
+    scope_id: UUID | None = None,
 ) -> TriageRejectionView:
     """Reject a held assistant draft so it cannot be queued for delivery."""
-    item = await session.get(TriageItem, item_id)
+    item = await _get_triage_item(session, item_id, scope_id=scope_id)
     if item is None:
         raise TriageItemNotFound()
     if item.status == "resolved":
@@ -303,9 +314,11 @@ async def reject_triage_item_draft(
 async def queue_triage_item_delivery(
     session: AsyncSession,
     item_id: UUID,
+    *,
+    scope_id: UUID | None = None,
 ) -> TriageDeliveryView:
     """Mark an approved assistant draft ready for the future delivery worker."""
-    item = await session.get(TriageItem, item_id)
+    item = await _get_triage_item(session, item_id, scope_id=scope_id)
     if item is None:
         raise TriageItemNotFound()
 
@@ -368,6 +381,17 @@ async def _get_approvable_draft(
         raise TriageDraftNotApprovable()
 
     return message
+
+
+async def _get_triage_item(
+    session: AsyncSession, item_id: UUID, *, scope_id: UUID | None = None
+) -> TriageItem | None:
+    statement = select(TriageItem).where(TriageItem.id == item_id)
+    if scope_id is not None:
+        statement = statement.join(Treatment, TriageItem.treatment_id == Treatment.id).where(
+            Treatment.scope_id == scope_id
+        )
+    return await session.scalar(statement)
 
 
 async def _get_rejectable_draft(
