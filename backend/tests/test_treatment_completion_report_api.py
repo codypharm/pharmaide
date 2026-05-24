@@ -24,7 +24,10 @@ async def test_completion_report_returns_sanitized_counts_for_completed_treatmen
     app_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    treatment, medication = await _persist_treatment(db_session, status="completed")
+    actor_id = uuid4()
+    treatment, medication = await _persist_treatment(
+        db_session, status="completed", scope_id=actor_id
+    )
     db_session.add_all(
         [
             AdherenceEvent(
@@ -49,7 +52,10 @@ async def test_completion_report_returns_sanitized_counts_for_completed_treatmen
     )
     await db_session.flush()
 
-    response = await app_client.get(f"/treatments/{treatment.id}/completion-report")
+    response = await app_client.get(
+        f"/treatments/{treatment.id}/completion-report",
+        headers={"X-Pharmaide-User-Id": str(actor_id)},
+    )
 
     assert response.status_code == 200
     body = response.json()
@@ -76,6 +82,7 @@ async def test_completion_report_returns_sanitized_counts_for_completed_treatmen
         )
     )
     assert audit is not None
+    assert audit.actor_id == actor_id
     assert audit.resource_type == "treatment"
     assert audit.payload == {
         "report_status": "completed",

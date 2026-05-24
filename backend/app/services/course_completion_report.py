@@ -106,10 +106,13 @@ async def build_course_completion_report(
 def audit_course_completion_report_viewed(
     session: AsyncSession,
     report: CourseCompletionReport,
+    *,
+    actor_id: UUID | None = None,
 ) -> None:
     """Record report access with aggregate counts only, never patient text."""
     session.add(
         AuditLogEntry(
+            actor_id=actor_id,
             event_type="completion_report_viewed",
             resource_type="treatment",
             resource_id=report.treatment_id,

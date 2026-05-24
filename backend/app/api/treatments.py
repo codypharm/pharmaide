@@ -242,7 +242,7 @@ async def get_treatment_completion_report(
     # only exposes finalized course reports after completion.
     if report.status != "completed":
         raise HTTPException(status_code=409, detail={"error": "treatment_not_completed"})
-    audit_course_completion_report_viewed(session, report)
+    audit_course_completion_report_viewed(session, report, actor_id=actor.actor_id)
     return report
 
 
