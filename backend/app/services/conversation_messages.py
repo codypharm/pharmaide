@@ -464,6 +464,7 @@ async def submit_pharmacist_takeover_holding_turn(
     assistant_draft: str,
     reply_classifier_agent: Agent[None, PatientReplyClassification] | None = None,
     scope_id: UUID | None = None,
+    actor_id: UUID | None = None,
 ) -> ConversationTurnView:
     """Record a deterministic acknowledgement while pharmacist owns the thread.
 
@@ -495,7 +496,14 @@ async def submit_pharmacist_takeover_holding_turn(
     )
 
     decision = _allow_deterministic_holding_reply(treatment_id, draft_body)
-    _audit_conversation_turn(session, treatment_id, inbound, assistant, decision.status)
+    _audit_conversation_turn(
+        session,
+        treatment_id,
+        inbound,
+        assistant,
+        decision.status,
+        actor_id=actor_id,
+    )
     await session.flush()
 
     log.info(

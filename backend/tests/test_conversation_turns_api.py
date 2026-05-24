@@ -616,9 +616,12 @@ async def test_list_conversation_messages_returns_404_for_other_actor_scope(
 @pytest.mark.usefixtures("postgres_container")
 async def test_post_patient_reply_draft_generates_ready_conversation_turn(
     app_client: AsyncClient,
+    db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    treatment_id = await _create_treatment(app_client, "CONV-API-007")
+    actor_id = uuid4()
+    headers = {"X-Pharmaide-User-Id": str(actor_id)}
+    treatment_id = await _create_treatment(app_client, "CONV-API-007", headers=headers)
     seen: dict[str, str] = {}
     _patch_generated_reply(monkeypatch)
     _patch_safety_decision(monkeypatch, treatment_id, status="send", seen=seen)
@@ -626,6 +629,7 @@ async def test_post_patient_reply_draft_generates_ready_conversation_turn(
     response = await app_client.post(
         f"/treatments/{treatment_id}/patient-reply-drafts",
         json={"patient_message": "Can I take this after food?"},
+        headers=headers,
     )
 
     assert response.status_code == 201, response.text
@@ -638,6 +642,12 @@ async def test_post_patient_reply_draft_generates_ready_conversation_turn(
     assert payload["safety_decision"]["status"] == "send"
     assert "Amoxicillin" in seen["prescription_context"]
     assert "Three Times Daily (TID)" in seen["prescription_context"]
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(AuditLogEntry.event_type == "conversation_turn_recorded")
+    )
+    assert audit is not None
+    assert audit.actor_id == actor_id
 
 
 @pytest.mark.usefixtures("postgres_container")
@@ -865,9 +875,12 @@ async def test_post_patient_reply_draft_opens_triage_when_draft_requires_review(
 @pytest.mark.usefixtures("postgres_container")
 async def test_post_patient_reply_draft_uses_holding_response_during_pharmacist_takeover(
     app_client: AsyncClient,
+    db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    treatment_id = await _create_treatment(app_client, "CONV-API-013")
+    actor_id = uuid4()
+    headers = {"X-Pharmaide-User-Id": str(actor_id)}
+    treatment_id = await _create_treatment(app_client, "CONV-API-013", headers=headers)
     _patch_safety_decision(monkeypatch, treatment_id, status="hold_for_pharmacist")
     held = await app_client.post(
         f"/treatments/{treatment_id}/conversation-turns",
@@ -876,6 +889,7 @@ async def test_post_patient_reply_draft_uses_holding_response_during_pharmacist_
             "assistant_draft": "This draft must be reviewed.",
             "prescription_context": "Amoxicillin 500 mg three times daily.",
         },
+        headers=headers,
     )
     assert held.status_code == 201, held.text
 
@@ -891,6 +905,7 @@ async def test_post_patient_reply_draft_uses_holding_response_during_pharmacist_
     response = await app_client.post(
         f"/treatments/{treatment_id}/patient-reply-drafts",
         json={"patient_message": "Any update on my question?"},
+        headers=headers,
     )
 
     assert response.status_code == 201, response.text
@@ -899,6 +914,15 @@ async def test_post_patient_reply_draft_uses_holding_response_during_pharmacist_
     assert payload["assistant_message"]["status"] == "draft_ready"
     assert "pharmacist is reviewing" in payload["assistant_message"]["body"]
     assert payload["safety_decision"]["status"] == "send"
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.event_type == "conversation_turn_recorded",
+            AuditLogEntry.resource_id == UUID(payload["assistant_message"]["id"]),
+        )
+    )
+    assert audit is not None
+    assert audit.actor_id == actor_id
 
 
 @pytest.mark.usefixtures("postgres_container")

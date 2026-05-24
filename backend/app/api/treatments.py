@@ -693,6 +693,7 @@ async def post_patient_reply_draft(
                         settings
                     ),
                     scope_id=actor.kb_scope_id,
+                    actor_id=actor.actor_id,
                 )
 
             interaction_evidence_retriever = build_patient_interaction_evidence_retriever(
@@ -728,6 +729,7 @@ async def post_patient_reply_draft(
                 draft_review_reason=_triage_reason_for_patient_reply_draft(draft),
                 reply_classifier_agent=_build_configured_patient_reply_classifier_agent(settings),
                 scope_id=actor.kb_scope_id,
+                actor_id=actor.actor_id,
             )
     except (ConversationTreatmentNotFound, ReplyDraftTreatmentNotFound) as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
