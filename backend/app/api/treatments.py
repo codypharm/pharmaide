@@ -163,7 +163,9 @@ async def post_treatment(
         # Create the treatment and reserve its first analysis in one request
         # transaction so every client gets the same startup behavior.
         async with session_factory() as session, session.begin():
-            created = await create_treatment(session, body, scope_id=actor.kb_scope_id)
+            created = await create_treatment(
+                session, body, scope_id=actor.kb_scope_id, actor_id=actor.actor_id
+            )
             analysis_id = await create_pending_analysis(session, created.treatment_id)
     except MRNConflict as exc:
         raise HTTPException(status_code=409, detail={"error": "mrn_already_exists"}) from exc
@@ -276,7 +278,9 @@ async def post_treatment_start_cycle(
     actor: ActorDep,
 ) -> TreatmentView:
     try:
-        return await start_treatment_cycle(session, treatment_id, scope_id=actor.kb_scope_id)
+        return await start_treatment_cycle(
+            session, treatment_id, scope_id=actor.kb_scope_id, actor_id=actor.actor_id
+        )
     except TreatmentCommandNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
     except AnalysisNotCompleted as exc:
@@ -298,7 +302,9 @@ async def post_treatment_archive(
     actor: ActorDep,
 ) -> TreatmentView:
     try:
-        return await archive_treatment(session, treatment_id, scope_id=actor.kb_scope_id)
+        return await archive_treatment(
+            session, treatment_id, scope_id=actor.kb_scope_id, actor_id=actor.actor_id
+        )
     except TreatmentCommandNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
     except TreatmentNotCompleted as exc:
@@ -315,7 +321,9 @@ async def post_treatment_terminate(
     actor: ActorDep,
 ) -> TreatmentView:
     try:
-        return await terminate_treatment(session, treatment_id, scope_id=actor.kb_scope_id)
+        return await terminate_treatment(
+            session, treatment_id, scope_id=actor.kb_scope_id, actor_id=actor.actor_id
+        )
     except TreatmentCommandNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
     except TreatmentAlreadyCompleted as exc:

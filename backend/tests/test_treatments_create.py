@@ -5,7 +5,7 @@ creates exactly: 1 patient + 1 treatment + N medications + 1 audit row,
 all atomically, and returns the new ids.
 """
 
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from httpx import AsyncClient
@@ -20,6 +20,7 @@ from app.services import task_runner
 async def test_post_treatments_creates_full_lineage(
     app_client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    actor_id = uuid4()
     scheduled: list[tuple[object, tuple[object, ...], dict[str, object]]] = []
 
     def capture_schedule(coro_fn: object, *args: object, **kwargs: object) -> None:
@@ -58,7 +59,11 @@ async def test_post_treatments_creates_full_lineage(
         "ingestion_method": "structured",
     }
 
-    response = await app_client.post("/treatments", json=body)
+    response = await app_client.post(
+        "/treatments",
+        json=body,
+        headers={"X-Pharmaide-User-Id": str(actor_id)},
+    )
 
     assert response.status_code == 201, response.text
     payload = response.json()
@@ -110,12 +115,16 @@ async def test_post_treatments_creates_full_lineage(
     )
     audits = list(audit_result.scalars())
     assert len(audits) == 1
+    assert audits[0].actor_id == actor_id
     assert audits[0].event_type == "treatment_created"
     assert audits[0].resource_type == "treatment"
     assert audits[0].payload["allergy_count"] == 2
     assert audits[0].payload["treatment_start_at_present"] is True
 
-    detail_response = await app_client.get(f"/treatments/{treatment_id}")
+    detail_response = await app_client.get(
+        f"/treatments/{treatment_id}",
+        headers={"X-Pharmaide-User-Id": str(actor_id)},
+    )
     assert detail_response.status_code == 200
     assert detail_response.json()["patient"]["allergies"] == ["Penicillin", "Sulfa"]
     assert detail_response.json()["treatment"]["chat_response_mode"] == "ai_active"

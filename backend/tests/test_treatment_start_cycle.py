@@ -21,7 +21,11 @@ def disable_analysis_schedule(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_post_start_cycle_marks_pending_treatment_active_and_audits(
     app_client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    create = await app_client.post("/treatments", json=_treatment_body("START-CYCLE-001"))
+    actor_id = uuid4()
+    headers = {"X-Pharmaide-User-Id": str(actor_id)}
+    create = await app_client.post(
+        "/treatments", json=_treatment_body("START-CYCLE-001"), headers=headers
+    )
     assert create.status_code == 201, create.text
     treatment_id = UUID(create.json()["treatment_id"])
     db_session.add(
@@ -36,7 +40,7 @@ async def test_post_start_cycle_marks_pending_treatment_active_and_audits(
     treatment.automation_mode = "paused"
     await db_session.flush()
 
-    response = await app_client.post(f"/treatments/{treatment_id}/start-cycle")
+    response = await app_client.post(f"/treatments/{treatment_id}/start-cycle", headers=headers)
 
     assert response.status_code == 200, response.text
     payload = response.json()
@@ -70,6 +74,7 @@ async def test_post_start_cycle_marks_pending_treatment_active_and_audits(
         )
     )
     assert audit is not None
+    assert audit.actor_id == actor_id
     assert audit.resource_type == "treatment"
     assert UUID(audit.payload["analysis_id"])
     assert audit.payload == {
@@ -214,7 +219,11 @@ async def test_post_start_cycle_returns_404_for_other_actor_scope(
 async def test_post_archive_completed_treatment_sets_archived_at_and_audits(
     app_client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    create = await app_client.post("/treatments", json=_treatment_body("ARCHIVE-001"))
+    actor_id = uuid4()
+    headers = {"X-Pharmaide-User-Id": str(actor_id)}
+    create = await app_client.post(
+        "/treatments", json=_treatment_body("ARCHIVE-001"), headers=headers
+    )
     assert create.status_code == 201, create.text
     treatment_id = UUID(create.json()["treatment_id"])
     treatment = await db_session.get(Treatment, treatment_id)
@@ -222,7 +231,7 @@ async def test_post_archive_completed_treatment_sets_archived_at_and_audits(
     treatment.status = "completed"
     await db_session.flush()
 
-    response = await app_client.post(f"/treatments/{treatment_id}/archive")
+    response = await app_client.post(f"/treatments/{treatment_id}/archive", headers=headers)
 
     assert response.status_code == 200, response.text
     payload = response.json()
@@ -240,6 +249,7 @@ async def test_post_archive_completed_treatment_sets_archived_at_and_audits(
         )
     )
     assert audit is not None
+    assert audit.actor_id == actor_id
     assert audit.resource_type == "treatment"
     assert audit.payload == {
         "status": "completed",
@@ -338,7 +348,11 @@ async def test_post_archive_returns_404_for_other_actor_scope(
 async def test_post_terminate_active_treatment_sets_terminal_state_and_audits(
     app_client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    create = await app_client.post("/treatments", json=_treatment_body("TERMINATE-001"))
+    actor_id = uuid4()
+    headers = {"X-Pharmaide-User-Id": str(actor_id)}
+    create = await app_client.post(
+        "/treatments", json=_treatment_body("TERMINATE-001"), headers=headers
+    )
     assert create.status_code == 201, create.text
     treatment_id = UUID(create.json()["treatment_id"])
     treatment = await db_session.get(Treatment, treatment_id)
@@ -346,7 +360,7 @@ async def test_post_terminate_active_treatment_sets_terminal_state_and_audits(
     treatment.status = "active"
     await db_session.flush()
 
-    response = await app_client.post(f"/treatments/{treatment_id}/terminate")
+    response = await app_client.post(f"/treatments/{treatment_id}/terminate", headers=headers)
 
     assert response.status_code == 200, response.text
     payload = response.json()
@@ -364,6 +378,7 @@ async def test_post_terminate_active_treatment_sets_terminal_state_and_audits(
         )
     )
     assert audit is not None
+    assert audit.actor_id == actor_id
     assert audit.payload == {
         "old_status": "active",
         "new_status": "terminated",

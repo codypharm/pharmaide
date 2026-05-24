@@ -87,7 +87,11 @@ class MedicationAlreadyDiscontinued(Exception):
 
 
 async def create_treatment(
-    session: AsyncSession, request: CreateTreatmentRequest, *, scope_id: UUID
+    session: AsyncSession,
+    request: CreateTreatmentRequest,
+    *,
+    scope_id: UUID,
+    actor_id: UUID | None = None,
 ) -> CreateTreatmentResponse:
     patient = await _resolve_treatment_patient(session, request)
 
@@ -116,6 +120,7 @@ async def create_treatment(
     await session.flush()
 
     audit = AuditLogEntry(
+        actor_id=actor_id,
         event_type="treatment_created",
         resource_type="treatment",
         resource_id=treatment.id,
@@ -334,7 +339,11 @@ async def update_chat_response_mode(
 
 
 async def start_treatment_cycle(
-    session: AsyncSession, treatment_id: UUID, *, scope_id: UUID | None = None
+    session: AsyncSession,
+    treatment_id: UUID,
+    *,
+    scope_id: UUID | None = None,
+    actor_id: UUID | None = None,
 ) -> TreatmentView:
     """Activate monitoring for a treatment after pharmacist review."""
     treatment = await _get_treatment_row(session, treatment_id, scope_id=scope_id)
@@ -357,6 +366,7 @@ async def start_treatment_cycle(
         await session.flush()
         session.add(
             AuditLogEntry(
+                actor_id=actor_id,
                 event_type="treatment_cycle_started",
                 resource_type="treatment",
                 resource_id=treatment.id,
@@ -432,7 +442,11 @@ def _build_cycle_onboarding_message(*, treatment_id: UUID) -> ConversationMessag
 
 
 async def archive_treatment(
-    session: AsyncSession, treatment_id: UUID, *, scope_id: UUID | None = None
+    session: AsyncSession,
+    treatment_id: UUID,
+    *,
+    scope_id: UUID | None = None,
+    actor_id: UUID | None = None,
 ) -> TreatmentView:
     """Move a completed treatment out of active work queues."""
     treatment = await _get_treatment_row(session, treatment_id, scope_id=scope_id)
@@ -446,6 +460,7 @@ async def archive_treatment(
     treatment.archived_at = datetime.now(UTC)
     session.add(
         AuditLogEntry(
+            actor_id=actor_id,
             event_type="treatment_archived",
             resource_type="treatment",
             resource_id=treatment.id,
@@ -467,7 +482,11 @@ async def archive_treatment(
 
 
 async def terminate_treatment(
-    session: AsyncSession, treatment_id: UUID, *, scope_id: UUID | None = None
+    session: AsyncSession,
+    treatment_id: UUID,
+    *,
+    scope_id: UUID | None = None,
+    actor_id: UUID | None = None,
 ) -> TreatmentView:
     """Stop monitoring for a pending or active treatment before normal completion."""
     treatment = await _get_treatment_row(session, treatment_id, scope_id=scope_id)
@@ -484,6 +503,7 @@ async def terminate_treatment(
     treatment.automation_mode = "paused"
     session.add(
         AuditLogEntry(
+            actor_id=actor_id,
             event_type="treatment_terminated",
             resource_type="treatment",
             resource_id=treatment.id,
