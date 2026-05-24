@@ -537,6 +537,7 @@ async def discontinue_medication(
     treatment_id: UUID,
     medication_id: UUID,
     scope_id: UUID | None = None,
+    actor_id: UUID | None = None,
 ) -> MedicationView:
     """Discontinue one medication and require fresh analysis before monitoring resumes."""
     treatment = await _get_treatment_row(session, treatment_id, scope_id=scope_id)
@@ -578,6 +579,7 @@ async def discontinue_medication(
         active_medication_count=active_medication_count,
         cancelled_message_count=cancelled_message_count,
         patient_notification=patient_notification,
+        actor_id=actor_id,
     )
     log.info(
         "treatment_medication_discontinued",
@@ -605,6 +607,7 @@ async def add_medication_to_treatment(
     treatment_id: UUID,
     medication: MedicationCreate,
     scope_id: UUID | None = None,
+    actor_id: UUID | None = None,
 ) -> MedicationView:
     """Add a medication and force pharmacist review before monitoring resumes."""
     treatment = await _get_treatment_row(session, treatment_id, scope_id=scope_id)
@@ -650,6 +653,7 @@ async def add_medication_to_treatment(
         active_medication_count=active_medication_count,
         cancelled_message_count=cancelled_message_count,
         patient_notification=patient_notification,
+        actor_id=actor_id,
     )
     log.info(
         "treatment_medication_added",
@@ -678,6 +682,7 @@ async def edit_medication(
     medication_id: UUID,
     medication_update: MedicationUpdate,
     scope_id: UUID | None = None,
+    actor_id: UUID | None = None,
 ) -> MedicationView:
     """Edit active medication instructions and require fresh pharmacist review."""
     treatment = await _get_treatment_row(session, treatment_id, scope_id=scope_id)
@@ -717,6 +722,7 @@ async def edit_medication(
         cancelled_message_count=cancelled_message_count,
         patient_notification=patient_notification,
         changed_fields=changed_fields,
+        actor_id=actor_id,
     )
     log.info(
         "treatment_medication_edited",
@@ -908,9 +914,11 @@ def _audit_medication_added(
     active_medication_count: int,
     cancelled_message_count: int,
     patient_notification: ConversationMessage | None,
+    actor_id: UUID | None,
 ) -> None:
     session.add(
         AuditLogEntry(
+            actor_id=actor_id,
             event_type="treatment_medication_added",
             resource_type="medication",
             resource_id=medication.id,
@@ -946,9 +954,11 @@ def _audit_medication_edited(
     cancelled_message_count: int,
     patient_notification: ConversationMessage | None,
     changed_fields: list[str],
+    actor_id: UUID | None,
 ) -> None:
     session.add(
         AuditLogEntry(
+            actor_id=actor_id,
             event_type="treatment_medication_edited",
             resource_type="medication",
             resource_id=medication.id,
@@ -984,9 +994,11 @@ def _audit_medication_discontinued(
     active_medication_count: int,
     cancelled_message_count: int,
     patient_notification: ConversationMessage | None,
+    actor_id: UUID | None,
 ) -> None:
     session.add(
         AuditLogEntry(
+            actor_id=actor_id,
             event_type="treatment_medication_discontinued",
             resource_type="medication",
             resource_id=medication.id,

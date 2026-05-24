@@ -28,7 +28,11 @@ async def test_add_medication_pauses_cycle_notifies_patient_and_audits(
     app_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    treatment_id = await _create_treatment(app_client, mrn="MED-CHANGE-ADD")
+    actor_id = uuid4()
+    headers = {"X-Pharmaide-User-Id": str(actor_id)}
+    treatment_id = await _create_treatment(
+        app_client, mrn="MED-CHANGE-ADD", headers=headers
+    )
     analysis = TreatmentAnalysis(
         treatment_id=treatment_id,
         status="completed",
@@ -58,6 +62,7 @@ async def test_add_medication_pauses_cycle_notifies_patient_and_audits(
             "duration": "30 days",
             "objective": None,
         },
+        headers=headers,
     )
 
     assert response.status_code == 201, response.text
@@ -93,6 +98,7 @@ async def test_add_medication_pauses_cycle_notifies_patient_and_audits(
         )
     )
     assert audit is not None
+    assert audit.actor_id == actor_id
     assert audit.resource_type == "medication"
     assert audit.payload == {
         "treatment_id": str(treatment_id),
@@ -184,7 +190,11 @@ async def test_edit_active_medication_pauses_cycle_notifies_patient_and_audits(
     app_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    treatment_id = await _create_treatment(app_client, mrn="MED-CHANGE-EDIT")
+    actor_id = uuid4()
+    headers = {"X-Pharmaide-User-Id": str(actor_id)}
+    treatment_id = await _create_treatment(
+        app_client, mrn="MED-CHANGE-EDIT", headers=headers
+    )
     medication = await _first_medication(db_session, treatment_id)
     analysis = TreatmentAnalysis(
         treatment_id=treatment_id,
@@ -214,6 +224,7 @@ async def test_edit_active_medication_pauses_cycle_notifies_patient_and_audits(
             "frequency": "Twice Daily (BID)",
             "duration": "14 days",
         },
+        headers=headers,
     )
 
     assert response.status_code == 200, response.text
@@ -252,6 +263,7 @@ async def test_edit_active_medication_pauses_cycle_notifies_patient_and_audits(
         )
     )
     assert audit is not None
+    assert audit.actor_id == actor_id
     assert audit.resource_type == "medication"
     assert audit.payload == {
         "treatment_id": str(treatment_id),
@@ -448,7 +460,11 @@ async def test_discontinue_one_medication_pauses_cycle_notifies_patient_and_audi
     app_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    treatment_id = await _create_treatment(app_client, mrn="MED-CHANGE-001", medication_count=2)
+    actor_id = uuid4()
+    headers = {"X-Pharmaide-User-Id": str(actor_id)}
+    treatment_id = await _create_treatment(
+        app_client, mrn="MED-CHANGE-001", medication_count=2, headers=headers
+    )
     medication = await _first_medication(db_session, treatment_id)
     analysis = TreatmentAnalysis(
         treatment_id=treatment_id,
@@ -463,7 +479,8 @@ async def test_discontinue_one_medication_pauses_cycle_notifies_patient_and_audi
     await db_session.flush()
 
     response = await app_client.post(
-        f"/treatments/{treatment_id}/medications/{medication.id}/discontinue"
+        f"/treatments/{treatment_id}/medications/{medication.id}/discontinue",
+        headers=headers,
     )
 
     assert response.status_code == 200, response.text
@@ -495,6 +512,7 @@ async def test_discontinue_one_medication_pauses_cycle_notifies_patient_and_audi
         )
     )
     assert audit is not None
+    assert audit.actor_id == actor_id
     assert audit.resource_type == "medication"
     assert audit.payload == {
         "treatment_id": str(treatment_id),

@@ -350,6 +350,7 @@ async def post_treatment_medication(
             treatment_id=treatment_id,
             medication=body,
             scope_id=actor.kb_scope_id,
+            actor_id=actor.actor_id,
         )
     except TreatmentCommandNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
@@ -375,6 +376,7 @@ async def post_treatment_medication_edit(
             medication_id=medication_id,
             medication_update=body,
             scope_id=actor.kb_scope_id,
+            actor_id=actor.actor_id,
         )
     except TreatmentCommandNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
@@ -405,6 +407,7 @@ async def post_treatment_medication_discontinue(
             treatment_id=treatment_id,
             medication_id=medication_id,
             scope_id=actor.kb_scope_id,
+            actor_id=actor.actor_id,
         )
     except TreatmentCommandNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
