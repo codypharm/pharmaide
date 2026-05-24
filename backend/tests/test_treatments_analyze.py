@@ -146,9 +146,25 @@ async def test_post_treatment_analyze_passes_uuid_user_header_as_kb_scope(
     )
 
     assert response.status_code == 202, response.text
+    analysis_id = UUID(response.json()["analysis_id"])
     assert scheduled[0][0].payload["kb_scope_id"] == str(scope_id)
     assert scheduled[0][1]["user_id"] == str(scope_id)
     assert scheduled[0][1]["kb_scope_id"] == scope_id
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.event_type == "analysis_requested",
+            AuditLogEntry.resource_id == treatment_id,
+        )
+    )
+    assert audit is not None
+    assert audit.actor_id == scope_id
+    assert audit.resource_type == "treatment"
+    assert audit.payload == {
+        "treatment_id": str(treatment_id),
+        "analysis_id": str(analysis_id),
+        "force": False,
+    }
 
 
 @pytest.mark.usefixtures("postgres_container")

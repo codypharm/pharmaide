@@ -65,6 +65,7 @@ from app.services.adherence_events import (
 from app.services.analysis import (
     AnalysisInProgress,
     analyze_treatment,
+    audit_analysis_requested,
     create_pending_analysis,
     get_latest_analysis,
     get_latest_completed_analysis,
@@ -750,6 +751,13 @@ async def post_treatment_analysis(
             if not await treatment_exists(session, treatment_id, scope_id=actor.kb_scope_id):
                 raise HTTPException(status_code=404, detail={"error": "treatment_not_found"})
             analysis_id = await create_pending_analysis(session, treatment_id, force=force)
+            audit_analysis_requested(
+                session,
+                treatment_id=treatment_id,
+                analysis_id=analysis_id,
+                actor_id=actor.actor_id,
+                force=force,
+            )
     except AnalysisInProgress as exc:
         raise HTTPException(status_code=409, detail={"error": "analysis_in_progress"}) from exc
     timeout_seconds = timeout if timeout is not None else settings.analysis_timeout_seconds

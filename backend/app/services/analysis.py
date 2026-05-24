@@ -91,6 +91,30 @@ async def create_pending_analysis(
     return analysis.id
 
 
+def audit_analysis_requested(
+    session: AsyncSession,
+    *,
+    treatment_id: UUID,
+    analysis_id: UUID,
+    actor_id: UUID | None = None,
+    force: bool = False,
+) -> None:
+    """Record explicit pharmacist analysis requests without clinical payloads."""
+    session.add(
+        AuditLogEntry(
+            actor_id=actor_id,
+            event_type="analysis_requested",
+            resource_type="treatment",
+            resource_id=treatment_id,
+            payload={
+                "treatment_id": str(treatment_id),
+                "analysis_id": str(analysis_id),
+                "force": force,
+            },
+        )
+    )
+
+
 async def _supersede_active_analyses(session: AsyncSession, treatment_id: UUID) -> None:
     """Free the partial unique-index slot before creating a replacement run."""
     await session.execute(
