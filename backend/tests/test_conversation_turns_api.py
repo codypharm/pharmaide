@@ -38,9 +38,12 @@ def disable_analysis_schedule(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.usefixtures("postgres_container")
 async def test_post_conversation_turn_returns_ready_draft(
     app_client: AsyncClient,
+    db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    treatment_id = await _create_treatment(app_client, "CONV-API-001")
+    actor_id = uuid4()
+    headers = {"X-Pharmaide-User-Id": str(actor_id)}
+    treatment_id = await _create_treatment(app_client, "CONV-API-001", headers=headers)
     _patch_safety_decision(monkeypatch, treatment_id, status="send")
 
     response = await app_client.post(
@@ -50,6 +53,7 @@ async def test_post_conversation_turn_returns_ready_draft(
             "assistant_draft": "Please follow the timing your pharmacist approved.",
             "prescription_context": "Amoxicillin 500 mg three times daily.",
         },
+        headers=headers,
     )
 
     assert response.status_code == 201, response.text
@@ -60,6 +64,19 @@ async def test_post_conversation_turn_returns_ready_draft(
         "Please follow the timing your pharmacist approved."
     )
     assert payload["safety_decision"]["status"] == "send"
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(AuditLogEntry.event_type == "conversation_turn_recorded")
+    )
+    assert audit is not None
+    assert audit.actor_id == actor_id
+    assert audit.payload == {
+        "treatment_id": str(treatment_id),
+        "inbound_message_id": payload["inbound_message"]["id"],
+        "assistant_message_id": payload["assistant_message"]["id"],
+        "safety_status": "send",
+        "hold_reason": None,
+    }
 
 
 @pytest.mark.usefixtures("postgres_container")

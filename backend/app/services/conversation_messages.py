@@ -241,6 +241,7 @@ async def submit_patient_conversation_turn(
     draft_review_reason: TriageReason | None = None,
     reply_classifier_agent: Agent[None, PatientReplyClassification] | None = None,
     scope_id: UUID | None = None,
+    actor_id: UUID | None = None,
 ) -> ConversationTurnView:
     """Record one patient turn and gate the assistant draft before delivery."""
     treatment = await _get_treatment_row(session, treatment_id, scope_id=scope_id)
@@ -300,7 +301,14 @@ async def submit_patient_conversation_turn(
             reason=triage_reason,
         )
 
-    _audit_conversation_turn(session, treatment_id, inbound, assistant, decision.status)
+    _audit_conversation_turn(
+        session,
+        treatment_id,
+        inbound,
+        assistant,
+        decision.status,
+        actor_id=actor_id,
+    )
     await session.flush()
 
     log.info(
@@ -570,9 +578,12 @@ def _audit_conversation_turn(
     inbound: ConversationMessage,
     assistant: ConversationMessage,
     safety_status: str,
+    *,
+    actor_id: UUID | None = None,
 ) -> None:
     session.add(
         AuditLogEntry(
+            actor_id=actor_id,
             event_type="conversation_turn_recorded",
             resource_type="conversation_message",
             resource_id=assistant.id,
