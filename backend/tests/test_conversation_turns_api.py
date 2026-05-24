@@ -920,7 +920,13 @@ async def test_post_chat_response_mode_resumes_ai_replies_and_audits_change(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    treatment_id = await _create_treatment(app_client, "CONV-API-016")
+    actor_id = uuid4()
+    headers = {"X-Pharmaide-User-Id": str(actor_id)}
+    treatment_id = await _create_treatment(
+        app_client,
+        "CONV-API-016",
+        headers=headers,
+    )
     _patch_safety_decision(monkeypatch, treatment_id, status="hold_for_pharmacist")
     held = await app_client.post(
         f"/treatments/{treatment_id}/conversation-turns",
@@ -929,12 +935,14 @@ async def test_post_chat_response_mode_resumes_ai_replies_and_audits_change(
             "assistant_draft": "This draft must be reviewed.",
             "prescription_context": "Amoxicillin 500 mg three times daily.",
         },
+        headers=headers,
     )
     assert held.status_code == 201, held.text
 
     response = await app_client.post(
         f"/treatments/{treatment_id}/chat-response-mode",
         json={"chat_response_mode": "ai_active"},
+        headers=headers,
     )
 
     assert response.status_code == 200, response.text
@@ -953,6 +961,7 @@ async def test_post_chat_response_mode_resumes_ai_replies_and_audits_change(
         .order_by(AuditLogEntry.created_at.desc())
     )
     assert audit is not None
+    assert audit.actor_id == actor_id
     assert audit.payload == {
         "old_chat_response_mode": "pharmacist_takeover",
         "new_chat_response_mode": "ai_active",

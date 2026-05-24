@@ -263,6 +263,7 @@ async def post_treatment_chat_response_mode(
                 treatment_id,
                 chat_response_mode=body.chat_response_mode,
                 scope_id=actor.kb_scope_id,
+                actor_id=actor.actor_id,
             )
     except TreatmentCommandNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc

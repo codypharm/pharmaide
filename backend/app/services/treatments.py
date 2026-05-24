@@ -300,6 +300,7 @@ async def update_chat_response_mode(
     *,
     chat_response_mode: ChatResponseMode,
     scope_id: UUID | None = None,
+    actor_id: UUID | None = None,
 ) -> TreatmentView:
     """Let pharmacists hand patient replies between AI and manual control."""
     treatment = await _get_treatment_row(session, treatment_id, scope_id=scope_id)
@@ -312,6 +313,7 @@ async def update_chat_response_mode(
     if old_mode != chat_response_mode:
         session.add(
             AuditLogEntry(
+                actor_id=actor_id,
                 event_type="treatment_chat_response_mode_changed",
                 resource_type="treatment",
                 resource_id=treatment.id,
