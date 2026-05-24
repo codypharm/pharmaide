@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.extraction import build_extraction_agent, extract_prescription_image
 from app.agents.extraction_schemas import ExtractedPrescription
-from app.auth import get_current_actor
+from app.auth import ActorDep
 from app.config import Settings, get_settings
 from app.db.engine import get_session
 from app.db.models import AuditLogEntry
@@ -44,7 +44,7 @@ def build_configured_extraction_agent(
 
 ExtractionAgentDep = Annotated[Agent[None, ExtractedPrescription], Depends(get_extraction_agent)]
 
-router = APIRouter(prefix="/prescriptions", dependencies=[Depends(get_current_actor)])
+router = APIRouter(prefix="/prescriptions")
 
 
 @router.post(
@@ -54,6 +54,7 @@ router = APIRouter(prefix="/prescriptions", dependencies=[Depends(get_current_ac
 async def extract_prescription(
     session: SessionDep,
     agent: ExtractionAgentDep,
+    actor: ActorDep,
     file: Annotated[UploadFile, File()],
 ) -> ExtractedPrescription | JSONResponse:
     extraction_id = uuid4()
@@ -63,6 +64,7 @@ async def extract_prescription(
         extraction_id=extraction_id,
         size_bytes=len(data),
         declared_mime=file.content_type,
+        actor_id=actor.actor_id,
     )
 
     try:
@@ -79,6 +81,7 @@ async def extract_prescription(
             error=exc.code,
             size_bytes=len(data),
             declared_mime=file.content_type,
+            actor_id=actor.actor_id,
         )
         return JSONResponse(status_code=422, content={"detail": {"error": exc.code}})
     except Exception as exc:
@@ -89,10 +92,17 @@ async def extract_prescription(
             error=error_code,
             size_bytes=len(data),
             declared_mime=file.content_type,
+            actor_id=actor.actor_id,
         )
         return JSONResponse(status_code=422, content={"detail": {"error": error_code}})
 
-    _audit_completed(session, extraction_id=extraction_id, image=image, prescription=prescription)
+    _audit_completed(
+        session,
+        extraction_id=extraction_id,
+        image=image,
+        prescription=prescription,
+        actor_id=actor.actor_id,
+    )
     return prescription
 
 
@@ -102,9 +112,11 @@ def _audit_started(
     extraction_id: UUID,
     size_bytes: int,
     declared_mime: str | None,
+    actor_id: UUID | None,
 ) -> None:
     session.add(
         AuditLogEntry(
+            actor_id=actor_id,
             event_type="extraction_started",
             resource_type="extraction",
             resource_id=extraction_id,
@@ -122,9 +134,11 @@ def _audit_completed(
     extraction_id: UUID,
     image: GuardedImage,
     prescription: ExtractedPrescription,
+    actor_id: UUID | None,
 ) -> None:
     session.add(
         AuditLogEntry(
+            actor_id=actor_id,
             event_type="extraction_completed",
             resource_type="extraction",
             resource_id=extraction_id,
@@ -164,9 +178,11 @@ def _audit_failed(
     error: str,
     size_bytes: int,
     declared_mime: str | None,
+    actor_id: UUID | None,
 ) -> None:
     session.add(
         AuditLogEntry(
+            actor_id=actor_id,
             event_type="extraction_failed",
             resource_type="extraction",
             resource_id=extraction_id,

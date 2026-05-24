@@ -1,7 +1,7 @@
 """POST /prescriptions/extract route behavior."""
 
 import json
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import FastAPI
@@ -54,8 +54,10 @@ async def test_extract_prescription_returns_validated_draft_and_audits_without_p
         }
     )
 
+    actor_id = uuid4()
     response = await app_client.post(
         "/prescriptions/extract",
+        headers={"X-Pharmaide-User-Id": str(actor_id)},
         files={"file": ("script.png", b"\x89PNG\r\n\x1a\nfake-body", "image/png")},
     )
 
@@ -77,6 +79,7 @@ async def test_extract_prescription_returns_validated_draft_and_audits_without_p
         "extraction_started",
         "extraction_completed",
     ]
+    assert [audit.actor_id for audit in audits] == [actor_id, actor_id]
     assert UUID(str(audits[0].resource_id)) == audits[1].resource_id
     completed_payload = audits[1].payload
     assert completed_payload["media_type"] == "image/png"
@@ -103,8 +106,10 @@ async def test_extract_prescription_rejects_invalid_upload_and_audits_failure(
     app_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
+    actor_id = uuid4()
     response = await app_client.post(
         "/prescriptions/extract",
+        headers={"X-Pharmaide-User-Id": str(actor_id)},
         files={"file": ("script.png", b"not an image", "image/png")},
     )
 
@@ -118,6 +123,7 @@ async def test_extract_prescription_rejects_invalid_upload_and_audits_failure(
     ).scalar_one()
 
     assert audit.resource_type == "extraction"
+    assert audit.actor_id == actor_id
     assert audit.payload["error"] == "unsupported_image_type"
     assert audit.payload["declared_mime"] == "image/png"
     assert audit.payload["size_bytes"] == len(b"not an image")
