@@ -971,11 +971,18 @@ async def test_post_treatment_clinical_objective_updates_objective_and_audits_me
     app_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    treatment_id = await _create_treatment(app_client, "CONV-API-017")
+    actor_id = uuid4()
+    headers = {"X-Pharmaide-User-Id": str(actor_id)}
+    treatment_id = await _create_treatment(
+        app_client,
+        "CONV-API-017",
+        headers=headers,
+    )
 
     response = await app_client.post(
         f"/treatments/{treatment_id}/clinical-objective",
         json={"clinical_objective": "Monitor nausea and recovery"},
+        headers=headers,
     )
 
     assert response.status_code == 200, response.text
@@ -993,6 +1000,7 @@ async def test_post_treatment_clinical_objective_updates_objective_and_audits_me
         .order_by(AuditLogEntry.created_at.desc())
     )
     assert audit is not None
+    assert audit.actor_id == actor_id
     assert audit.payload == {
         "old_clinical_objective_present": True,
         "new_clinical_objective_present": True,

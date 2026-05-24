@@ -1028,6 +1028,7 @@ async def update_clinical_objective(
     *,
     clinical_objective: str | None,
     scope_id: UUID | None = None,
+    actor_id: UUID | None = None,
 ) -> TreatmentView:
     """Update pharmacist-maintained monitoring intent without auditing the text."""
     treatment = await _get_treatment_row(session, treatment_id, scope_id=scope_id)
@@ -1040,6 +1041,7 @@ async def update_clinical_objective(
     if old_objective != clinical_objective:
         session.add(
             AuditLogEntry(
+                actor_id=actor_id,
                 event_type="treatment_clinical_objective_changed",
                 resource_type="treatment",
                 resource_id=treatment.id,

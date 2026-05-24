@@ -434,6 +434,7 @@ async def post_treatment_clinical_objective(
                 treatment_id,
                 clinical_objective=body.clinical_objective,
                 scope_id=actor.kb_scope_id,
+                actor_id=actor.actor_id,
             )
     except TreatmentCommandNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc
