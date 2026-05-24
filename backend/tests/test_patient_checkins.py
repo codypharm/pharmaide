@@ -57,7 +57,13 @@ async def test_create_patient_check_in_records_status_and_audit_metadata(
     app_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    treatment_id = await _create_treatment(app_client, "CHECKIN-001")
+    actor_id = uuid4()
+    headers = {"X-Pharmaide-User-Id": str(actor_id)}
+    treatment_id = await _create_treatment(
+        app_client,
+        "CHECKIN-001",
+        headers=headers,
+    )
 
     response = await app_client.post(
         f"/treatments/{treatment_id}/check-ins",
@@ -67,6 +73,7 @@ async def test_create_patient_check_in_records_status_and_audit_metadata(
             "message": "  I am not feeling better after three days.  ",
             "observed_at": "2026-05-18T09:15:00Z",
         },
+        headers=headers,
     )
 
     assert response.status_code == 201, response.text
@@ -84,6 +91,7 @@ async def test_create_patient_check_in_records_status_and_audit_metadata(
             .where(AuditLogEntry.event_type == "patient_check_in_recorded")
         )
     ).scalar_one()
+    assert audit.actor_id == actor_id
     assert audit.payload == {
         "treatment_id": str(treatment_id),
         "report_type": "not_improving",

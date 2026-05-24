@@ -454,7 +454,11 @@ async def post_patient_check_in(
     try:
         async with session_factory() as session, session.begin():
             return await create_patient_check_in(
-                session, treatment_id, body, scope_id=actor.kb_scope_id
+                session,
+                treatment_id,
+                body,
+                scope_id=actor.kb_scope_id,
+                actor_id=actor.actor_id,
             )
     except CheckInTreatmentNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc

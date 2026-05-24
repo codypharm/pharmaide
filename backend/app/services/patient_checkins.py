@@ -28,6 +28,7 @@ async def create_patient_check_in(
     request: PatientCheckInCreate,
     *,
     scope_id: UUID | None = None,
+    actor_id: UUID | None = None,
 ) -> PatientCheckInView:
     treatment = await _get_treatment_row(session, treatment_id, scope_id=scope_id)
     if treatment is None:
@@ -45,6 +46,7 @@ async def create_patient_check_in(
 
     session.add(
         AuditLogEntry(
+            actor_id=actor_id,
             event_type="patient_check_in_recorded",
             resource_type="patient_check_in",
             resource_id=check_in.id,
