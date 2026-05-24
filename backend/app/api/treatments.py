@@ -497,7 +497,11 @@ async def post_adherence_event(
     try:
         async with session_factory() as session, session.begin():
             return await create_adherence_event(
-                session, treatment_id, body, scope_id=actor.kb_scope_id
+                session,
+                treatment_id,
+                body,
+                scope_id=actor.kb_scope_id,
+                actor_id=actor.actor_id,
             )
     except AdherenceTreatmentNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc

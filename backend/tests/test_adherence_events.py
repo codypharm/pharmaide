@@ -63,7 +63,9 @@ async def test_create_adherence_event_records_status_and_audit_metadata(
     app_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    treatment_id = await _create_treatment(app_client, "ADH-001")
+    actor_id = uuid4()
+    headers = {"X-Pharmaide-User-Id": str(actor_id)}
+    treatment_id = await _create_treatment(app_client, "ADH-001", headers=headers)
     medication_id = await _first_medication_id(db_session, treatment_id)
 
     response = await app_client.post(
@@ -76,6 +78,7 @@ async def test_create_adherence_event_records_status_and_audit_metadata(
             "occurred_at": "2026-05-18T08:05:00Z",
             "note": "  Took after breakfast.  ",
         },
+        headers=headers,
     )
 
     assert response.status_code == 201, response.text
@@ -95,6 +98,7 @@ async def test_create_adherence_event_records_status_and_audit_metadata(
             .where(AuditLogEntry.event_type == "adherence_event_recorded")
         )
     ).scalar_one()
+    assert audit.actor_id == actor_id
     assert audit.payload == {
         "treatment_id": str(treatment_id),
         "medication_id": str(medication_id),

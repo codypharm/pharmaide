@@ -32,6 +32,7 @@ async def create_adherence_event(
     request: AdherenceEventCreate,
     *,
     scope_id: UUID | None = None,
+    actor_id: UUID | None = None,
 ) -> AdherenceEventView:
     treatment = await _get_treatment_row(session, treatment_id, scope_id=scope_id)
     if treatment is None:
@@ -55,6 +56,7 @@ async def create_adherence_event(
 
     session.add(
         AuditLogEntry(
+            actor_id=actor_id,
             event_type="adherence_event_recorded",
             resource_type="adherence_event",
             resource_id=event.id,
