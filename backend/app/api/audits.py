@@ -11,12 +11,13 @@ from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas import AuditLogEntryList
-from app.auth import get_current_actor
+from app.auth import CurrentActor, get_current_actor
 from app.db.engine import get_session
 from app.db.models import AuditLogEntry
 from app.services.audits import list_audit_log_entries
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+ActorDep = Annotated[CurrentActor, Depends(get_current_actor)]
 AUDIT_EXPORT_FILENAME = "pharmaide-audit-trail.csv"
 
 router = APIRouter(prefix="/audits", dependencies=[Depends(get_current_actor)])
@@ -25,6 +26,7 @@ router = APIRouter(prefix="/audits", dependencies=[Depends(get_current_actor)])
 @router.get("", response_model=AuditLogEntryList)
 async def get_audit_log_entries(
     session: SessionDep,
+    actor: ActorDep,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
     event_type: Annotated[str | None, Query(min_length=1)] = None,
@@ -38,6 +40,8 @@ async def get_audit_log_entries(
         event_type=event_type,
         resource_type=resource_type,
         actor_id=actor_id,
+        current_actor_id=actor.actor_id,
+        scope_id=actor.kb_scope_id,
     )
     return AuditLogEntryList(items=entries)
 
@@ -45,6 +49,7 @@ async def get_audit_log_entries(
 @router.get("/export.csv")
 async def export_audit_log_entries(
     session: SessionDep,
+    actor: ActorDep,
     limit: Annotated[int, Query(ge=1, le=1000)] = 1000,
     offset: Annotated[int, Query(ge=0)] = 0,
     event_type: Annotated[str | None, Query(min_length=1)] = None,
@@ -58,6 +63,8 @@ async def export_audit_log_entries(
         event_type=event_type,
         resource_type=resource_type,
         actor_id=actor_id,
+        current_actor_id=actor.actor_id,
+        scope_id=actor.kb_scope_id,
     )
     return Response(
         content=_audit_entries_csv(entries),
