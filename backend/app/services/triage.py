@@ -167,6 +167,7 @@ async def update_triage_item_status(
     *,
     status: TriageStatus,
     scope_id: UUID | None = None,
+    actor_id: UUID | None = None,
 ) -> TriageItemView:
     """Move a triage item through the pharmacist review lifecycle."""
     item = await _get_triage_item(session, item_id, scope_id=scope_id)
@@ -181,6 +182,7 @@ async def update_triage_item_status(
     await session.flush()
     session.add(
         AuditLogEntry(
+            actor_id=actor_id,
             event_type="triage_item_status_changed",
             resource_type="triage_item",
             resource_id=item.id,
@@ -207,6 +209,7 @@ async def approve_triage_item_draft(
     item_id: UUID,
     *,
     scope_id: UUID | None = None,
+    actor_id: UUID | None = None,
 ) -> TriageApprovalView:
     """Approve a held assistant draft and resolve its pharmacist review item."""
     item = await _get_triage_item(session, item_id, scope_id=scope_id)
@@ -225,6 +228,7 @@ async def approve_triage_item_draft(
 
     session.add(
         AuditLogEntry(
+            actor_id=actor_id,
             event_type="triage_item_draft_approved",
             resource_type="triage_item",
             resource_id=item.id,
@@ -261,6 +265,7 @@ async def reject_triage_item_draft(
     item_id: UUID,
     *,
     scope_id: UUID | None = None,
+    actor_id: UUID | None = None,
 ) -> TriageRejectionView:
     """Reject a held assistant draft so it cannot be queued for delivery."""
     item = await _get_triage_item(session, item_id, scope_id=scope_id)
@@ -279,6 +284,7 @@ async def reject_triage_item_draft(
 
     session.add(
         AuditLogEntry(
+            actor_id=actor_id,
             event_type="triage_item_draft_rejected",
             resource_type="triage_item",
             resource_id=item.id,
@@ -316,6 +322,7 @@ async def queue_triage_item_delivery(
     item_id: UUID,
     *,
     scope_id: UUID | None = None,
+    actor_id: UUID | None = None,
 ) -> TriageDeliveryView:
     """Mark an approved assistant draft ready for the future delivery worker."""
     item = await _get_triage_item(session, item_id, scope_id=scope_id)
@@ -330,6 +337,7 @@ async def queue_triage_item_delivery(
 
     session.add(
         AuditLogEntry(
+            actor_id=actor_id,
             event_type="triage_item_draft_queued_for_delivery",
             resource_type="triage_item",
             resource_id=item.id,

@@ -62,7 +62,11 @@ async def patch_triage_item(
 ) -> TriageItemView:
     try:
         return await update_triage_item_status(
-            session, item_id, status=body.status, scope_id=actor.kb_scope_id
+            session,
+            item_id,
+            status=body.status,
+            scope_id=actor.kb_scope_id,
+            actor_id=actor.actor_id,
         )
     except TriageItemNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "triage_item_not_found"}) from exc
@@ -80,7 +84,9 @@ async def approve_triage_item(
     actor: ActorDep,
 ) -> TriageApprovalView:
     try:
-        return await approve_triage_item_draft(session, item_id, scope_id=actor.kb_scope_id)
+        return await approve_triage_item_draft(
+            session, item_id, scope_id=actor.kb_scope_id, actor_id=actor.actor_id
+        )
     except TriageItemNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "triage_item_not_found"}) from exc
     except InvalidTriageTransition as exc:
@@ -102,7 +108,9 @@ async def reject_triage_item(
     actor: ActorDep,
 ) -> TriageRejectionView:
     try:
-        return await reject_triage_item_draft(session, item_id, scope_id=actor.kb_scope_id)
+        return await reject_triage_item_draft(
+            session, item_id, scope_id=actor.kb_scope_id, actor_id=actor.actor_id
+        )
     except TriageItemNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "triage_item_not_found"}) from exc
     except InvalidTriageTransition as exc:
@@ -124,7 +132,9 @@ async def queue_triage_item_for_delivery(
     actor: ActorDep,
 ) -> TriageDeliveryView:
     try:
-        return await queue_triage_item_delivery(session, item_id, scope_id=actor.kb_scope_id)
+        return await queue_triage_item_delivery(
+            session, item_id, scope_id=actor.kb_scope_id, actor_id=actor.actor_id
+        )
     except TriageItemNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "triage_item_not_found"}) from exc
     except TriageDraftNotQueueable as exc:

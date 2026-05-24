@@ -31,11 +31,18 @@ async def test_patch_triage_item_acknowledges_open_item_and_audits(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    item_id = await _create_open_triage_item(app_client, monkeypatch, "TRIAGE-001")
+    actor_id = uuid4()
+    item_id = await _create_open_triage_item(
+        app_client,
+        monkeypatch,
+        "TRIAGE-001",
+        headers={"X-Pharmaide-User-Id": str(actor_id)},
+    )
 
     response = await app_client.patch(
         f"/triage/items/{item_id}",
         json={"status": "acknowledged"},
+        headers={"X-Pharmaide-User-Id": str(actor_id)},
     )
 
     assert response.status_code == 200, response.text
@@ -47,6 +54,7 @@ async def test_patch_triage_item_acknowledges_open_item_and_audits(
         select(AuditLogEntry).where(AuditLogEntry.event_type == "triage_item_status_changed")
     )
     assert audit is not None
+    assert audit.actor_id == actor_id
     assert audit.payload == {
         "old_status": "open",
         "new_status": "acknowledged",
@@ -209,9 +217,18 @@ async def test_post_triage_item_approve_marks_held_draft_approved_and_resolves(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    item_id = await _create_open_triage_item(app_client, monkeypatch, "TRIAGE-APPROVE-001")
+    actor_id = uuid4()
+    item_id = await _create_open_triage_item(
+        app_client,
+        monkeypatch,
+        "TRIAGE-APPROVE-001",
+        headers={"X-Pharmaide-User-Id": str(actor_id)},
+    )
 
-    response = await app_client.post(f"/triage/items/{item_id}/approve")
+    response = await app_client.post(
+        f"/triage/items/{item_id}/approve",
+        headers={"X-Pharmaide-User-Id": str(actor_id)},
+    )
 
     assert response.status_code == 200, response.text
     payload = response.json()
@@ -232,6 +249,7 @@ async def test_post_triage_item_approve_marks_held_draft_approved_and_resolves(
         select(AuditLogEntry).where(AuditLogEntry.event_type == "triage_item_draft_approved")
     )
     assert audit is not None
+    assert audit.actor_id == actor_id
     assert audit.payload == {
         "triage_item_id": str(item_id),
         "treatment_id": payload["triage_item"]["treatment_id"],
@@ -285,9 +303,18 @@ async def test_post_triage_item_reject_marks_held_draft_rejected_and_resolves(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    item_id = await _create_open_triage_item(app_client, monkeypatch, "TRIAGE-REJECT-001")
+    actor_id = uuid4()
+    item_id = await _create_open_triage_item(
+        app_client,
+        monkeypatch,
+        "TRIAGE-REJECT-001",
+        headers={"X-Pharmaide-User-Id": str(actor_id)},
+    )
 
-    response = await app_client.post(f"/triage/items/{item_id}/reject")
+    response = await app_client.post(
+        f"/triage/items/{item_id}/reject",
+        headers={"X-Pharmaide-User-Id": str(actor_id)},
+    )
 
     assert response.status_code == 200, response.text
     payload = response.json()
@@ -308,6 +335,7 @@ async def test_post_triage_item_reject_marks_held_draft_rejected_and_resolves(
         select(AuditLogEntry).where(AuditLogEntry.event_type == "triage_item_draft_rejected")
     )
     assert audit is not None
+    assert audit.actor_id == actor_id
     assert audit.payload == {
         "triage_item_id": str(item_id),
         "treatment_id": payload["triage_item"]["treatment_id"],
@@ -325,11 +353,23 @@ async def test_post_triage_item_queue_delivery_marks_approved_draft_queued_and_a
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    item_id = await _create_open_triage_item(app_client, monkeypatch, "TRIAGE-QUEUE-001")
-    approved = await app_client.post(f"/triage/items/{item_id}/approve")
+    actor_id = uuid4()
+    item_id = await _create_open_triage_item(
+        app_client,
+        monkeypatch,
+        "TRIAGE-QUEUE-001",
+        headers={"X-Pharmaide-User-Id": str(actor_id)},
+    )
+    approved = await app_client.post(
+        f"/triage/items/{item_id}/approve",
+        headers={"X-Pharmaide-User-Id": str(actor_id)},
+    )
     assert approved.status_code == 200, approved.text
 
-    response = await app_client.post(f"/triage/items/{item_id}/queue-delivery")
+    response = await app_client.post(
+        f"/triage/items/{item_id}/queue-delivery",
+        headers={"X-Pharmaide-User-Id": str(actor_id)},
+    )
 
     assert response.status_code == 200, response.text
     payload = response.json()
@@ -352,6 +392,7 @@ async def test_post_triage_item_queue_delivery_marks_approved_draft_queued_and_a
         )
     )
     assert audit is not None
+    assert audit.actor_id == actor_id
     assert audit.payload == {
         "triage_item_id": str(item_id),
         "treatment_id": payload["triage_item"]["treatment_id"],
