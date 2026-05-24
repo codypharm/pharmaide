@@ -583,6 +583,7 @@ async def post_patient_message(
                 message=body.message,
                 reply_classifier_agent=_build_configured_patient_reply_classifier_agent(settings),
                 scope_id=actor.kb_scope_id,
+                actor_id=actor.actor_id,
             )
     except ConversationTreatmentNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc

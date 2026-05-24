@@ -245,11 +245,18 @@ async def test_post_patient_message_records_inbound_message_and_non_phi_audit(
     app_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    treatment_id = await _create_treatment(app_client, "CONV-API-003")
+    actor_id = uuid4()
+    headers = {"X-Pharmaide-User-Id": str(actor_id)}
+    treatment_id = await _create_treatment(
+        app_client,
+        "CONV-API-003",
+        headers=headers,
+    )
 
     response = await app_client.post(
         f"/treatments/{treatment_id}/patient-messages",
         json={"message": "  I feel nauseous after the morning dose.  "},
+        headers=headers,
     )
 
     assert response.status_code == 201, response.text
@@ -267,6 +274,7 @@ async def test_post_patient_message_records_inbound_message_and_non_phi_audit(
         )
     )
     assert audit is not None
+    assert audit.actor_id == actor_id
     assert audit.payload == {
         "treatment_id": str(treatment_id),
         "message_id": payload["id"],

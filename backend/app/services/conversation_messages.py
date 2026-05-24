@@ -61,6 +61,7 @@ async def record_patient_conversation_message(
     message: str,
     reply_classifier_agent: Agent[None, PatientReplyClassification] | None = None,
     scope_id: UUID | None = None,
+    actor_id: UUID | None = None,
 ) -> ConversationMessageView:
     """Store one inbound patient message without generating a reply."""
     treatment = await _get_treatment_row(session, treatment_id, scope_id=scope_id)
@@ -80,7 +81,7 @@ async def record_patient_conversation_message(
         inbound_message=inbound,
         classifier_agent=reply_classifier_agent,
     )
-    _audit_patient_message(session, treatment_id, inbound)
+    _audit_patient_message(session, treatment_id, inbound, actor_id=actor_id)
     await session.flush()
 
     log.info(
@@ -618,9 +619,12 @@ def _audit_patient_message(
     session: AsyncSession,
     treatment_id: UUID,
     message: ConversationMessage,
+    *,
+    actor_id: UUID | None,
 ) -> None:
     session.add(
         AuditLogEntry(
+            actor_id=actor_id,
             event_type="patient_conversation_message_recorded",
             resource_type="conversation_message",
             resource_id=message.id,
