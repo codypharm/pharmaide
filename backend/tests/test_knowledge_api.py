@@ -341,6 +341,7 @@ async def test_delete_knowledge_document_soft_removes_it_and_audits(
     assert not stored_file.exists()
     assert chunk_count == 0
     assert audit is not None
+    assert audit.actor_id == owner_id
     assert audit.payload == {
         "document_id": str(document.id),
         "stored_file_removed": True,

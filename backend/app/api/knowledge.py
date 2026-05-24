@@ -169,8 +169,9 @@ async def delete_document(
     document_id: UUID,
     session: SessionDep,
     settings: SettingsDep,
-    kb_scope_id: KbScopeDep,
+    actor: ActorDep,
 ) -> Response:
+    kb_scope_id = actor.kb_scope_id
     row = await session.execute(
         select(KnowledgeDocument).where(
             KnowledgeDocument.id == document_id,
@@ -190,6 +191,7 @@ async def delete_document(
     document.updated_at = func.clock_timestamp()
     session.add(
         AuditLogEntry(
+            actor_id=actor.actor_id,
             event_type="kb_doc_removed",
             resource_type="kb_document",
             resource_id=document_id,
