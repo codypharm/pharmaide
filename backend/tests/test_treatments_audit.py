@@ -1,8 +1,8 @@
 """Audit log content — no PHI in payload.
 
 CLAUDE.md: "Audit everything." HIPAA: "minimum necessary." A
-treatment_created audit row carries IDs and a non-PHI summary; the
-patient's name, DOB, MRN, phone, and dose details stay out.
+treatment_created audit row carries IDs and a non-PHI summary; the patient's
+name, DOB, MRN, phone, medication names, and dose details stay out.
 """
 
 from uuid import UUID
@@ -68,10 +68,10 @@ async def test_audit_payload_excludes_phi(
 
     # Expected non-PHI fields are present and useful for forensics.
     assert payload["medication_count"] == 2
-    assert payload["medication_names"] == ["Lisinopril", "Hydrochlorothiazide"]
     assert payload["allergy_count"] == 0
     assert payload["ingestion_method"] == "structured"
     assert payload["clinical_objective_present"] is True
+    assert "medication_names" not in payload
 
     # Forbidden fields — anything that could re-identify a patient.
     serialised = str(payload).lower()
@@ -80,6 +80,8 @@ async def test_audit_payload_excludes_phi(
     assert "1955" not in serialised
     assert "audit-001" not in serialised
     assert "+18005551212" not in serialised
+    assert "lisinopril" not in serialised
+    assert "hydrochlorothiazide" not in serialised
     assert "10 mg" not in serialised
     assert "30 days" not in serialised
     assert "monitor for cough" not in serialised

@@ -125,12 +125,11 @@ async def create_treatment(
         resource_type="treatment",
         resource_id=treatment.id,
         # Per HIPAA "minimum necessary" — IDs and a non-PHI summary only.
-        # No name, dob, mrn, phone, allergy names, dosages, frequencies, durations.
+        # No patient identifiers, medication names, allergy names, or dose details.
         payload={
             "patient_id": str(patient.id),
             "treatment_id": str(treatment.id),
             "medication_count": len(medications),
-            "medication_names": [m.name for m in medications],
             "allergy_count": len(patient.allergies),
             "treatment_start_at_present": request.treatment.treatment_start_at is not None,
             "ingestion_method": request.ingestion_method,
