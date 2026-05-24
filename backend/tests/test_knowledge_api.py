@@ -82,6 +82,7 @@ async def test_upload_knowledge_document_stores_file_schedules_ingestion_and_aud
     assert "source" in scheduled["kwargs"]
     assert "embedder" in scheduled["kwargs"]
     assert audit is not None
+    assert audit.actor_id == actor_id
     assert audit.payload == {
         "document_id": str(document_id),
         "size_bytes": len(b"Warfarin requires INR monitoring."),

@@ -14,7 +14,7 @@ from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.agents.knowledge_sources.user_upload import UserUploadSource
-from app.auth import get_current_kb_scope_id
+from app.auth import ActorDep, get_current_kb_scope_id
 from app.config import Settings, get_settings
 from app.db.engine import get_session, get_session_factory
 from app.db.models import AuditLogEntry, KnowledgeChunk, KnowledgeDocument
@@ -68,9 +68,10 @@ class KnowledgeDocumentList(BaseModel):
 async def upload_document(
     session_factory: SessionFactoryDep,
     settings: SettingsDep,
-    kb_scope_id: KbScopeDep,
+    actor: ActorDep,
     file: Annotated[UploadFile, File()],
 ) -> KnowledgeDocumentCreated:
+    kb_scope_id = actor.kb_scope_id
     mime = _supported_mime(file.content_type)
     data = await file.read()
     _validate_size(data, settings.knowledge_max_upload_bytes)
@@ -92,7 +93,13 @@ async def upload_document(
         storage_path.parent.mkdir(parents=True, exist_ok=True)
         storage_path.write_bytes(data)
         document.source_uri = _source_uri(document.id, title)
-        _audit_uploaded(session, document_id=document.id, size_bytes=len(data), mime=mime)
+        _audit_uploaded(
+            session,
+            document_id=document.id,
+            size_bytes=len(data),
+            mime=mime,
+            actor_id=actor.actor_id,
+        )
         document_id = document.id
         source_uri = document.source_uri
         status = document.status
@@ -332,9 +339,11 @@ def _audit_uploaded(
     document_id: UUID,
     size_bytes: int,
     mime: str,
+    actor_id: UUID | None,
 ) -> None:
     session.add(
         AuditLogEntry(
+            actor_id=actor_id,
             event_type="kb_doc_uploaded",
             resource_type="kb_document",
             resource_id=document_id,
