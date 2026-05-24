@@ -98,6 +98,7 @@ async def record_pharmacist_conversation_message(
     treatment_id: UUID,
     message: str,
     scope_id: UUID | None = None,
+    actor_id: UUID | None = None,
 ) -> ConversationMessageView:
     """Queue one pharmacist-authored outbound WhatsApp message."""
     treatment = await _get_treatment_row(session, treatment_id, scope_id=scope_id)
@@ -115,7 +116,7 @@ async def record_pharmacist_conversation_message(
     session.add(outbound)
     await session.flush()
 
-    _audit_pharmacist_message(session, treatment_id, outbound)
+    _audit_pharmacist_message(session, treatment_id, outbound, actor_id=actor_id)
     await session.flush()
 
     log.info(
@@ -636,9 +637,12 @@ def _audit_pharmacist_message(
     session: AsyncSession,
     treatment_id: UUID,
     message: ConversationMessage,
+    *,
+    actor_id: UUID | None,
 ) -> None:
     session.add(
         AuditLogEntry(
+            actor_id=actor_id,
             event_type="pharmacist_conversation_message_queued",
             resource_type="conversation_message",
             resource_id=message.id,

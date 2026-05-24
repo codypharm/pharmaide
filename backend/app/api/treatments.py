@@ -604,6 +604,7 @@ async def post_pharmacist_message(
                 treatment_id=treatment_id,
                 message=body.message,
                 scope_id=actor.kb_scope_id,
+                actor_id=actor.actor_id,
             )
     except ConversationTreatmentNotFound as exc:
         raise HTTPException(status_code=404, detail={"error": "treatment_not_found"}) from exc

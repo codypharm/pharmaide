@@ -327,11 +327,18 @@ async def test_post_pharmacist_message_records_queued_outbound_message_and_non_p
     app_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    treatment_id = await _create_treatment(app_client, "CONV-API-014")
+    actor_id = uuid4()
+    headers = {"X-Pharmaide-User-Id": str(actor_id)}
+    treatment_id = await _create_treatment(
+        app_client,
+        "CONV-API-014",
+        headers=headers,
+    )
 
     response = await app_client.post(
         f"/treatments/{treatment_id}/pharmacist-messages",
         json={"message": "  Please continue the current dose and call us if dizziness worsens.  "},
+        headers=headers,
     )
 
     assert response.status_code == 201, response.text
@@ -349,6 +356,7 @@ async def test_post_pharmacist_message_records_queued_outbound_message_and_non_p
         )
     )
     assert audit is not None
+    assert audit.actor_id == actor_id
     assert audit.payload == {
         "treatment_id": str(treatment_id),
         "message_id": payload["id"],
