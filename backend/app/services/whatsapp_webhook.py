@@ -206,7 +206,11 @@ async def _process_text_messages(
             ignored_count += 1
             continue
 
-        route = await _resolve_active_treatment_route(session, message.from_phone)
+        route = await _resolve_active_treatment_route(
+            session,
+            message.from_phone,
+            scope_id=settings.whatsapp_workspace_scope_id,
+        )
         if route.treatment_id is None:
             _audit_patient_route_ignored(
                 session,
@@ -383,8 +387,13 @@ def _audit_patient_route_ignored(
 async def _resolve_active_treatment_route(
     session: AsyncSession,
     whatsapp_from: str,
+    *,
+    scope_id: UUID | None = None,
 ) -> ActiveTreatmentRoute:
     phone = _normalise_whatsapp_phone(whatsapp_from)
+    conditions = []
+    if scope_id is not None:
+        conditions.append(Treatment.scope_id == scope_id)
     result = await session.execute(
         select(Treatment.id)
         .join(Patient)
@@ -392,6 +401,7 @@ async def _resolve_active_treatment_route(
             Patient.phone == phone,
             Treatment.status == "active",
             Treatment.archived_at.is_(None),
+            *conditions,
         )
         .order_by(Treatment.created_at.desc(), Treatment.id.desc())
         .limit(2)

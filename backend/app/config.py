@@ -6,6 +6,7 @@ checkpointer paths, debug gates) reads the same values everywhere.
 
 from functools import lru_cache
 from typing import Literal
+from uuid import UUID
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -57,6 +58,7 @@ class Settings(BaseSettings):
     whatsapp_delivery_provider: Literal["placeholder", "cloud_api"] = "placeholder"
     whatsapp_cloud_api_access_token: SecretStr | None = None
     whatsapp_cloud_api_phone_number_id: str | None = None
+    whatsapp_workspace_scope_id: UUID | None = None
     whatsapp_cloud_api_version: str = "v25.0"
     whatsapp_cloud_api_base_url: str = "https://graph.facebook.com"
 

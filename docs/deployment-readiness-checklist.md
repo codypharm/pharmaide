@@ -54,6 +54,9 @@ WhatsApp settings:
 - `PHARMAIDE_WHATSAPP_DELIVERY_PROVIDER=cloud_api`.
 - `PHARMAIDE_WHATSAPP_CLOUD_API_ACCESS_TOKEN`: Meta Cloud API access token.
 - `PHARMAIDE_WHATSAPP_CLOUD_API_PHONE_NUMBER_ID`: sender phone number ID.
+- `PHARMAIDE_WHATSAPP_WORKSPACE_SCOPE_ID`: optional workspace UUID for this
+  sender number; set it when one Meta phone number is assigned to one clinic so
+  inbound messages route only inside that workspace.
 - `PHARMAIDE_WHATSAPP_CLOUD_API_VERSION=v25.0`.
 - `PHARMAIDE_WHATSAPP_CLOUD_API_BASE_URL=https://graph.facebook.com`.
 
@@ -129,6 +132,8 @@ Safety settings:
 - Verify:
   - GET verification succeeds.
   - POST signature validation succeeds.
+  - If `PHARMAIDE_WHATSAPP_WORKSPACE_SCOPE_ID` is set, inbound phone matching is
+    limited to that workspace.
   - inbound message is buffered only when there is one active treatment for the
     sender phone.
   - delivery status updates queued/sent/failed messages.
@@ -139,9 +144,10 @@ Safety settings:
   exist. Remaining auth work is MFA policy setup, production user provisioning
   and custom-claim issuance, plus a final route audit for local/dev scope
   assumptions.
-- WhatsApp Cloud API delivery and signed webhooks exist. Remaining messaging
-  work is Meta app publishing, production phone setup, event subscriptions, and
-  workspace-aware phone ownership policy.
+- WhatsApp Cloud API delivery, signed webhooks, and optional workspace-scoped
+  inbound routing exist. Remaining messaging work is Meta app publishing,
+  production phone setup, event subscriptions, and phone-to-workspace mapping
+  rollout.
 - Knowledge upload source files still use local disk storage.
 - Patient/treatment/conversation retention and purge policy is not implemented.
 - Cloud Tasks code support exists, but queues, IAM/OIDC, scheduler ticks, and

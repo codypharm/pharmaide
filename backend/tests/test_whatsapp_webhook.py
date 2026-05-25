@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 from datetime import date
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import FastAPI
@@ -400,6 +401,54 @@ async def test_whatsapp_webhook_ignores_ambiguous_active_phone_match(
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_whatsapp_webhook_routes_within_configured_workspace_scope(
+    test_app: FastAPI,
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    target_scope_id = uuid4()
+    other_scope_id = uuid4()
+    target_treatment = await _persist_active_treatment(
+        db_session,
+        mrn="WHATSAPP-SCOPE-001",
+        scope_id=target_scope_id,
+    )
+    await _persist_active_treatment(
+        db_session,
+        mrn="WHATSAPP-SCOPE-002",
+        scope_id=other_scope_id,
+    )
+    test_app.state.settings = Settings(
+        _env_file=None,
+        whatsapp_workspace_scope_id=target_scope_id,
+    )
+    scheduled: list[task_runner.BackgroundJob] = []
+    monkeypatch.setattr(
+        task_runner,
+        "schedule_job",
+        lambda job, *args, **kwargs: scheduled.append(job),
+    )
+
+    response = await app_client.post(
+        "/webhooks/whatsapp",
+        json=_message_payload(from_phone="18005551212", message="hello"),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "accepted_count": 1,
+        "buffered_count": 1,
+        "scheduled_count": 1,
+        "ignored_count": 0,
+    }
+    message = await db_session.scalar(select(ConversationMessage))
+    assert message is not None
+    assert message.treatment_id == target_treatment.id
+    assert len(scheduled) == 1
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_whatsapp_webhook_records_delivery_status_callback(
     app_client: AsyncClient,
     db_session: AsyncSession,
@@ -533,6 +582,7 @@ async def _persist_active_treatment(
     session: AsyncSession,
     *,
     mrn: str = "WHATSAPP-001",
+    scope_id: UUID | None = None,
 ) -> Treatment:
     patient = Patient(
         name="Eleanor Vance",
@@ -540,11 +590,15 @@ async def _persist_active_treatment(
         mrn=mrn,
         phone="+18005551212",
     )
+    treatment_kwargs = {}
+    if scope_id is not None:
+        treatment_kwargs["scope_id"] = scope_id
     treatment = Treatment(
         patient=patient,
         status="active",
         automation_mode="active",
         clinical_objective="Monitor recovery",
+        **treatment_kwargs,
     )
     session.add(treatment)
     await session.flush()

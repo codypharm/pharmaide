@@ -21,6 +21,7 @@ def test_settings_defaults_match_env_example(monkeypatch: pytest.MonkeyPatch) ->
         "PHARMAIDE_WHATSAPP_DELIVERY_PROVIDER",
         "PHARMAIDE_WHATSAPP_CLOUD_API_ACCESS_TOKEN",
         "PHARMAIDE_WHATSAPP_CLOUD_API_PHONE_NUMBER_ID",
+        "PHARMAIDE_WHATSAPP_WORKSPACE_SCOPE_ID",
         "PHARMAIDE_WHATSAPP_CLOUD_API_VERSION",
         "PHARMAIDE_WHATSAPP_CLOUD_API_BASE_URL",
         "PHARMAIDE_SAFETY_PROVIDER",
@@ -60,6 +61,7 @@ def test_settings_defaults_match_env_example(monkeypatch: pytest.MonkeyPatch) ->
     assert settings.whatsapp_delivery_provider == "placeholder"
     assert settings.whatsapp_cloud_api_access_token is None
     assert settings.whatsapp_cloud_api_phone_number_id is None
+    assert settings.whatsapp_workspace_scope_id is None
     assert settings.whatsapp_cloud_api_version == "v25.0"
     assert settings.whatsapp_cloud_api_base_url == "https://graph.facebook.com"
     assert settings.safety_provider == "model"
@@ -100,6 +102,10 @@ def test_settings_reads_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PHARMAIDE_WHATSAPP_DELIVERY_PROVIDER", "cloud_api")
     monkeypatch.setenv("PHARMAIDE_WHATSAPP_CLOUD_API_ACCESS_TOKEN", "wa-token")
     monkeypatch.setenv("PHARMAIDE_WHATSAPP_CLOUD_API_PHONE_NUMBER_ID", "phone-number-id")
+    monkeypatch.setenv(
+        "PHARMAIDE_WHATSAPP_WORKSPACE_SCOPE_ID",
+        "11111111-1111-4111-8111-111111111111",
+    )
     monkeypatch.setenv("PHARMAIDE_WHATSAPP_CLOUD_API_VERSION", "v24.0")
     monkeypatch.setenv("PHARMAIDE_WHATSAPP_CLOUD_API_BASE_URL", "https://graph.test")
     monkeypatch.setenv("PHARMAIDE_SAFETY_PROVIDER", "remote_http")
@@ -150,6 +156,7 @@ def test_settings_reads_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.whatsapp_cloud_api_access_token is not None
     assert settings.whatsapp_cloud_api_access_token.get_secret_value() == "wa-token"
     assert settings.whatsapp_cloud_api_phone_number_id == "phone-number-id"
+    assert str(settings.whatsapp_workspace_scope_id) == "11111111-1111-4111-8111-111111111111"
     assert settings.whatsapp_cloud_api_version == "v24.0"
     assert settings.whatsapp_cloud_api_base_url == "https://graph.test"
     assert settings.safety_provider == "remote_http"

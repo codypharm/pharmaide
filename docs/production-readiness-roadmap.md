@@ -10,9 +10,10 @@ Keep each item as a small, reviewable slice.
   Remaining work is GCIP MFA policy setup, production user provisioning/custom
   claims, and a final route audit to remove local/dev scope assumptions.
 - WhatsApp production readiness: Cloud API delivery, signed webhook handling,
-  delivery callbacks, and active-treatment routing are implemented locally.
-  Remaining work is Meta app publishing, production phone setup, webhook event
-  subscriptions, and workspace-aware phone ownership policy.
+  delivery callbacks, workspace-scoped inbound routing, and active-treatment
+  routing are implemented locally. Remaining work is Meta app publishing,
+  production phone setup, webhook event subscriptions, and operational rollout
+  of the phone-to-workspace mapping.
 - GCP deployment: Cloud Run containers, production environment variables,
   secrets, HTTPS-only browser-to-API path, and deployment runbooks. See
   `docs/deployment-readiness-checklist.md`.
