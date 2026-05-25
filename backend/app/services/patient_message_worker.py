@@ -70,7 +70,7 @@ async def process_buffered_patient_messages_for_treatment(
         interaction_evidence_retriever = build_patient_interaction_evidence_retriever(
             session,
             openai_api_key=settings.openai_api_key,
-            kb_scope_id=None,
+            kb_scope_id=turn.kb_scope_id,
         )
         draft = await draft_patient_reply_for_treatment(
             session,

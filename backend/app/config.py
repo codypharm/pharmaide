@@ -64,8 +64,8 @@ class Settings(BaseSettings):
     # capacity indefinitely. Route-level test overrides use the same bounds.
     analysis_timeout_seconds: int = Field(default=60, gt=0, le=300)
 
-    # Temporary pre-auth guard. Once GCIP lands, the route will use the real
-    # actor id instead of the X-Pharmaide-User-Id development header.
+    # Caps active analyses per actor/workspace so one caller cannot saturate
+    # the analysis worker pool.
     max_concurrent_analyses_per_user: int = Field(default=3, gt=0, le=50)
 
     # Local development storage for uploaded KB source files. Production should

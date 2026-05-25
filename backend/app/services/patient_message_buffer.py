@@ -30,6 +30,7 @@ class TreatmentNotFound(Exception):
 @dataclass(frozen=True)
 class BufferedPatientTurn:
     treatment_id: UUID
+    kb_scope_id: UUID
     message_ids: list[UUID]
     message_text: str
 
@@ -99,6 +100,7 @@ async def process_buffered_patient_turn(
 
     turn = BufferedPatientTurn(
         treatment_id=treatment_id,
+        kb_scope_id=treatment.scope_id,
         message_ids=[message.id for message in messages],
         message_text="\n".join(message.body for message in messages),
     )

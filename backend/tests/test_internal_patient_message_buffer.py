@@ -15,7 +15,7 @@ from app.agents.safety_schemas import (
     RefereeResult,
     SafetyReview,
 )
-from app.db.models import AuditLogEntry, ConversationMessage
+from app.db.models import AuditLogEntry, ConversationMessage, Treatment
 from app.services import task_runner
 from app.services.patient_message_buffer import buffer_patient_message
 
@@ -118,6 +118,42 @@ async def test_process_buffered_patient_turn_waits_for_default_debounce_window(
     message = await db_session.scalar(select(ConversationMessage))
     assert message is not None
     assert message.processed_at is None
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_process_buffered_patient_turn_uses_treatment_scope_for_evidence(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    treatment_id = await _create_treatment(app_client, "BUFFER-ENDPOINT-005")
+    treatment = await db_session.get(Treatment, treatment_id)
+    assert treatment is not None
+    await buffer_patient_message(db_session, treatment_id=treatment_id, message="Can I take food?")
+    await _age_buffered_messages(db_session, treatment_id)
+    _patch_generated_reply(monkeypatch)
+    _patch_safety_decision(monkeypatch, treatment_id)
+    seen_scope_ids: list[UUID | None] = []
+
+    def fake_build_patient_interaction_evidence_retriever(*args: object, **kwargs: object):
+        seen_scope_ids.append(kwargs["kb_scope_id"])
+
+        async def fake_retriever(*args: object, **kwargs: object) -> list[object]:
+            return []
+
+        return fake_retriever
+
+    monkeypatch.setattr(
+        "app.services.patient_message_worker.build_patient_interaction_evidence_retriever",
+        fake_build_patient_interaction_evidence_retriever,
+    )
+
+    response = await app_client.post(
+        f"/internal/treatments/{treatment_id}/process-buffered-patient-turn"
+    )
+
+    assert response.status_code == 200, response.text
+    assert seen_scope_ids == [treatment.scope_id]
 
 
 @pytest.mark.usefixtures("postgres_container")
