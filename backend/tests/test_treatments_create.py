@@ -5,13 +5,15 @@ creates exactly: 1 patient + 1 treatment + N medications + 1 audit row,
 all atomically, and returns the new ids.
 """
 
-from uuid import UUID, uuid4
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 import pytest
+from fastapi import FastAPI
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import Settings, get_settings
 from app.db.models import AuditLogEntry, Medication, Patient, Treatment, TreatmentAnalysis
 from app.services import task_runner
 
@@ -135,6 +137,64 @@ async def test_post_treatments_creates_full_lineage(
 
 
 @pytest.mark.usefixtures("postgres_container")
+async def test_post_treatments_uses_gcip_workspace_scope_not_dev_header(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+    test_app: FastAPI,
+) -> None:
+    workspace_id = uuid4()
+    ignored_dev_actor_id = uuid4()
+    settings = Settings(_env_file=None, auth_mode="gcip", gcip_project_id="pharmaide-test")
+    test_app.state.settings = settings
+    test_app.dependency_overrides[get_settings] = lambda: settings
+    scheduled: list[tuple[object, tuple[object, ...], dict[str, object]]] = []
+
+    def verify_token(token: str, *, project_id: str) -> dict[str, object]:
+        assert token == "good-token"
+        assert project_id == "pharmaide-test"
+        return {
+            "sub": "firebase-user-123",
+            "email": "pharmacist@example.com",
+            "workspace_id": str(workspace_id),
+        }
+
+    def capture_schedule(coro_fn: object, *args: object, **kwargs: object) -> None:
+        scheduled.append((coro_fn, args, kwargs))
+
+    monkeypatch.setattr("app.auth.verify_gcip_id_token", verify_token)
+    monkeypatch.setattr(task_runner, "schedule", capture_schedule)
+
+    response = await app_client.post(
+        "/treatments",
+        json=_treatment_body("GCIP-SCOPE-001"),
+        headers={
+            "Authorization": "Bearer good-token",
+            "X-Pharmaide-User-Id": str(ignored_dev_actor_id),
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    treatment_id = UUID(response.json()["treatment_id"])
+    treatment = await db_session.get(Treatment, treatment_id)
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(AuditLogEntry.resource_id == treatment_id)
+    )
+    expected_actor_id = uuid5(
+        NAMESPACE_URL,
+        "pharmaide:gcip:pharmaide-test:firebase-user-123",
+    )
+
+    assert treatment is not None
+    assert treatment.scope_id == workspace_id
+    assert audit is not None
+    assert audit.actor_id == expected_actor_id
+    assert audit.actor_id != ignored_dev_actor_id
+    assert scheduled[0][2]["kb_scope_id"] == workspace_id
+    assert scheduled[0][2]["user_id"] == str(expected_actor_id)
+
+
+@pytest.mark.usefixtures("postgres_container")
 async def test_post_treatments_can_attach_to_existing_patient(
     app_client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -232,3 +292,29 @@ async def test_post_treatments_returns_404_for_unknown_existing_patient(
 
     assert response.status_code == 404
     assert response.json() == {"detail": {"error": "patient_not_found"}}
+
+
+def _treatment_body(mrn: str) -> dict[str, object]:
+    return {
+        "patient": {
+            "name": "Eleanor Vance",
+            "dob": "1955-10-12",
+            "mrn": mrn,
+            "phone": "+18005551212",
+            "allergies": [],
+        },
+        "treatment": {
+            "clinical_objective": "Monitor recovery",
+            "treatment_start_at": "2026-05-20T08:30:00Z",
+        },
+        "medications": [
+            {
+                "name": "Amoxicillin",
+                "dosage": "500 mg",
+                "frequency": "Twice Daily (BID)",
+                "duration": "7 days",
+                "objective": None,
+            }
+        ],
+        "ingestion_method": "structured",
+    }
