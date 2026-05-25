@@ -49,6 +49,17 @@ async def test_gcip_auth_mode_requires_bearer_token() -> None:
     assert response.json()["detail"] == {"error": "auth_token_required"}
 
 
+async def test_gcip_auth_mode_ignores_development_actor_header() -> None:
+    app = _auth_test_app(
+        Settings(_env_file=None, auth_mode="gcip", gcip_project_id="pharmaide-test")
+    )
+
+    response = await _get_me(app, headers={"X-Pharmaide-User-Id": str(uuid4())})
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == {"error": "auth_token_required"}
+
+
 async def test_gcip_auth_mode_rejects_invalid_token(monkeypatch) -> None:
     def reject_token(token: str, *, project_id: str) -> dict[str, object]:
         del token, project_id
