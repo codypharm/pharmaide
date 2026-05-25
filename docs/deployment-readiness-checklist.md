@@ -2,8 +2,8 @@
 
 This is the pre-deployment checklist for moving PharmaAide from local
 development toward a Cloud Run staging environment. It is not a production
-approval checklist; auth, workspace scoping, and safety gateway deployment are
-still tracked as production blockers.
+approval checklist; Cloud Run rollout, durable storage, queue operations,
+provider deployments, and evaluations are still tracked as production blockers.
 
 ## Deployment Targets
 
@@ -95,7 +95,7 @@ Safety settings:
 - Verify all expected tables exist:
   - treatments and medications
   - treatment analyses
-  - monitoring cycles and adherence/check-in tables
+  - adherence events and patient check-ins
   - conversation/triage/message delivery tables
   - knowledge documents/chunks
   - audit log entries
@@ -135,12 +135,21 @@ Safety settings:
 
 ## Current Deployment Blockers
 
-- GCIP frontend login/session enforcement exists. Remaining auth blockers are
-  MFA, workspace membership authorization, and route-by-route removal of
-  pre-auth scaffolding.
-- Workspace/clinic scoping is not yet derived from authenticated membership.
+- GCIP login/session enforcement, workspace claims, and membership-claim checks
+  exist. Remaining auth work is MFA policy setup, production user provisioning
+  and custom-claim issuance, plus a final route audit for local/dev scope
+  assumptions.
+- WhatsApp Cloud API delivery and signed webhooks exist. Remaining messaging
+  work is Meta app publishing, production phone setup, event subscriptions, and
+  workspace-aware phone ownership policy.
 - Knowledge upload source files still use local disk storage.
-- Private Llama Guard / AgentDoG deployment is not yet live.
+- Patient/treatment/conversation retention and purge policy is not implemented.
+- Cloud Tasks code support exists, but queues, IAM/OIDC, scheduler ticks, and
+  dead-letter operations still need real GCP deployment verification.
+- Private Llama Guard / AgentDoG HTTP adapters exist, but the gateway services
+  are not yet deployed.
+- Clinical, safety, retrieval, DDI, and patient-message evaluations still need
+  to be run as a release gate.
 
 ## Pre-Staging Verification
 

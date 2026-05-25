@@ -3,8 +3,8 @@
 Review date: 2026-05-18
 
 This review covers the current pre-production codebase. It does not replace the
-remaining production blockers for GCIP, Cloud Run, workspace scoping, or
-WhatsApp provider hardening.
+remaining production blockers for Cloud Run, durable storage, queue operations,
+provider deployments, or release-gate evaluations.
 
 ## Reviewed Areas
 
@@ -28,10 +28,13 @@ WhatsApp provider hardening.
 ### Auth Headers
 
 - `X-Pharmaide-User-Id` is development scaffolding only.
-- Production identity must come from GCIP-authenticated claims and workspace
-  membership, not from a client-controlled header.
-- Knowledge-base scope and treatment access must derive from workspace/clinic
-  authorization after auth lands.
+- Production identity comes from GCIP-authenticated claims when
+  `PHARMAIDE_AUTH_MODE=gcip`.
+- Workspace/clinic scope is derived from the verified workspace claim, and can
+  be fail-closed against a workspace-membership claim.
+- Remaining auth hardening is MFA policy setup, production user provisioning
+  and custom-claim issuance, plus a final route audit for local/dev scope
+  assumptions.
 
 ### Audit Trails
 
@@ -40,8 +43,8 @@ WhatsApp provider hardening.
 - Patient messages, assistant drafts, medication names, doses, and uploaded
   knowledge excerpts should remain in their clinical/source tables, not audit
   payloads.
-- Audit export must stay behind authenticated pharmacist/admin access once auth
-  is enabled.
+- Audit export is behind the authenticated pharmacist route dependency; add
+  admin/role separation before exposing multi-workspace admin views.
 
 ### Data Minimisation
 
@@ -59,8 +62,12 @@ WhatsApp provider hardening.
 The review is complete for the current codebase, but these items remain tracked
 as production blockers:
 
-- GCIP MFA, workspace membership authorization, and full route enforcement.
-- Workspace scoping from clinic/workspace membership.
+- GCIP MFA policy setup, production user provisioning, and full route enforcement.
+- Route-by-route cleanup of any remaining local/dev scope assumptions.
 - HTTPS-only Cloud Run deployment.
-- Cloud Tasks/Pub/Sub worker replacement for in-process background work.
+- Durable object/blob storage for uploaded knowledge source files.
+- Retention/purge policy for patient, treatment, conversation, audit, and
+  uploaded-source data.
+- Cloud Tasks/Pub/Sub deployment and IAM/OIDC verification for background work.
 - Private safety gateway deployment for Llama Guard / AgentDoG.
+- Release-gate evaluations for clinical, safety, retrieval, DDI, and patient-message behavior.
