@@ -11,6 +11,8 @@ def test_settings_defaults_match_env_example(monkeypatch: pytest.MonkeyPatch) ->
         "PHARMAIDE_CORS_ALLOWED_ORIGINS",
         "PHARMAIDE_AUTH_MODE",
         "PHARMAIDE_GCIP_PROJECT_ID",
+        "PHARMAIDE_GCIP_WORKSPACE_MEMBERSHIPS_CLAIM",
+        "PHARMAIDE_GCIP_REQUIRE_WORKSPACE_MEMBERSHIP",
         "PHARMAIDE_CHECKPOINT_DB_PATH",
         "PHARMAIDE_RXNORM_BASE_URL",
         "PHARMAIDE_OPENAI_API_KEY",
@@ -48,6 +50,8 @@ def test_settings_defaults_match_env_example(monkeypatch: pytest.MonkeyPatch) ->
     assert settings.cors_allowed_origin_list == ("http://localhost:5173",)
     assert settings.auth_mode == "disabled"
     assert settings.gcip_project_id is None
+    assert settings.gcip_workspace_memberships_claim == "workspace_memberships"
+    assert settings.gcip_require_workspace_membership is False
     assert settings.checkpoint_db_path == "./pharmaide.db"
     assert settings.rxnorm_base_url == "https://rxnav.nlm.nih.gov/REST"
     assert settings.openai_api_key is None
@@ -86,6 +90,8 @@ def test_settings_reads_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     monkeypatch.setenv("PHARMAIDE_AUTH_MODE", "gcip")
     monkeypatch.setenv("PHARMAIDE_GCIP_PROJECT_ID", "pharmaide-staging")
+    monkeypatch.setenv("PHARMAIDE_GCIP_WORKSPACE_MEMBERSHIPS_CLAIM", "clinic_ids")
+    monkeypatch.setenv("PHARMAIDE_GCIP_REQUIRE_WORKSPACE_MEMBERSHIP", "true")
     monkeypatch.setenv("PHARMAIDE_CHECKPOINT_DB_PATH", "/tmp/x.db")
     monkeypatch.setenv("PHARMAIDE_RXNORM_BASE_URL", "https://rxnav.test/REST")
     monkeypatch.setenv("PHARMAIDE_OPENAI_API_KEY", "sk-test")
@@ -130,6 +136,8 @@ def test_settings_reads_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert settings.auth_mode == "gcip"
     assert settings.gcip_project_id == "pharmaide-staging"
+    assert settings.gcip_workspace_memberships_claim == "clinic_ids"
+    assert settings.gcip_require_workspace_membership is True
     assert settings.checkpoint_db_path == "/tmp/x.db"
     assert settings.rxnorm_base_url == "https://rxnav.test/REST"
     assert settings.openai_api_key is not None

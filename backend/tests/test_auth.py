@@ -145,6 +145,60 @@ async def test_gcip_auth_mode_can_require_workspace_claim(monkeypatch) -> None:
     assert response.json()["detail"] == {"error": "workspace_claim_required"}
 
 
+async def test_gcip_auth_mode_can_require_workspace_membership(monkeypatch) -> None:
+    workspace_id = uuid4()
+
+    def verify_token(token: str, *, project_id: str) -> dict[str, object]:
+        del token, project_id
+        return {
+            "sub": "firebase-user-123",
+            "workspace_id": str(workspace_id),
+            "workspace_memberships": [str(workspace_id)],
+        }
+
+    monkeypatch.setattr("app.auth.verify_gcip_id_token", verify_token)
+    app = _auth_test_app(
+        Settings(
+            _env_file=None,
+            auth_mode="gcip",
+            gcip_project_id="pharmaide-test",
+            gcip_require_workspace_membership=True,
+        )
+    )
+
+    response = await _get_me(app, headers={"Authorization": "Bearer good-token"})
+
+    assert response.status_code == 200
+    assert response.json()["workspace_id"] == str(workspace_id)
+
+
+async def test_gcip_auth_mode_rejects_missing_workspace_membership(monkeypatch) -> None:
+    workspace_id = uuid4()
+
+    def verify_token(token: str, *, project_id: str) -> dict[str, object]:
+        del token, project_id
+        return {
+            "sub": "firebase-user-123",
+            "workspace_id": str(workspace_id),
+            "workspace_memberships": [str(uuid4())],
+        }
+
+    monkeypatch.setattr("app.auth.verify_gcip_id_token", verify_token)
+    app = _auth_test_app(
+        Settings(
+            _env_file=None,
+            auth_mode="gcip",
+            gcip_project_id="pharmaide-test",
+            gcip_require_workspace_membership=True,
+        )
+    )
+
+    response = await _get_me(app, headers={"Authorization": "Bearer good-token"})
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == {"error": "workspace_membership_required"}
+
+
 async def test_auth_me_returns_development_actor() -> None:
     actor_id = uuid4()
     app = create_app(Settings(_env_file=None, auth_mode="disabled"))

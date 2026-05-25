@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     gcip_project_id: str | None = None
     gcip_workspace_claim: str = "workspace_id"
     gcip_require_workspace_claim: bool = False
+    gcip_workspace_memberships_claim: str = "workspace_memberships"
+    gcip_require_workspace_membership: bool = False
 
     rxnorm_base_url: str = "https://rxnav.nlm.nih.gov/REST"
 

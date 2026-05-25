@@ -95,6 +95,15 @@ def _gcip_actor(settings: Settings, authorization: str | None) -> CurrentActor:
     workspace_id = _claim_uuid(claims, settings.gcip_workspace_claim)
     if settings.gcip_require_workspace_claim and workspace_id is None:
         raise HTTPException(status_code=403, detail={"error": "workspace_claim_required"})
+    if settings.gcip_require_workspace_membership:
+        if workspace_id is None:
+            raise HTTPException(status_code=403, detail={"error": "workspace_claim_required"})
+        if not _claim_includes_uuid(
+            claims,
+            settings.gcip_workspace_memberships_claim,
+            workspace_id,
+        ):
+            raise HTTPException(status_code=403, detail={"error": "workspace_membership_required"})
 
     return CurrentActor(
         actor_id=_actor_uuid("gcip", f"{settings.gcip_project_id}:{subject}"),
@@ -129,6 +138,19 @@ def _claim_uuid(claims: dict[str, object], key: str) -> UUID | None:
         return UUID(value)
     except ValueError as exc:
         raise HTTPException(status_code=401, detail={"error": "invalid_auth_token"}) from exc
+
+
+def _claim_includes_uuid(claims: dict[str, object], key: str, expected: UUID) -> bool:
+    """Accept GCIP membership claims as a UUID list or comma-separated string."""
+    value = claims.get(key)
+    if isinstance(value, str):
+        candidates = [part.strip() for part in value.split(",")]
+    elif isinstance(value, list | tuple | set):
+        candidates = [part.strip() for part in value if isinstance(part, str)]
+    else:
+        return False
+
+    return str(expected) in candidates
 
 
 def _actor_uuid(namespace: str, subject: str) -> UUID:

@@ -28,6 +28,10 @@ Required for staging:
   pharmacist workspace/clinic UUID used for knowledge-base scope.
 - `PHARMAIDE_GCIP_REQUIRE_WORKSPACE_CLAIM=true`: enable after GCIP custom claims
   are configured so production requests without workspace scope fail closed.
+- `PHARMAIDE_GCIP_WORKSPACE_MEMBERSHIPS_CLAIM=workspace_memberships`: GCIP
+  custom claim containing the workspace UUIDs this pharmacist may access.
+- `PHARMAIDE_GCIP_REQUIRE_WORKSPACE_MEMBERSHIP=true`: enable after membership
+  claims are issued so verified users cannot access unassigned workspaces.
 - `PHARMAIDE_LOG_MODE=json`: structured logs for Cloud Run.
 - `PHARMAIDE_DEBUG_ROUTES_ENABLED=false`: debug graph route must stay unmounted.
 - `PHARMAIDE_RXNORM_BASE_URL=https://rxnav.nlm.nih.gov/REST`.
