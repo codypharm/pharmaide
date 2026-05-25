@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { Award, History, Key, Mail, Settings, Shield } from "lucide-react";
+import { getCurrentActor, type CurrentActorView } from "../api/auth";
 import type { AuthSessionState } from "../auth/session";
 
 type PharmacistProfilePageProps = {
@@ -13,12 +15,44 @@ type ProfileAuthSummary = {
   sessionText: string;
   authModeLabel: string;
   workspaceLabel: string;
+  verificationLabel: string;
+  workspaceDetail: string;
 };
 
 export default function PharmacistProfilePage({
   authSessionState = { status: "disabled" },
 }: PharmacistProfilePageProps) {
-  const profile = profileAuthSummary(authSessionState);
+  const [serverActor, setServerActor] = useState<CurrentActorView | null>(null);
+  const [verificationState, setVerificationState] = useState<
+    "checking" | "verified" | "unavailable"
+  >("checking");
+  const profile = profileAuthSummary(authSessionState, serverActor);
+
+  useEffect(() => {
+    let active = true;
+    setVerificationState("checking");
+    setServerActor(null);
+
+    getCurrentActor()
+      .then((actor) => {
+        if (!active) {
+          return;
+        }
+        setServerActor(actor);
+        setVerificationState("verified");
+      })
+      .catch(() => {
+        if (!active) {
+          return;
+        }
+        setServerActor(null);
+        setVerificationState("unavailable");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [authSessionState]);
 
   return (
     <div className="h-full overflow-y-auto p-8">
@@ -42,6 +76,9 @@ export default function PharmacistProfilePage({
                 <span className="rounded-md bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-600">
                   {profile.authModeLabel}
                 </span>
+                <span className={`rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${verificationClass(verificationState)}`}>
+                  {verificationText(verificationState)}
+                </span>
               </div>
             </div>
           </div>
@@ -59,7 +96,7 @@ export default function PharmacistProfilePage({
               </h3>
               <div className="grid grid-cols-2 gap-6">
                 <ProfileField label="Role" value="Clinical Pharmacist" detail="Medication follow-up workspace" />
-                <ProfileField label="Workspace" value={profile.workspaceLabel} detail="Used for treatment and knowledge scope" />
+                <ProfileField label="Workspace" value={profile.workspaceLabel} detail={profile.workspaceDetail} />
                 <ProfileField label="Session" value={profile.sessionTitle} detail="Browser session state" />
                 <ProfileField label="Audit Trail" value="Enabled" detail="Pharmacist actions are attributable" />
               </div>
@@ -73,7 +110,7 @@ export default function PharmacistProfilePage({
                 {[
                   {
                     action: "Authentication status checked",
-                    details: profile.sessionText,
+                    details: profile.verificationLabel,
                     time: "Now",
                   },
                   {
@@ -124,7 +161,7 @@ export default function PharmacistProfilePage({
               </div>
               <p className="mb-4 text-xs leading-6 text-slate-300">{profile.sessionText}</p>
               <p className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-200">
-                Workspace access is controlled by authenticated claims.
+                {profile.workspaceDetail}
               </p>
             </section>
           </div>
@@ -177,7 +214,29 @@ function AccessRow({
   );
 }
 
-function profileAuthSummary(authSessionState: AuthSessionState): ProfileAuthSummary {
+function profileAuthSummary(
+  authSessionState: AuthSessionState,
+  serverActor: CurrentActorView | null,
+): ProfileAuthSummary {
+  if (serverActor) {
+    const email = serverActor.email ?? "Email unavailable";
+    return {
+      avatarText: initialsForEmail(email),
+      displayName: serverActor.email ?? "Verified pharmacist",
+      email,
+      sessionTitle:
+        serverActor.auth_mode === "gcip" ? "GCIP session active" : "Local auth disabled",
+      sessionText:
+        "This identity was verified by the backend before showing scoped pharmacist access.",
+      authModeLabel: serverActor.auth_mode === "gcip" ? "GCIP active" : "Local dev",
+      workspaceLabel: serverActor.workspace_id ? "Workspace verified" : "Actor scoped",
+      verificationLabel: "Server-verified identity",
+      workspaceDetail: serverActor.workspace_id
+        ? "Treatment and knowledge access use the authenticated workspace claim."
+        : "Treatment and knowledge access use the verified actor scope.",
+    };
+  }
+
   if (authSessionState.status === "missing_adapter") {
     return {
       avatarText: "PA",
@@ -187,6 +246,8 @@ function profileAuthSummary(authSessionState: AuthSessionState): ProfileAuthSumm
       sessionText: "Browser auth is enabled, but the frontend sign-in adapter is not available.",
       authModeLabel: "GCIP setup",
       workspaceLabel: "Unavailable",
+      verificationLabel: "Backend verification is unavailable.",
+      workspaceDetail: "Workspace access cannot be verified until sign-in setup is complete.",
     };
   }
 
@@ -201,6 +262,8 @@ function profileAuthSummary(authSessionState: AuthSessionState): ProfileAuthSumm
         "This browser session uses GCIP ID tokens. Tokens are kept in memory and sent as bearer auth on API requests.",
       authModeLabel: "GCIP active",
       workspaceLabel: "Claim scoped",
+      verificationLabel: "Backend verification is still checking.",
+      workspaceDetail: "Workspace access is controlled by authenticated claims.",
     };
   }
 
@@ -213,7 +276,29 @@ function profileAuthSummary(authSessionState: AuthSessionState): ProfileAuthSumm
       "This environment uses the development auth scaffold. Production should run with GCIP enabled.",
     authModeLabel: "Local dev",
     workspaceLabel: "Dev actor scoped",
+    verificationLabel: "Backend verification is still checking.",
+    workspaceDetail: "Workspace access is controlled by the development actor.",
   };
+}
+
+function verificationText(state: "checking" | "verified" | "unavailable"): string {
+  if (state === "verified") {
+    return "Server verified";
+  }
+  if (state === "unavailable") {
+    return "Verification unavailable";
+  }
+  return "Verifying";
+}
+
+function verificationClass(state: "checking" | "verified" | "unavailable"): string {
+  if (state === "verified") {
+    return "bg-emerald-50 text-emerald-700";
+  }
+  if (state === "unavailable") {
+    return "bg-amber-50 text-amber-700";
+  }
+  return "bg-slate-100 text-slate-600";
 }
 
 function initialsForEmail(email: string): string {

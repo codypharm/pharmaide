@@ -101,6 +101,22 @@ describe("PharmaAide app shell", () => {
 
   it("shows the signed-in pharmacist in dashboard chrome and profile", async () => {
     window.history.pushState({}, "", "/dashboard/profile");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          actor_id: "11111111-1111-4111-8111-111111111111",
+          subject: "firebase-user-123",
+          auth_mode: "gcip",
+          email: "pharmacist@example.com",
+          workspace_id: "22222222-2222-4222-8222-222222222222",
+          kb_scope_id: "22222222-2222-4222-8222-222222222222",
+        }),
+        {
+          status: 200,
+          headers: new Headers({ "X-Request-ID": "req_auth_me" }),
+        },
+      ),
+    );
 
     render(
       <App
@@ -117,7 +133,8 @@ describe("PharmaAide app shell", () => {
 
     expect(screen.getAllByText("pharmacist@example.com").length).toBeGreaterThan(0);
     expect(screen.getAllByText("GCIP session active").length).toBeGreaterThan(0);
-    expect(screen.getByText("Workspace access is controlled by authenticated claims.")).toBeInTheDocument();
+    expect(await screen.findByText("Server-verified identity")).toBeInTheDocument();
+    expect(screen.getAllByText("Workspace verified").length).toBeGreaterThan(0);
   });
 
   it("hides patient names when privacy mode is toggled on", async () => {
