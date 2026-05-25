@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from app.api.audits import router as audits_router
+from app.api.auth import router as auth_router
 from app.api.internal import router as internal_router
 from app.api.knowledge import router as knowledge_router
 from app.api.patients import router as patients_router
@@ -76,6 +77,7 @@ def create_app(settings: Settings) -> FastAPI:
     async def health() -> dict[str, str]:
         return {"status": "ok", "version": VERSION}
 
+    app.include_router(auth_router, tags=["auth"])
     app.include_router(treatments_router, tags=["treatments"])
     app.include_router(patients_router, tags=["patients"])
     app.include_router(prescriptions_router, tags=["prescriptions"])

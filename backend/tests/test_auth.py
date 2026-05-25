@@ -6,6 +6,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.auth import CurrentActor, get_current_actor
 from app.config import Settings
+from app.main import create_app
 
 
 async def test_disabled_auth_mode_uses_development_actor_header() -> None:
@@ -144,6 +145,52 @@ async def test_gcip_auth_mode_can_require_workspace_claim(monkeypatch) -> None:
     assert response.json()["detail"] == {"error": "workspace_claim_required"}
 
 
+async def test_auth_me_returns_development_actor() -> None:
+    actor_id = uuid4()
+    app = create_app(Settings(_env_file=None, auth_mode="disabled"))
+
+    response = await _get_auth_me(app, headers={"X-Pharmaide-User-Id": str(actor_id)})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "actor_id": str(actor_id),
+        "subject": str(actor_id),
+        "auth_mode": "disabled",
+        "email": None,
+        "workspace_id": None,
+        "kb_scope_id": str(actor_id),
+    }
+
+
+async def test_auth_me_returns_gcip_claim_projection(monkeypatch) -> None:
+    workspace_id = uuid4()
+
+    def verify_token(token: str, *, project_id: str) -> dict[str, object]:
+        assert token == "good-token"
+        assert project_id == "pharmaide-test"
+        return {
+            "sub": "firebase-user-123",
+            "email": "pharmacist@example.com",
+            "workspace_id": str(workspace_id),
+        }
+
+    monkeypatch.setattr("app.auth.verify_gcip_id_token", verify_token)
+    app = create_app(
+        Settings(_env_file=None, auth_mode="gcip", gcip_project_id="pharmaide-test")
+    )
+
+    response = await _get_auth_me(app, headers={"Authorization": "Bearer good-token"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert UUID(payload["actor_id"])
+    assert payload["subject"] == "firebase-user-123"
+    assert payload["auth_mode"] == "gcip"
+    assert payload["email"] == "pharmacist@example.com"
+    assert payload["workspace_id"] == str(workspace_id)
+    assert payload["kb_scope_id"] == str(workspace_id)
+
+
 def _auth_test_app(settings: Settings) -> FastAPI:
     app = FastAPI()
     app.state.settings = settings
@@ -166,3 +213,9 @@ async def _get_me(app: FastAPI, headers: dict[str, str] | None = None):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         return await client.get("/me", headers=headers)
+
+
+async def _get_auth_me(app: FastAPI, headers: dict[str, str] | None = None):
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        return await client.get("/auth/me", headers=headers)

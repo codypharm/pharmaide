@@ -350,6 +350,15 @@ class AuditLogEntryList(BaseModel):
     items: list[AuditLogEntryView]
 
 
+class CurrentActorView(BaseModel):
+    actor_id: UUID
+    subject: str
+    auth_mode: Literal["disabled", "gcip"]
+    email: str | None
+    workspace_id: UUID | None
+    kb_scope_id: UUID
+
+
 class TreatmentAnalysisSnapshot(BaseModel):
     id: UUID
     treatment_id: UUID
