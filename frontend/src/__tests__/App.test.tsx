@@ -133,8 +133,9 @@ describe("PharmaAide app shell", () => {
 
     expect(screen.getAllByText("pharmacist@example.com").length).toBeGreaterThan(0);
     expect(screen.getAllByText("GCIP session active").length).toBeGreaterThan(0);
-    expect(await screen.findByText("Server-verified identity")).toBeInTheDocument();
+    expect((await screen.findAllByText("Server-verified identity")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Workspace verified").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /account settings/i })).not.toBeInTheDocument();
   });
 
   it("hides patient names when privacy mode is toggled on", async () => {

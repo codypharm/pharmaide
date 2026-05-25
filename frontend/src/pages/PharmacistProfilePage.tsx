@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Award, History, Key, Mail, Settings, Shield } from "lucide-react";
+import { Award, History, Key, Mail, Shield } from "lucide-react";
 import { getCurrentActor, type CurrentActorView } from "../api/auth";
 import type { AuthSessionState } from "../auth/session";
 
@@ -82,10 +82,14 @@ export default function PharmacistProfilePage({
               </div>
             </div>
           </div>
-          <button className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-6 py-2.5 font-bold text-slate-700 transition-colors hover:bg-slate-50">
-            <Settings size={18} />
-            Account Settings
-          </button>
+          <div className="max-w-xs rounded-xl border border-slate-200 bg-white px-4 py-3 text-right">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              Session source
+            </p>
+            <p className="mt-1 text-sm font-bold text-slate-900">
+              {profile.verificationLabel}
+            </p>
+          </div>
         </div>
 
         <div className="grid grid-cols-3 gap-6">
