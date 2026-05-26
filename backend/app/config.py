@@ -76,6 +76,10 @@ class Settings(BaseSettings):
     knowledge_max_upload_bytes: int = Field(default=25 * 1024 * 1024, gt=0)
     knowledge_ingestion_stale_minutes: int = Field(default=30, gt=0, le=24 * 60)
 
+    # Closed treatments are only purge-eligible after they are archived and this
+    # retention window has elapsed.
+    data_retention_closed_treatment_days: int = Field(default=365, ge=0, le=3650)
+
     # Internal worker routes are open in local dev, but production should require
     # Google-issued OIDC identity tokens from Cloud Tasks/Scheduler invokers.
     internal_worker_auth: Literal["disabled", "oidc"] = "disabled"
@@ -88,6 +92,14 @@ class Settings(BaseSettings):
     cloud_tasks_base_url: str | None = None
     cloud_tasks_service_account_email: str | None = None
     cloud_tasks_oidc_audience: str | None = None
+
+    @field_validator("whatsapp_workspace_scope_id", mode="before")
+    @classmethod
+    def blank_workspace_scope_id_is_unset(cls, value: object) -> object:
+        """Allow optional UUID env values to be left blank in local .env files."""
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     @field_validator("knowledge_max_upload_bytes", mode="before")
     @classmethod

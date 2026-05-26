@@ -18,6 +18,7 @@ from app.db.engine import get_session, get_session_factory
 from app.db.models import AuditLogEntry, KnowledgeDocument, TreatmentAnalysis
 from app.services import (
     dailymed_cache,
+    data_retention,
     internal_worker_auth,
     message_delivery,
     monitoring,
@@ -109,6 +110,21 @@ class CleanupCheckpointsResponse(BaseModel):
 class CleanupDailyMedCacheResponse(BaseModel):
     deleted_count: int
     retention_days: int
+
+
+class CleanupClosedTreatmentsRequest(BaseModel):
+    dry_run: bool = True
+    retention_days: int | None = Field(default=None, ge=0, le=3650)
+    limit: int = Field(default=100, ge=1, le=1000)
+
+
+class CleanupClosedTreatmentsResponse(BaseModel):
+    dry_run: bool
+    retention_days: int
+    eligible_treatment_count: int
+    deleted_treatment_count: int
+    deleted_patient_count: int
+    deleted_audit_log_count: int
 
 
 class MessageDeliveryRunResponse(BaseModel):
@@ -230,6 +246,36 @@ async def cleanup_dailymed_cache(session: SessionDep) -> CleanupDailyMedCacheRes
     return CleanupDailyMedCacheResponse(
         deleted_count=deleted_count,
         retention_days=dailymed_cache.DAILYMED_FAILED_CACHE_RETENTION_DAYS,
+    )
+
+
+@router.post(
+    "/cleanup/closed-treatments",
+    response_model=CleanupClosedTreatmentsResponse,
+)
+async def cleanup_closed_treatments(
+    session: SessionDep,
+    settings: SettingsDep,
+    body: CleanupClosedTreatmentsRequest | None = None,
+) -> CleanupClosedTreatmentsResponse:
+    request = body or CleanupClosedTreatmentsRequest()
+    result = await data_retention.cleanup_closed_treatments(
+        session,
+        retention_days=(
+            request.retention_days
+            if request.retention_days is not None
+            else settings.data_retention_closed_treatment_days
+        ),
+        dry_run=request.dry_run,
+        limit=request.limit,
+    )
+    return CleanupClosedTreatmentsResponse(
+        dry_run=result.dry_run,
+        retention_days=result.retention_days,
+        eligible_treatment_count=result.eligible_treatment_count,
+        deleted_treatment_count=result.deleted_treatment_count,
+        deleted_patient_count=result.deleted_patient_count,
+        deleted_audit_log_count=result.deleted_audit_log_count,
     )
 
 

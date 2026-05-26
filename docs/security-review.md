@@ -54,8 +54,10 @@ provider deployments, or release-gate evaluations.
   text.
 - Uploaded knowledge files are stored as source files plus parsed chunks; delete
   actions remove chunks and the stored source file.
-- Production still needs a retention/purge policy for patient data after the
-  treatment lifecycle.
+- Archive-gated treatment retention cleanup exists behind an internal dry-run
+  first endpoint. Production still needs scheduled rollout, uploaded-source
+  object cleanup, broader audit retention policy, and final legal retention
+  windows.
 
 ## Remaining Production Blockers
 
@@ -66,8 +68,8 @@ as production blockers:
 - Route-by-route cleanup of any remaining local/dev scope assumptions.
 - HTTPS-only Cloud Run deployment.
 - Durable object/blob storage for uploaded knowledge source files.
-- Retention/purge policy for patient, treatment, conversation, audit, and
-  uploaded-source data.
+- Retention rollout for scheduled cleanup, uploaded-source object cleanup,
+  broader audit retention policy, and final legal retention windows.
 - Cloud Tasks/Pub/Sub deployment and IAM/OIDC verification for background work.
 - Private safety gateway deployment for Llama Guard / AgentDoG.
 - Release-gate evaluations for clinical, safety, retrieval, DDI, and patient-message behavior.

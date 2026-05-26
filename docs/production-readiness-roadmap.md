@@ -23,9 +23,10 @@ Keep each item as a small, reviewable slice.
   `docs/cloud-tasks-pubsub-worker-plan.md`.
 - Knowledge source storage: uploaded source files still use local disk; replace
   with durable object/blob storage before production.
-- Data retention: define and implement purge/retention policy for patient,
-  treatment, conversation, audit, and uploaded-source data after treatment
-  lifecycle close.
+- Data retention: archive-gated treatment/patient/conversation purge is
+  implemented behind an internal dry-run-first endpoint. Remaining work is
+  production scheduling, uploaded-source object cleanup, broader audit retention
+  policy, and final legal retention-window approval.
 - Private safety gateway: deploy Llama Guard / AgentDoG behind backend-only provider adapters with fail-closed behavior.
 - Evaluation suite: run clinical, safety, retrieval, DDI, and patient-message regression cases before production release.
 

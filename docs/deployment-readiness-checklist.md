@@ -45,6 +45,8 @@ Knowledge-base settings:
 - `PHARMAIDE_KNOWLEDGE_UPLOAD_DIR` is local-development storage only. Before
   production, replace local disk storage with durable object/blob storage or
   accept that uploaded files are not durable across Cloud Run instances.
+- `PHARMAIDE_DATA_RETENTION_CLOSED_TREATMENT_DAYS=365` or another reviewed
+  archive-gated retention window.
 
 WhatsApp settings:
 
@@ -117,6 +119,7 @@ Safety settings:
   - buffered patient turn processing
   - message delivery run
   - stale ingestion cleanup
+  - closed-treatment retention cleanup in dry-run mode before any apply run
   - dead-letter audit recording
 - Confirm retry headers are audited without request bodies.
 
@@ -149,7 +152,9 @@ Safety settings:
   production phone setup, event subscriptions, and phone-to-workspace mapping
   rollout.
 - Knowledge upload source files still use local disk storage.
-- Patient/treatment/conversation retention and purge policy is not implemented.
+- Archive-gated treatment/patient/conversation purge exists behind an internal
+  dry-run-first endpoint. Remaining retention work is production scheduling,
+  source-file/object cleanup, and final legal retention-window approval.
 - Cloud Tasks code support exists, but queues, IAM/OIDC, scheduler ticks, and
   dead-letter operations still need real GCP deployment verification.
 - Private Llama Guard / AgentDoG HTTP adapters exist, but the gateway services
