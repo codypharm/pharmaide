@@ -21,8 +21,9 @@ Keep each item as a small, reviewable slice.
   foundation with real GCP queues, Cloud Scheduler/Pub/Sub ticks, IAM/OIDC
   invokers, dead-letter handling, and operational runbooks. See
   `docs/cloud-tasks-pubsub-worker-plan.md`.
-- Knowledge source storage: uploaded source files still use local disk; replace
-  with durable object/blob storage before production.
+- Knowledge source storage: uploaded source files are behind a storage adapter
+  but still use the local-disk implementation; add the durable object/blob
+  storage adapter before production.
 - Data retention: archive-gated treatment/patient/conversation purge is
   implemented behind an internal dry-run-first endpoint. Remaining work is
   production scheduling, uploaded-source object cleanup, broader audit retention

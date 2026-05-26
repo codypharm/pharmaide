@@ -13,7 +13,6 @@ from pydantic import BaseModel, Field, SecretStr
 from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.agents.knowledge_sources.user_upload import UserUploadSource
 from app.auth import ActorDep, get_current_kb_scope_id
 from app.config import Settings, get_settings
 from app.db.engine import get_session, get_session_factory
@@ -22,6 +21,7 @@ from app.services import task_runner
 from app.services.embeddings import build_embedding_client, embed_texts
 from app.services.kb_ingestion import ingest_document, mark_stale_ingestions_failed
 from app.services.kb_scope import GLOBAL_DAILYMED_SCOPE_ID
+from app.services.knowledge_storage import build_local_knowledge_storage
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 SessionFactoryDep = Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)]
@@ -77,6 +77,7 @@ async def upload_document(
     _validate_size(data, settings.knowledge_max_upload_bytes)
 
     title = _safe_title(file.filename)
+    storage = build_local_knowledge_storage(settings.knowledge_upload_dir)
     async with session_factory() as session, session.begin():
         document = KnowledgeDocument(
             source_type="user_upload",
@@ -89,10 +90,8 @@ async def upload_document(
         session.add(document)
         await session.flush()
 
-        storage_path = _storage_path(settings.knowledge_upload_dir, document.id)
-        storage_path.parent.mkdir(parents=True, exist_ok=True)
-        storage_path.write_bytes(data)
-        document.source_uri = _source_uri(document.id, title)
+        storage.save(document.id, data)
+        document.source_uri = storage.source_uri(document.id, title)
         _audit_uploaded(
             session,
             document_id=document.id,
@@ -113,8 +112,8 @@ async def upload_document(
         ingest_document,
         session_factory,
         document_id,
-        source=UserUploadSource(
-            path=storage_path,
+        source=storage.source_from_metadata(
+            document_id=document_id,
             mime=mime,
             title=title,
             source_uri=source_uri,
@@ -185,7 +184,9 @@ async def delete_document(
     if document.source_type != "user_upload":
         raise HTTPException(status_code=409, detail={"error": "knowledge_document_read_only"})
 
-    stored_file_removed = _remove_stored_upload(settings.knowledge_upload_dir, document)
+    stored_file_removed = build_local_knowledge_storage(settings.knowledge_upload_dir).remove(
+        document
+    )
     chunk_count_removed = await _remove_document_chunks(session, document_id)
     document.status = "removed"
     document.updated_at = func.clock_timestamp()
@@ -307,32 +308,11 @@ def _safe_title(filename: str | None) -> str:
     return title or "knowledge-upload"
 
 
-def _storage_path(upload_dir: str, document_id: UUID) -> Path:
-    return Path(upload_dir) / f"{document_id}.bin"
-
-
 async def _remove_document_chunks(session: AsyncSession, document_id: UUID) -> int:
     result = await session.execute(
         delete(KnowledgeChunk).where(KnowledgeChunk.document_id == document_id)
     )
     return int(result.rowcount or 0)
-
-
-def _remove_stored_upload(upload_dir: str, document: KnowledgeDocument) -> bool:
-    if document.source_type != "user_upload":
-        return False
-
-    path = _storage_path(upload_dir, document.id)
-    if not path.exists():
-        log.info("kb_doc_upload_file_missing", document_id=str(document.id))
-        return False
-
-    path.unlink()
-    return True
-
-
-def _source_uri(document_id: UUID, title: str) -> str:
-    return f"local://kb/{document_id}/{title}"
 
 
 def _audit_uploaded(

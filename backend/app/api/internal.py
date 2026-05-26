@@ -4,7 +4,6 @@ import base64
 import binascii
 import json
 from collections.abc import Sequence
-from pathlib import Path
 from typing import Annotated
 from uuid import UUID
 
@@ -12,7 +11,6 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import AliasChoices, BaseModel, Field, SecretStr
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.agents.knowledge_sources.user_upload import UserUploadSource
 from app.config import Settings, get_settings
 from app.db.engine import get_session, get_session_factory
 from app.db.models import AuditLogEntry, KnowledgeDocument, TreatmentAnalysis
@@ -29,6 +27,7 @@ from app.services import (
 from app.services.analysis import analyze_treatment
 from app.services.embeddings import build_embedding_client, embed_texts
 from app.services.kb_ingestion import ingest_document
+from app.services.knowledge_storage import build_local_knowledge_storage
 from app.services.patient_reply_drafts import (
     TreatmentNotFound as ReplyDraftTreatmentNotFound,
 )
@@ -437,12 +436,7 @@ async def run_knowledge_ingestion_worker(
     await ingest_document(
         session_factory,
         document_id,
-        source=UserUploadSource(
-            path=_stored_upload_path(settings.knowledge_upload_dir, document_id),
-            mime=document.mime,
-            title=document.title,
-            source_uri=document.source_uri,
-        ),
+        source=build_local_knowledge_storage(settings.knowledge_upload_dir).source_for(document),
         embedder=_knowledge_embedder(settings.openai_api_key),
     )
     status = await _knowledge_document_status(session_factory, document_id)
@@ -532,10 +526,6 @@ async def _knowledge_document_status(
     if document is None:
         raise HTTPException(status_code=404, detail={"error": "knowledge_document_not_found"})
     return document.status
-
-
-def _stored_upload_path(upload_dir: str, document_id: UUID) -> Path:
-    return Path(upload_dir) / f"{document_id}.bin"
 
 
 def _knowledge_embedder(openai_api_key: SecretStr | None):

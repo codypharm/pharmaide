@@ -42,9 +42,9 @@ Knowledge-base settings:
 
 - `PHARMAIDE_KNOWLEDGE_MAX_UPLOAD_BYTES=25MB` or another reviewed cap.
 - `PHARMAIDE_KNOWLEDGE_INGESTION_STALE_MINUTES=30`.
-- `PHARMAIDE_KNOWLEDGE_UPLOAD_DIR` is local-development storage only. Before
-  production, replace local disk storage with durable object/blob storage or
-  accept that uploaded files are not durable across Cloud Run instances.
+- `PHARMAIDE_KNOWLEDGE_UPLOAD_DIR` configures the local-development storage
+  adapter. Before production, switch the storage adapter to durable object/blob
+  storage.
 - `PHARMAIDE_DATA_RETENTION_CLOSED_TREATMENT_DAYS=365` or another reviewed
   archive-gated retention window.
 
@@ -151,7 +151,8 @@ Safety settings:
   inbound routing exist. Remaining messaging work is Meta app publishing,
   production phone setup, event subscriptions, and phone-to-workspace mapping
   rollout.
-- Knowledge upload source files still use local disk storage.
+- Knowledge upload source files are behind a storage adapter but still use the
+  local-disk implementation.
 - Archive-gated treatment/patient/conversation purge exists behind an internal
   dry-run-first endpoint. Remaining retention work is production scheduling,
   source-file/object cleanup, and final legal retention-window approval.
