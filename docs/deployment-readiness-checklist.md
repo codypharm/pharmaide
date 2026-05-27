@@ -42,6 +42,7 @@ Knowledge-base settings:
 
 - `PHARMAIDE_KNOWLEDGE_MAX_UPLOAD_BYTES=25MB` or another reviewed cap.
 - `PHARMAIDE_KNOWLEDGE_INGESTION_STALE_MINUTES=30`.
+- `PHARMAIDE_KNOWLEDGE_STORAGE_BACKEND=local` selects the storage adapter.
 - `PHARMAIDE_KNOWLEDGE_UPLOAD_DIR` configures the local-development storage
   adapter. Before production, switch the storage adapter to durable object/blob
   storage.

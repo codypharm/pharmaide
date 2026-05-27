@@ -70,8 +70,9 @@ class Settings(BaseSettings):
     # the analysis worker pool.
     max_concurrent_analyses_per_user: int = Field(default=3, gt=0, le=50)
 
-    # Local development storage for uploaded KB source files. Production should
-    # point this adapter at blob storage while keeping the DB metadata contract.
+    # Local development storage for uploaded KB source files. Production will
+    # select a durable adapter while keeping the same DB metadata contract.
+    knowledge_storage_backend: Literal["local"] = "local"
     knowledge_upload_dir: str = "./data/kb_uploads"
     knowledge_max_upload_bytes: int = Field(default=25 * 1024 * 1024, gt=0)
     knowledge_ingestion_stale_minutes: int = Field(default=30, gt=0, le=24 * 60)

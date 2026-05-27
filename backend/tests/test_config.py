@@ -31,6 +31,7 @@ def test_settings_defaults_match_env_example(monkeypatch: pytest.MonkeyPatch) ->
         "PHARMAIDE_SAFETY_PROVIDER_TIMEOUT_SECONDS",
         "PHARMAIDE_ANALYSIS_TIMEOUT_SECONDS",
         "PHARMAIDE_MAX_CONCURRENT_ANALYSES_PER_USER",
+        "PHARMAIDE_KNOWLEDGE_STORAGE_BACKEND",
         "PHARMAIDE_KNOWLEDGE_UPLOAD_DIR",
         "PHARMAIDE_KNOWLEDGE_MAX_UPLOAD_BYTES",
         "PHARMAIDE_KNOWLEDGE_INGESTION_STALE_MINUTES",
@@ -72,6 +73,7 @@ def test_settings_defaults_match_env_example(monkeypatch: pytest.MonkeyPatch) ->
     assert settings.safety_provider_timeout_seconds == 10
     assert settings.analysis_timeout_seconds == 60
     assert settings.max_concurrent_analyses_per_user == 3
+    assert settings.knowledge_storage_backend == "local"
     assert settings.knowledge_upload_dir == "./data/kb_uploads"
     assert settings.knowledge_max_upload_bytes == 25 * 1024 * 1024
     assert settings.knowledge_ingestion_stale_minutes == 30
@@ -117,6 +119,7 @@ def test_settings_reads_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PHARMAIDE_SAFETY_PROVIDER_TIMEOUT_SECONDS", "8")
     monkeypatch.setenv("PHARMAIDE_ANALYSIS_TIMEOUT_SECONDS", "12")
     monkeypatch.setenv("PHARMAIDE_MAX_CONCURRENT_ANALYSES_PER_USER", "5")
+    monkeypatch.setenv("PHARMAIDE_KNOWLEDGE_STORAGE_BACKEND", "local")
     monkeypatch.setenv("PHARMAIDE_KNOWLEDGE_UPLOAD_DIR", "/tmp/kb")
     monkeypatch.setenv("PHARMAIDE_KNOWLEDGE_MAX_UPLOAD_BYTES", "1024")
     monkeypatch.setenv("PHARMAIDE_KNOWLEDGE_INGESTION_STALE_MINUTES", "7")
@@ -170,6 +173,7 @@ def test_settings_reads_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.safety_provider_timeout_seconds == 8
     assert settings.analysis_timeout_seconds == 12
     assert settings.max_concurrent_analyses_per_user == 5
+    assert settings.knowledge_storage_backend == "local"
     assert settings.knowledge_upload_dir == "/tmp/kb"
     assert settings.knowledge_max_upload_bytes == 1024
     assert settings.knowledge_ingestion_stale_minutes == 7

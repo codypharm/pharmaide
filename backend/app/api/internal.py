@@ -27,7 +27,7 @@ from app.services import (
 from app.services.analysis import analyze_treatment
 from app.services.embeddings import build_embedding_client, embed_texts
 from app.services.kb_ingestion import ingest_document
-from app.services.knowledge_storage import build_local_knowledge_storage
+from app.services.knowledge_storage import build_knowledge_storage
 from app.services.patient_reply_drafts import (
     TreatmentNotFound as ReplyDraftTreatmentNotFound,
 )
@@ -436,7 +436,7 @@ async def run_knowledge_ingestion_worker(
     await ingest_document(
         session_factory,
         document_id,
-        source=build_local_knowledge_storage(settings.knowledge_upload_dir).source_for(document),
+        source=build_knowledge_storage(settings).source_for(document),
         embedder=_knowledge_embedder(settings.openai_api_key),
     )
     status = await _knowledge_document_status(session_factory, document_id)

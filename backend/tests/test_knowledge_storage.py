@@ -2,12 +2,13 @@
 
 from uuid import uuid4
 
+from app.config import Settings
 from app.db.models import KnowledgeDocument
-from app.services.knowledge_storage import build_local_knowledge_storage
+from app.services.knowledge_storage import LocalKnowledgeStorage, build_knowledge_storage
 
 
 def test_local_knowledge_storage_saves_builds_source_and_removes_upload(tmp_path) -> None:
-    storage = build_local_knowledge_storage(str(tmp_path))
+    storage = LocalKnowledgeStorage(tmp_path)
     document_id = uuid4()
 
     path = storage.save(document_id, b"Clinic protocol text")
@@ -34,7 +35,7 @@ def test_local_knowledge_storage_saves_builds_source_and_removes_upload(tmp_path
 
 
 def test_local_knowledge_storage_remove_is_idempotent_for_missing_file(tmp_path) -> None:
-    storage = build_local_knowledge_storage(str(tmp_path))
+    storage = LocalKnowledgeStorage(tmp_path)
     document = KnowledgeDocument(
         id=uuid4(),
         source_type="user_upload",
@@ -45,3 +46,16 @@ def test_local_knowledge_storage_remove_is_idempotent_for_missing_file(tmp_path)
     )
 
     assert storage.remove(document) is False
+
+
+def test_build_knowledge_storage_selects_local_backend(tmp_path) -> None:
+    storage = build_knowledge_storage(
+        Settings(
+            _env_file=None,
+            knowledge_storage_backend="local",
+            knowledge_upload_dir=str(tmp_path),
+        )
+    )
+
+    assert isinstance(storage, LocalKnowledgeStorage)
+    assert storage.upload_dir == tmp_path

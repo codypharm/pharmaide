@@ -21,7 +21,7 @@ from app.services import task_runner
 from app.services.embeddings import build_embedding_client, embed_texts
 from app.services.kb_ingestion import ingest_document, mark_stale_ingestions_failed
 from app.services.kb_scope import GLOBAL_DAILYMED_SCOPE_ID
-from app.services.knowledge_storage import build_local_knowledge_storage
+from app.services.knowledge_storage import build_knowledge_storage
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 SessionFactoryDep = Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)]
@@ -77,7 +77,7 @@ async def upload_document(
     _validate_size(data, settings.knowledge_max_upload_bytes)
 
     title = _safe_title(file.filename)
-    storage = build_local_knowledge_storage(settings.knowledge_upload_dir)
+    storage = build_knowledge_storage(settings)
     async with session_factory() as session, session.begin():
         document = KnowledgeDocument(
             source_type="user_upload",
@@ -184,9 +184,7 @@ async def delete_document(
     if document.source_type != "user_upload":
         raise HTTPException(status_code=409, detail={"error": "knowledge_document_read_only"})
 
-    stored_file_removed = build_local_knowledge_storage(settings.knowledge_upload_dir).remove(
-        document
-    )
+    stored_file_removed = build_knowledge_storage(settings).remove(document)
     chunk_count_removed = await _remove_document_chunks(session, document_id)
     document.status = "removed"
     document.updated_at = func.clock_timestamp()

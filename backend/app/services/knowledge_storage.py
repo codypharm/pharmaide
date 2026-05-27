@@ -7,14 +7,47 @@ without changing upload, delete, or ingestion worker behavior.
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 from uuid import UUID
 
 import structlog
 
 from app.agents.knowledge_sources.user_upload import UserUploadSource
+from app.config import Settings
 from app.db.models import KnowledgeDocument
 
 log = structlog.get_logger(__name__)
+
+
+class KnowledgeStorage(Protocol):
+    """Storage contract used by upload, delete, and ingestion worker routes."""
+
+    def save(self, document_id: UUID, data: bytes) -> Path:
+        """Persist an uploaded source file and return its ingestion path."""
+        ...
+
+    def remove(self, document: KnowledgeDocument) -> bool:
+        """Delete a stored upload file if the backend still has it."""
+        ...
+
+    def source_for(self, document: KnowledgeDocument) -> UserUploadSource:
+        """Build the ingestion source for a persisted user-upload document."""
+        ...
+
+    def source_from_metadata(
+        self,
+        *,
+        document_id: UUID,
+        mime: str,
+        title: str,
+        source_uri: str,
+    ) -> UserUploadSource:
+        """Build an ingestion source from committed document metadata."""
+        ...
+
+    def source_uri(self, document_id: UUID, title: str) -> str:
+        """Build the source URI stored in the knowledge document row."""
+        ...
 
 
 @dataclass(frozen=True)
@@ -75,3 +108,9 @@ class LocalKnowledgeStorage:
 
 def build_local_knowledge_storage(upload_dir: str) -> LocalKnowledgeStorage:
     return LocalKnowledgeStorage(upload_dir=Path(upload_dir))
+
+
+def build_knowledge_storage(settings: Settings) -> KnowledgeStorage:
+    if settings.knowledge_storage_backend == "local":
+        return build_local_knowledge_storage(settings.knowledge_upload_dir)
+    raise ValueError("unsupported knowledge storage backend")
