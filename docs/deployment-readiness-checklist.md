@@ -23,6 +23,19 @@ provider deployments, and evaluations are still tracked as production blockers.
   do not copy `.env`, `.venv`, local DB files, `.reports`, or uploaded source
   files into the image.
 
+## Frontend Container
+
+- Build context: `frontend/`.
+- Container file: `frontend/Dockerfile`.
+- Static runtime: unprivileged nginx listening on port `8080`.
+- Build-time public variables: pass `VITE_API_BASE_URL`, `VITE_AUTH_MODE`, and
+  GCIP `VITE_*` values as build args. These are browser-visible configuration,
+  not secrets.
+- The nginx config must keep the SPA fallback so direct links such as
+  `/treatments/<id>` resolve to `index.html`.
+- The image excludes `.env`, `node_modules`, and local `dist` output through
+  `frontend/.dockerignore`.
+
 ## Backend Environment
 
 Required for staging:
