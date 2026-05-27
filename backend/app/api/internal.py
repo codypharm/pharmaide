@@ -192,7 +192,7 @@ class PubSubPushRequest(BaseModel):
 
 class SchedulerTickResponse(BaseModel):
     tick_type: str
-    result: dict[str, int]
+    result: dict[str, bool | int]
 
 
 class QueueDeadLetterRequest(BaseModel):
@@ -338,6 +338,7 @@ async def run_due_monitoring(session: SessionDep) -> DueMonitoringRunResponse:
 async def run_scheduler_pubsub_tick(
     body: PubSubPushRequest,
     session: SessionDep,
+    settings: SettingsDep,
 ) -> SchedulerTickResponse:
     """Dispatch metadata-only Cloud Scheduler Pub/Sub ticks to internal workers."""
     tick_type = _scheduler_tick_type(body)
@@ -359,6 +360,23 @@ async def run_scheduler_pubsub_tick(
                 "processed_count": result.processed_count,
                 "sent_count": result.sent_count,
                 "failed_count": result.failed_count,
+            },
+        )
+    if tick_type == "closed_treatment_retention":
+        result = await data_retention.cleanup_closed_treatments(
+            session,
+            retention_days=settings.data_retention_closed_treatment_days,
+            dry_run=settings.data_retention_cleanup_dry_run,
+        )
+        return SchedulerTickResponse(
+            tick_type=tick_type,
+            result={
+                "dry_run": result.dry_run,
+                "retention_days": result.retention_days,
+                "eligible_treatment_count": result.eligible_treatment_count,
+                "deleted_treatment_count": result.deleted_treatment_count,
+                "deleted_patient_count": result.deleted_patient_count,
+                "deleted_audit_log_count": result.deleted_audit_log_count,
             },
         )
 

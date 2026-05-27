@@ -80,6 +80,9 @@ class Settings(BaseSettings):
     # Closed treatments are only purge-eligible after they are archived and this
     # retention window has elapsed.
     data_retention_closed_treatment_days: int = Field(default=365, ge=0, le=3650)
+    # Scheduled retention starts in dry-run mode so production can verify
+    # eligibility and audit output before enabling destructive cleanup.
+    data_retention_cleanup_dry_run: bool = True
 
     # Internal worker routes are open in local dev, but production should require
     # Google-issued OIDC identity tokens from Cloud Tasks/Scheduler invokers.

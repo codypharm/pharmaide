@@ -155,8 +155,9 @@ Safety settings:
 - Knowledge upload source files are behind a storage adapter but still use the
   local-disk implementation.
 - Archive-gated treatment/patient/conversation purge exists behind an internal
-  dry-run-first endpoint. Remaining retention work is production scheduling,
-  source-file/object cleanup, and final legal retention-window approval.
+  dry-run-first endpoint and scheduler tick. Remaining retention work is
+  configuring the production Cloud Scheduler job, source-file/object cleanup,
+  and final legal retention-window approval.
 - Cloud Tasks code support exists, but queues, IAM/OIDC, scheduler ticks, and
   dead-letter operations still need real GCP deployment verification.
 - Private Llama Guard / AgentDoG HTTP adapters exist, but the gateway services

@@ -4,10 +4,12 @@ import base64
 import json
 
 import pytest
+from fastapi import FastAPI
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services import message_delivery, monitoring, task_runner
+from app.config import Settings, get_settings
+from app.services import data_retention, message_delivery, monitoring, task_runner
 
 
 @pytest.fixture(autouse=True)
@@ -82,6 +84,64 @@ async def test_pubsub_tick_runs_message_delivery_from_attributes(
             "processed_count": 4,
             "sent_count": 3,
             "failed_count": 1,
+        },
+    }
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_pubsub_tick_runs_closed_treatment_retention_dry_run(
+    app_client: AsyncClient,
+    test_app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        data_retention_closed_treatment_days=45,
+        data_retention_cleanup_dry_run=True,
+    )
+    test_app.dependency_overrides[get_settings] = lambda: settings
+
+    async def fake_cleanup_closed_treatments(
+        session: AsyncSession,
+        *,
+        retention_days: int,
+        dry_run: bool = True,
+        limit: int = 100,
+    ) -> data_retention.ClosedTreatmentRetentionResult:
+        assert session is not None
+        assert retention_days == 45
+        assert dry_run is True
+        assert limit == 100
+        return data_retention.ClosedTreatmentRetentionResult(
+            dry_run=dry_run,
+            retention_days=retention_days,
+            eligible_treatment_count=2,
+            deleted_treatment_count=0,
+            deleted_patient_count=0,
+            deleted_audit_log_count=0,
+        )
+
+    monkeypatch.setattr(
+        data_retention,
+        "cleanup_closed_treatments",
+        fake_cleanup_closed_treatments,
+    )
+
+    response = await app_client.post(
+        "/internal/scheduler/pubsub",
+        json=_pubsub_message({"tick_type": "closed_treatment_retention"}),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "tick_type": "closed_treatment_retention",
+        "result": {
+            "dry_run": True,
+            "retention_days": 45,
+            "eligible_treatment_count": 2,
+            "deleted_treatment_count": 0,
+            "deleted_patient_count": 0,
+            "deleted_audit_log_count": 0,
         },
     }
 
