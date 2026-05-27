@@ -14,8 +14,10 @@ Keep each item as a small, reviewable slice.
   routing are implemented locally. Remaining work is Meta app publishing,
   production phone setup, webhook event subscriptions, and operational rollout
   of the phone-to-workspace mapping.
-- GCP deployment: Cloud Run containers, production environment variables,
-  secrets, HTTPS-only browser-to-API path, and deployment runbooks. See
+- GCP deployment: backend Cloud Run container artifact, production environment
+  variables, secrets, HTTPS-only browser-to-API path, and deployment runbooks.
+  The backend Dockerfile exists; remaining work is frontend hosting/container
+  packaging and real Cloud Run deployment verification. See
   `docs/deployment-readiness-checklist.md`.
 - Cloud Tasks/Pub/Sub operations: deploy and verify the implemented queue
   foundation with real GCP queues, Cloud Scheduler/Pub/Sub ticks, IAM/OIDC

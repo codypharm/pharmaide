@@ -14,6 +14,15 @@ provider deployments, and evaluations are still tracked as production blockers.
 - Messaging: Meta WhatsApp Cloud API and webhook.
 - Secrets: Google Secret Manager or Cloud Run secret bindings.
 
+## Backend Container
+
+- Build context: `backend/`.
+- Container file: `backend/Dockerfile`.
+- Runtime command binds FastAPI to `0.0.0.0` and `${PORT:-8080}` for Cloud Run.
+- The image excludes local state and secrets through `backend/.dockerignore`;
+  do not copy `.env`, `.venv`, local DB files, `.reports`, or uploaded source
+  files into the image.
+
 ## Backend Environment
 
 Required for staging:
