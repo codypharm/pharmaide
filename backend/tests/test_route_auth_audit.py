@@ -16,7 +16,7 @@ from app.auth import get_current_actor
 from app.config import Settings
 from app.main import create_app
 
-_PUBLIC_PATHS = {"/health"}
+_PUBLIC_PATHS = {"/health", "/health/ready"}
 _EXTERNAL_WEBHOOK_PREFIXES = ("/webhooks/",)
 _INTERNAL_PREFIXES = ("/internal/",)
 

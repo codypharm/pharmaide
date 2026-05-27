@@ -8,11 +8,13 @@ real Settings parsed from the environment.
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import cast
+from typing import Annotated, cast
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.audits import router as audits_router
 from app.api.auth import router as auth_router
@@ -24,12 +26,14 @@ from app.api.treatments import router as treatments_router
 from app.api.triage import router as triage_router
 from app.api.webhooks import router as webhooks_router
 from app.config import Settings, get_settings
+from app.db.engine import get_session
 from app.errors import RequestIdMiddleware, global_exception_handler, run_graph
 from app.graph import open_counter_graph
 from app.logging_setup import configure_logging
 from app.services import task_runner
 
 VERSION = "0.1.0"
+SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
 class DebugGraphRequest(BaseModel):
@@ -38,6 +42,17 @@ class DebugGraphRequest(BaseModel):
 
 class DebugGraphResponse(BaseModel):
     turn: int
+
+
+class HealthResponse(BaseModel):
+    status: str
+    version: str
+
+
+class ReadinessResponse(BaseModel):
+    status: str
+    version: str
+    checks: dict[str, str]
 
 
 @asynccontextmanager
@@ -73,9 +88,27 @@ def create_app(settings: Settings) -> FastAPI:
 
     app.add_exception_handler(Exception, global_exception_handler)
 
-    @app.get("/health")
-    async def health() -> dict[str, str]:
-        return {"status": "ok", "version": VERSION}
+    @app.get("/health", response_model=HealthResponse)
+    async def health() -> HealthResponse:
+        return HealthResponse(status="ok", version=VERSION)
+
+    @app.get("/health/ready", response_model=ReadinessResponse)
+    async def readiness(session: SessionDep) -> ReadinessResponse:
+        try:
+            await session.execute(text("SELECT 1"))
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "status": "unavailable",
+                    "checks": {"database": "unavailable"},
+                },
+            ) from exc
+        return ReadinessResponse(
+            status="ready",
+            version=VERSION,
+            checks={"database": "ok"},
+        )
 
     app.include_router(auth_router, tags=["auth"])
     app.include_router(treatments_router, tags=["treatments"])

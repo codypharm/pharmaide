@@ -121,6 +121,8 @@ Safety settings:
 ## Database And Migrations
 
 - Run Alembic migrations against the staging database before routing traffic.
+- Verify `GET /health` returns process liveness and `GET /health/ready` returns
+  database readiness.
 - Verify vector support for `kb_chunks.embedding`.
 - Verify all expected tables exist:
   - treatments and medications
