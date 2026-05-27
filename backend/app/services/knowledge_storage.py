@@ -14,7 +14,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.knowledge_sources.user_upload import UserUploadSource
+from app.agents.knowledge_sources.user_upload import UserUploadBytesSource, UserUploadSource
 from app.config import Settings
 from app.db.models import AuditLogEntry, KnowledgeDocument
 
@@ -32,15 +32,15 @@ class KnowledgeUploadCleanupResult:
 class KnowledgeStorage(Protocol):
     """Storage contract used by upload, delete, and ingestion worker routes."""
 
-    def save(self, document_id: UUID, data: bytes) -> Path:
-        """Persist an uploaded source file and return its ingestion path."""
+    def save(self, document_id: UUID, data: bytes) -> Path | str:
+        """Persist an uploaded source file and return its storage location."""
         ...
 
     def remove(self, document: KnowledgeDocument) -> bool:
         """Delete a stored upload file if the backend still has it."""
         ...
 
-    def source_for(self, document: KnowledgeDocument) -> UserUploadSource:
+    def source_for(self, document: KnowledgeDocument) -> UserUploadSource | UserUploadBytesSource:
         """Build the ingestion source for a persisted user-upload document."""
         ...
 
@@ -51,7 +51,7 @@ class KnowledgeStorage(Protocol):
         mime: str,
         title: str,
         source_uri: str,
-    ) -> UserUploadSource:
+    ) -> UserUploadSource | UserUploadBytesSource:
         """Build an ingestion source from committed document metadata."""
         ...
 
@@ -116,13 +116,106 @@ class LocalKnowledgeStorage:
         return f"local://kb/{document_id}/{title}"
 
 
+@dataclass(frozen=True)
+class GCSKnowledgeStorage:
+    bucket_name: str
+    prefix: str = "kb_uploads"
+    client: object | None = None
+
+    def save(self, document_id: UUID, data: bytes) -> str:
+        """Persist upload bytes to Google Cloud Storage."""
+        blob = self._blob(document_id)
+        blob.upload_from_string(data, content_type="application/octet-stream")
+        return self._blob_name(document_id)
+
+    def remove(self, document: KnowledgeDocument) -> bool:
+        """Delete a stored GCS object if it still exists."""
+        if document.source_type != "user_upload":
+            return False
+
+        blob = self._blob(document.id)
+        if not blob.exists():
+            log.info("kb_doc_upload_file_missing", document_id=str(document.id))
+            return False
+
+        blob.delete()
+        return True
+
+    def source_for(self, document: KnowledgeDocument) -> UserUploadBytesSource:
+        """Download persisted GCS bytes and build an ingestion source."""
+        return self.source_from_metadata(
+            document_id=document.id,
+            mime=document.mime,
+            title=document.title,
+            source_uri=document.source_uri,
+        )
+
+    def source_from_metadata(
+        self,
+        *,
+        document_id: UUID,
+        mime: str,
+        title: str,
+        source_uri: str,
+    ) -> UserUploadBytesSource:
+        return UserUploadBytesSource(
+            data=self._blob(document_id).download_as_bytes(),
+            mime=mime,
+            title=title,
+            source_uri=source_uri,
+        )
+
+    def source_uri(self, document_id: UUID, title: str) -> str:
+        _ = title
+        return f"gcs://{self.bucket_name}/{self._blob_name(document_id)}"
+
+    def _blob(self, document_id: UUID):
+        return self._bucket().blob(self._blob_name(document_id))
+
+    def _bucket(self):
+        return self._storage_client().bucket(self.bucket_name)
+
+    def _storage_client(self):
+        if self.client is not None:
+            return self.client
+
+        try:
+            from google.cloud import storage
+        except ImportError as exc:  # pragma: no cover - exercised by config tests.
+            raise RuntimeError(
+                "google-cloud-storage is required for GCS knowledge storage"
+            ) from exc
+        return storage.Client()
+
+    def _blob_name(self, document_id: UUID) -> str:
+        clean_prefix = self.prefix.strip("/")
+        if not clean_prefix:
+            return f"{document_id}.bin"
+        return f"{clean_prefix}/{document_id}.bin"
+
+
 def build_local_knowledge_storage(upload_dir: str) -> LocalKnowledgeStorage:
     return LocalKnowledgeStorage(upload_dir=Path(upload_dir))
+
+
+def build_gcs_knowledge_storage(
+    *,
+    bucket_name: str,
+    prefix: str,
+) -> GCSKnowledgeStorage:
+    return GCSKnowledgeStorage(bucket_name=bucket_name, prefix=prefix)
 
 
 def build_knowledge_storage(settings: Settings) -> KnowledgeStorage:
     if settings.knowledge_storage_backend == "local":
         return build_local_knowledge_storage(settings.knowledge_upload_dir)
+    if settings.knowledge_storage_backend == "gcs":
+        if not settings.knowledge_gcs_bucket:
+            raise ValueError("gcs knowledge storage requires a bucket")
+        return build_gcs_knowledge_storage(
+            bucket_name=settings.knowledge_gcs_bucket,
+            prefix=settings.knowledge_gcs_prefix,
+        )
     raise ValueError("unsupported knowledge storage backend")
 
 

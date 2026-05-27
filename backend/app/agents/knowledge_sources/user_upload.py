@@ -28,10 +28,43 @@ class UserUploadSource:
     source_uri: str
 
     async def list_chunks(self, _document_id: UUID) -> AsyncIterator[KnowledgeSourceChunk]:
-        data = self.path.read_bytes()
-        segments = _parse_segments(data, mime=self.mime, title=self.title)
-        for chunk in chunk_segments(segments):
-            yield _source_chunk(chunk, source_uri=self.source_uri)
+        for chunk in _chunks_from_bytes(
+            self.path.read_bytes(),
+            mime=self.mime,
+            title=self.title,
+            source_uri=self.source_uri,
+        ):
+            yield chunk
+
+
+@dataclass(frozen=True, slots=True)
+class UserUploadBytesSource:
+    """Read already-loaded upload bytes and yield chunks for embedding."""
+
+    data: bytes
+    mime: str
+    title: str
+    source_uri: str
+
+    async def list_chunks(self, _document_id: UUID) -> AsyncIterator[KnowledgeSourceChunk]:
+        for chunk in _chunks_from_bytes(
+            self.data,
+            mime=self.mime,
+            title=self.title,
+            source_uri=self.source_uri,
+        ):
+            yield chunk
+
+
+def _chunks_from_bytes(
+    data: bytes,
+    *,
+    mime: str,
+    title: str,
+    source_uri: str,
+) -> list[KnowledgeSourceChunk]:
+    segments = _parse_segments(data, mime=mime, title=title)
+    return [_source_chunk(chunk, source_uri=source_uri) for chunk in chunk_segments(segments)]
 
 
 def _parse_segments(data: bytes, *, mime: str, title: str) -> list[TextSegment]:

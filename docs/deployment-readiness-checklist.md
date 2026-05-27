@@ -64,10 +64,12 @@ Knowledge-base settings:
 
 - `PHARMAIDE_KNOWLEDGE_MAX_UPLOAD_BYTES=25MB` or another reviewed cap.
 - `PHARMAIDE_KNOWLEDGE_INGESTION_STALE_MINUTES=30`.
-- `PHARMAIDE_KNOWLEDGE_STORAGE_BACKEND=local` selects the storage adapter.
+- `PHARMAIDE_KNOWLEDGE_STORAGE_BACKEND=gcs` selects durable Google Cloud
+  Storage for uploaded source files.
 - `PHARMAIDE_KNOWLEDGE_UPLOAD_DIR` configures the local-development storage
-  adapter. Before production, switch the storage adapter to durable object/blob
-  storage.
+  adapter.
+- `PHARMAIDE_KNOWLEDGE_GCS_BUCKET`: GCS bucket for uploaded source files.
+- `PHARMAIDE_KNOWLEDGE_GCS_PREFIX=kb_uploads`: object prefix inside the bucket.
 - `PHARMAIDE_DATA_RETENTION_CLOSED_TREATMENT_DAYS=365` or another reviewed
   archive-gated retention window.
 
@@ -176,8 +178,9 @@ Safety settings:
   inbound routing exist. Remaining messaging work is Meta app publishing,
   production phone setup, event subscriptions, and phone-to-workspace mapping
   rollout.
-- Knowledge upload source files are behind a storage adapter but still use the
-  local-disk implementation.
+- Knowledge upload source files are behind local and GCS storage adapters.
+  Remaining storage work is provisioning the production bucket, IAM, lifecycle
+  policy, and deployment verification.
 - Archive-gated treatment/patient/conversation purge exists behind an internal
   dry-run-first endpoint and scheduler tick. Removed knowledge upload file
   cleanup and operational audit retention also have internal endpoints and

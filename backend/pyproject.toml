@@ -26,6 +26,7 @@ dependencies = [
     "python-multipart>=0.0.28",
     "tiktoken>=0.12",
     "google-cloud-tasks>=2.22",
+    "google-cloud-storage>=3.6",
     "google-auth>=2.52",
 ]
 

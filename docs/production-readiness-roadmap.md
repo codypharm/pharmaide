@@ -24,16 +24,16 @@ Keep each item as a small, reviewable slice.
   foundation with real GCP queues, Cloud Scheduler/Pub/Sub ticks, IAM/OIDC
   invokers, dead-letter handling, and operational runbooks. See
   `docs/cloud-tasks-pubsub-worker-plan.md`.
-- Knowledge source storage: uploaded source files are behind a storage adapter
-  but still use the local-disk implementation; add the durable object/blob
-  storage adapter before production.
+- Knowledge source storage: uploaded source files are behind local and GCS
+  storage adapters. Remaining work is provisioning the production bucket, IAM,
+  lifecycle rules, and deployment verification.
 - Data retention: archive-gated treatment/patient/conversation purge is
   implemented behind an internal dry-run-first endpoint and scheduler tick.
   Removed upload file cleanup is implemented behind an internal endpoint and
   scheduler tick. Operational audit retention is implemented for low-risk
   system audit rows only. Remaining work is production Cloud Scheduler
-  configuration, durable object-storage lifecycle cleanup, clinical audit
-  retention policy approval, and final legal retention-window approval.
+  configuration, production bucket lifecycle policy verification, clinical
+  audit retention policy approval, and final legal retention-window approval.
 - Private safety gateway: deploy Llama Guard / AgentDoG behind backend-only provider adapters with fail-closed behavior.
 - Evaluation suite: run clinical, safety, retrieval, DDI, and patient-message regression cases before production release.
 

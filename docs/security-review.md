@@ -66,9 +66,11 @@ as production blockers:
 
 - GCIP MFA policy setup, production user provisioning, and custom-claim issuance.
 - HTTPS-only Cloud Run deployment.
-- Durable object/blob storage for uploaded knowledge source files.
-- Retention rollout for scheduled cleanup, durable object-storage lifecycle
-  cleanup, clinical audit retention approval, and final legal retention windows.
+- Production GCS bucket provisioning, IAM, and lifecycle rules for uploaded
+  knowledge source files.
+- Retention rollout for scheduled cleanup, production bucket lifecycle policy
+  verification, clinical audit retention approval, and final legal retention
+  windows.
 - Cloud Tasks/Pub/Sub deployment and IAM/OIDC verification for background work.
 - Private safety gateway deployment for Llama Guard / AgentDoG.
 - Release-gate evaluations for clinical, safety, retrieval, DDI, and patient-message behavior.

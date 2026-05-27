@@ -72,8 +72,10 @@ class Settings(BaseSettings):
 
     # Local development storage for uploaded KB source files. Production will
     # select a durable adapter while keeping the same DB metadata contract.
-    knowledge_storage_backend: Literal["local"] = "local"
+    knowledge_storage_backend: Literal["local", "gcs"] = "local"
     knowledge_upload_dir: str = "./data/kb_uploads"
+    knowledge_gcs_bucket: str | None = None
+    knowledge_gcs_prefix: str = "kb_uploads"
     knowledge_max_upload_bytes: int = Field(default=25 * 1024 * 1024, gt=0)
     knowledge_ingestion_stale_minutes: int = Field(default=30, gt=0, le=24 * 60)
 
@@ -174,6 +176,13 @@ class Settings(BaseSettings):
                 "cloud_api WhatsApp delivery requires token, phone number id, "
                 "webhook verify token, and app secret"
             )
+        return self
+
+    @model_validator(mode="after")
+    def require_gcs_knowledge_storage_configuration(self) -> "Settings":
+        """GCS knowledge storage needs a bucket name for uploaded source files."""
+        if self.knowledge_storage_backend == "gcs" and not self.knowledge_gcs_bucket:
+            raise ValueError("gcs knowledge storage requires a bucket")
         return self
 
     @model_validator(mode="after")
