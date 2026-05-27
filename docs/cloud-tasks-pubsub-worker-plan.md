@@ -39,6 +39,7 @@ browser must never call production worker routes directly.
 | Due monitoring | `run_due_monitoring(...)` | Cloud Scheduler Pub/Sub tick | `limit`, optional `now` for tests only | service-level schedule tick id |
 | Message delivery | `run_message_delivery_once(...)` | Cloud Scheduler Pub/Sub tick or task fanout | `limit` | service-level schedule tick id |
 | Closed-treatment retention | `cleanup_closed_treatments(...)` | Cloud Scheduler Pub/Sub tick | none; uses env-configured retention window and dry-run mode | service-level schedule tick id |
+| Removed upload file cleanup | `cleanup_removed_upload_files(...)` | Cloud Scheduler Pub/Sub tick | none; scans removed user-upload document rows | service-level schedule tick id |
 
 Queue payloads must not include patient message bodies, assistant drafts,
 medication names, uploaded document text, or prescription content. Workers load
@@ -53,6 +54,7 @@ auth protection before deployment:
 - `POST /internal/monitoring/run-due`
 - `POST /internal/message-delivery/run-once`
 - `POST /internal/scheduler/pubsub`
+- `POST /internal/cleanup/knowledge-upload-files`
 - `POST /internal/treatments/{treatment_id}/process-buffered-patient-turn`
 
 Add these production-only routes when the queue adapter lands:
@@ -120,6 +122,8 @@ The Cloud Tasks/Pub/Sub worker foundation is implemented:
 - Cloud Scheduler Pub/Sub ticks dispatch due monitoring and message delivery.
 - Cloud Scheduler Pub/Sub ticks dispatch closed-treatment retention cleanup in
   configurable dry-run/apply mode.
+- Removed knowledge-upload source files can be cleaned through an internal
+  endpoint or scheduler tick without exposing titles or storage paths in audits.
 - Internal worker routes can require Google OIDC service-to-service auth.
 - Queue retry and dead-letter metadata are audited without storing clinical payloads.
 - Buffered patient-turn jobs map to the existing internal processor route with a

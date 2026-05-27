@@ -8,8 +8,15 @@ from fastapi import FastAPI
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api import internal as internal_api
 from app.config import Settings, get_settings
-from app.services import data_retention, message_delivery, monitoring, task_runner
+from app.services import (
+    data_retention,
+    knowledge_storage,
+    message_delivery,
+    monitoring,
+    task_runner,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -142,6 +149,48 @@ async def test_pubsub_tick_runs_closed_treatment_retention_dry_run(
             "deleted_treatment_count": 0,
             "deleted_patient_count": 0,
             "deleted_audit_log_count": 0,
+        },
+    }
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_pubsub_tick_runs_knowledge_upload_file_cleanup(
+    app_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_cleanup_removed_upload_files(
+        session: AsyncSession,
+        storage: knowledge_storage.KnowledgeStorage,
+        *,
+        limit: int = 100,
+    ) -> knowledge_storage.KnowledgeUploadCleanupResult:
+        assert session is not None
+        assert storage is not None
+        assert limit == 100
+        return knowledge_storage.KnowledgeUploadCleanupResult(
+            scanned_document_count=3,
+            removed_file_count=2,
+            missing_file_count=1,
+        )
+
+    monkeypatch.setattr(
+        internal_api,
+        "cleanup_removed_upload_files",
+        fake_cleanup_removed_upload_files,
+    )
+
+    response = await app_client.post(
+        "/internal/scheduler/pubsub",
+        json=_pubsub_message({"tick_type": "knowledge_upload_file_cleanup"}),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "tick_type": "knowledge_upload_file_cleanup",
+        "result": {
+            "scanned_document_count": 3,
+            "removed_file_count": 2,
+            "missing_file_count": 1,
         },
     }
 

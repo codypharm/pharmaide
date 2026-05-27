@@ -27,7 +27,7 @@ from app.services import (
 from app.services.analysis import analyze_treatment
 from app.services.embeddings import build_embedding_client, embed_texts
 from app.services.kb_ingestion import ingest_document
-from app.services.knowledge_storage import build_knowledge_storage
+from app.services.knowledge_storage import build_knowledge_storage, cleanup_removed_upload_files
 from app.services.patient_reply_drafts import (
     TreatmentNotFound as ReplyDraftTreatmentNotFound,
 )
@@ -124,6 +124,12 @@ class CleanupClosedTreatmentsResponse(BaseModel):
     deleted_treatment_count: int
     deleted_patient_count: int
     deleted_audit_log_count: int
+
+
+class CleanupKnowledgeUploadFilesResponse(BaseModel):
+    scanned_document_count: int
+    removed_file_count: int
+    missing_file_count: int
 
 
 class MessageDeliveryRunResponse(BaseModel):
@@ -279,6 +285,25 @@ async def cleanup_closed_treatments(
 
 
 @router.post(
+    "/cleanup/knowledge-upload-files",
+    response_model=CleanupKnowledgeUploadFilesResponse,
+)
+async def cleanup_knowledge_upload_files(
+    session: SessionDep,
+    settings: SettingsDep,
+) -> CleanupKnowledgeUploadFilesResponse:
+    result = await cleanup_removed_upload_files(
+        session,
+        build_knowledge_storage(settings),
+    )
+    return CleanupKnowledgeUploadFilesResponse(
+        scanned_document_count=result.scanned_document_count,
+        removed_file_count=result.removed_file_count,
+        missing_file_count=result.missing_file_count,
+    )
+
+
+@router.post(
     "/message-delivery/run-once",
     response_model=MessageDeliveryRunResponse,
 )
@@ -377,6 +402,19 @@ async def run_scheduler_pubsub_tick(
                 "deleted_treatment_count": result.deleted_treatment_count,
                 "deleted_patient_count": result.deleted_patient_count,
                 "deleted_audit_log_count": result.deleted_audit_log_count,
+            },
+        )
+    if tick_type == "knowledge_upload_file_cleanup":
+        result = await cleanup_removed_upload_files(
+            session,
+            build_knowledge_storage(settings),
+        )
+        return SchedulerTickResponse(
+            tick_type=tick_type,
+            result={
+                "scanned_document_count": result.scanned_document_count,
+                "removed_file_count": result.removed_file_count,
+                "missing_file_count": result.missing_file_count,
             },
         )
 

@@ -11,12 +11,22 @@ from typing import Protocol
 from uuid import UUID
 
 import structlog
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.knowledge_sources.user_upload import UserUploadSource
 from app.config import Settings
-from app.db.models import KnowledgeDocument
+from app.db.models import AuditLogEntry, KnowledgeDocument
 
 log = structlog.get_logger(__name__)
+SYSTEM_RESOURCE_ID = UUID("00000000-0000-0000-0000-000000000000")
+
+
+@dataclass(frozen=True)
+class KnowledgeUploadCleanupResult:
+    scanned_document_count: int
+    removed_file_count: int
+    missing_file_count: int
 
 
 class KnowledgeStorage(Protocol):
@@ -114,3 +124,71 @@ def build_knowledge_storage(settings: Settings) -> KnowledgeStorage:
     if settings.knowledge_storage_backend == "local":
         return build_local_knowledge_storage(settings.knowledge_upload_dir)
     raise ValueError("unsupported knowledge storage backend")
+
+
+async def cleanup_removed_upload_files(
+    session: AsyncSession,
+    storage: KnowledgeStorage,
+    *,
+    limit: int = 100,
+) -> KnowledgeUploadCleanupResult:
+    """Remove source files left behind for already-removed user uploads."""
+    documents = await _removed_upload_documents(session, limit=limit)
+    removed_file_count = 0
+    missing_file_count = 0
+    for document in documents:
+        if storage.remove(document):
+            removed_file_count += 1
+        else:
+            missing_file_count += 1
+
+    result = KnowledgeUploadCleanupResult(
+        scanned_document_count=len(documents),
+        removed_file_count=removed_file_count,
+        missing_file_count=missing_file_count,
+    )
+    _audit_removed_upload_cleanup(session, result)
+    await session.flush()
+    log.info(
+        "kb_removed_upload_files_cleaned",
+        scanned_document_count=result.scanned_document_count,
+        removed_file_count=result.removed_file_count,
+        missing_file_count=result.missing_file_count,
+    )
+    return result
+
+
+async def _removed_upload_documents(
+    session: AsyncSession,
+    *,
+    limit: int,
+) -> list[KnowledgeDocument]:
+    result = await session.execute(
+        select(KnowledgeDocument)
+        .where(
+            KnowledgeDocument.source_type == "user_upload",
+            KnowledgeDocument.status == "removed",
+        )
+        .order_by(KnowledgeDocument.updated_at.asc(), KnowledgeDocument.id.asc())
+        .limit(limit)
+    )
+    return list(result.scalars())
+
+
+def _audit_removed_upload_cleanup(
+    session: AsyncSession,
+    result: KnowledgeUploadCleanupResult,
+) -> None:
+    session.add(
+        AuditLogEntry(
+            event_type="kb_removed_upload_files_cleaned",
+            resource_type="system",
+            resource_id=SYSTEM_RESOURCE_ID,
+            # Counts only; source titles and storage paths may disclose clinic data.
+            payload={
+                "scanned_document_count": result.scanned_document_count,
+                "removed_file_count": result.removed_file_count,
+                "missing_file_count": result.missing_file_count,
+            },
+        )
+    )

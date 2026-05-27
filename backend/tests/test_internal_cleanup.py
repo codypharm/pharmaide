@@ -1,14 +1,17 @@
 """Internal maintenance endpoints."""
 
 from datetime import UTC, date, datetime, timedelta
-from uuid import UUID
+from pathlib import Path
+from uuid import UUID, uuid4
 
 import pytest
+from fastapi import FastAPI
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import AuditLogEntry, ConversationMessage, Patient, Treatment
+from app.config import Settings, get_settings
+from app.db.models import AuditLogEntry, ConversationMessage, KnowledgeDocument, Patient, Treatment
 from app.services import dailymed_cache, task_runner
 
 _DEFAULT_ARCHIVED_AT = object()
@@ -148,6 +151,67 @@ async def test_cleanup_closed_treatments_deletes_archived_closed_lifecycle_data(
     assert await db_session.scalar(
         select(ConversationMessage).where(ConversationMessage.treatment_id == eligible.id)
     ) is None
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_cleanup_knowledge_upload_files_removes_removed_upload_files_only(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    test_app: FastAPI,
+    tmp_path: Path,
+) -> None:
+    test_app.dependency_overrides[get_settings] = lambda: Settings(
+        _env_file=None,
+        knowledge_upload_dir=str(tmp_path),
+    )
+    owner_id = uuid4()
+    removed_document = KnowledgeDocument(
+        source_type="user_upload",
+        source_uri="local://kb/removed-protocol.pdf",
+        title="Removed Protocol",
+        mime="application/pdf",
+        status="removed",
+        uploaded_by=owner_id,
+    )
+    active_document = KnowledgeDocument(
+        source_type="user_upload",
+        source_uri="local://kb/active-protocol.pdf",
+        title="Active Protocol",
+        mime="application/pdf",
+        status="ready",
+        uploaded_by=owner_id,
+    )
+    db_session.add_all([removed_document, active_document])
+    await db_session.flush()
+    removed_path = tmp_path / f"{removed_document.id}.bin"
+    active_path = tmp_path / f"{active_document.id}.bin"
+    removed_path.write_bytes(b"removed clinical asset")
+    active_path.write_bytes(b"active clinical asset")
+
+    response = await app_client.post("/internal/cleanup/knowledge-upload-files")
+
+    audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.event_type == "kb_removed_upload_files_cleaned"
+        )
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "scanned_document_count": 1,
+        "removed_file_count": 1,
+        "missing_file_count": 0,
+    }
+    assert not removed_path.exists()
+    assert active_path.exists()
+    assert audit is not None
+    assert audit.resource_type == "system"
+    assert audit.payload == {
+        "scanned_document_count": 1,
+        "removed_file_count": 1,
+        "missing_file_count": 0,
+    }
+    assert "Protocol" not in str(audit.payload)
 
 
 async def _persist_archived_closed_treatment(

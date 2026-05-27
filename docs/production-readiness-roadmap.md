@@ -26,9 +26,10 @@ Keep each item as a small, reviewable slice.
   storage adapter before production.
 - Data retention: archive-gated treatment/patient/conversation purge is
   implemented behind an internal dry-run-first endpoint and scheduler tick.
-  Remaining work is production Cloud Scheduler configuration, uploaded-source
-  object cleanup, broader audit retention policy, and final legal
-  retention-window approval.
+  Removed upload file cleanup is implemented behind an internal endpoint and
+  scheduler tick. Remaining work is production Cloud Scheduler configuration,
+  durable object-storage lifecycle cleanup, broader audit retention policy, and
+  final legal retention-window approval.
 - Private safety gateway: deploy Llama Guard / AgentDoG behind backend-only provider adapters with fail-closed behavior.
 - Evaluation suite: run clinical, safety, retrieval, DDI, and patient-message regression cases before production release.
 
