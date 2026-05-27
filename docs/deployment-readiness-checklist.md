@@ -145,8 +145,8 @@ Safety settings:
 
 - GCIP login/session enforcement, workspace claims, and membership-claim checks
   exist. Remaining auth work is MFA policy setup, production user provisioning
-  and custom-claim issuance, plus a final route audit for local/dev scope
-  assumptions.
+  and custom-claim issuance. Route-level guard coverage is enforced by
+  regression tests.
 - WhatsApp Cloud API delivery, signed webhooks, and optional workspace-scoped
   inbound routing exist. Remaining messaging work is Meta app publishing,
   production phone setup, event subscriptions, and phone-to-workspace mapping

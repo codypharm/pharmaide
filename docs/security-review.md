@@ -32,9 +32,9 @@ provider deployments, or release-gate evaluations.
   `PHARMAIDE_AUTH_MODE=gcip`.
 - Workspace/clinic scope is derived from the verified workspace claim, and can
   be fail-closed against a workspace-membership claim.
-- Remaining auth hardening is MFA policy setup, production user provisioning
-  and custom-claim issuance, plus a final route audit for local/dev scope
-  assumptions.
+- Remaining auth hardening is MFA policy setup, production user provisioning,
+  and custom-claim issuance. Route-level guard coverage is enforced by
+  regression tests.
 
 ### Audit Trails
 
@@ -64,8 +64,7 @@ provider deployments, or release-gate evaluations.
 The review is complete for the current codebase, but these items remain tracked
 as production blockers:
 
-- GCIP MFA policy setup, production user provisioning, and full route enforcement.
-- Route-by-route cleanup of any remaining local/dev scope assumptions.
+- GCIP MFA policy setup, production user provisioning, and custom-claim issuance.
 - HTTPS-only Cloud Run deployment.
 - Durable object/blob storage for uploaded knowledge source files.
 - Retention rollout for scheduled cleanup, uploaded-source object cleanup,
