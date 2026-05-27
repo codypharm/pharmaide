@@ -214,6 +214,89 @@ async def test_cleanup_knowledge_upload_files_removes_removed_upload_files_only(
     assert "Protocol" not in str(audit.payload)
 
 
+@pytest.mark.usefixtures("postgres_container")
+async def test_cleanup_operational_audit_logs_dry_run_does_not_delete_rows(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    old_operational = _audit_log(
+        event_type="queue_task_retry_observed",
+        created_at=datetime.now(UTC) - timedelta(days=90),
+        payload={"retry_count": 2},
+    )
+    db_session.add(old_operational)
+    await db_session.flush()
+
+    response = await app_client.post(
+        "/internal/cleanup/operational-audit-logs",
+        json={"dry_run": True, "retention_days": 30},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "dry_run": True,
+        "retention_days": 30,
+        "eligible_audit_log_count": 1,
+        "deleted_audit_log_count": 0,
+    }
+    assert await db_session.get(AuditLogEntry, old_operational.id) is not None
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_cleanup_operational_audit_logs_deletes_only_old_operational_rows(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    old_operational = _audit_log(
+        event_type="queue_dead_letter_received",
+        created_at=datetime.now(UTC) - timedelta(days=90),
+        payload={"queue_name": "internal"},
+    )
+    recent_operational = _audit_log(
+        event_type="queue_task_retry_observed",
+        created_at=datetime.now(UTC) - timedelta(days=5),
+        payload={"retry_count": 1},
+    )
+    clinical_audit = _audit_log(
+        event_type="treatment_created",
+        created_at=datetime.now(UTC) - timedelta(days=90),
+        resource_type="treatment",
+        payload={"patient_text": "Should not be copied into cleanup audit."},
+    )
+    db_session.add_all([old_operational, recent_operational, clinical_audit])
+    await db_session.flush()
+
+    response = await app_client.post(
+        "/internal/cleanup/operational-audit-logs",
+        json={"dry_run": False, "retention_days": 30},
+    )
+
+    cleanup_audit = await db_session.scalar(
+        select(AuditLogEntry).where(
+            AuditLogEntry.event_type == "operational_audit_retention_cleanup"
+        )
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "dry_run": False,
+        "retention_days": 30,
+        "eligible_audit_log_count": 1,
+        "deleted_audit_log_count": 1,
+    }
+    assert await db_session.get(AuditLogEntry, old_operational.id) is None
+    assert await db_session.get(AuditLogEntry, recent_operational.id) is not None
+    assert await db_session.get(AuditLogEntry, clinical_audit.id) is not None
+    assert cleanup_audit is not None
+    assert cleanup_audit.payload == {
+        "dry_run": False,
+        "retention_days": 30,
+        "eligible_audit_log_count": 1,
+        "deleted_audit_log_count": 1,
+    }
+    assert "patient_text" not in str(cleanup_audit.payload)
+
+
 async def _persist_archived_closed_treatment(
     session: AsyncSession,
     *,
@@ -261,3 +344,19 @@ async def _persist_archived_closed_treatment(
     )
     await session.flush()
     return treatment
+
+
+def _audit_log(
+    *,
+    event_type: str,
+    created_at: datetime,
+    resource_type: str = "system",
+    payload: dict[str, object] | None = None,
+) -> AuditLogEntry:
+    return AuditLogEntry(
+        event_type=event_type,
+        resource_type=resource_type,
+        resource_id=UUID("00000000-0000-0000-0000-000000000000"),
+        payload=payload or {},
+        created_at=created_at,
+    )

@@ -37,6 +37,8 @@ def test_settings_defaults_match_env_example(monkeypatch: pytest.MonkeyPatch) ->
         "PHARMAIDE_KNOWLEDGE_INGESTION_STALE_MINUTES",
         "PHARMAIDE_DATA_RETENTION_CLOSED_TREATMENT_DAYS",
         "PHARMAIDE_DATA_RETENTION_CLEANUP_DRY_RUN",
+        "PHARMAIDE_AUDIT_RETENTION_OPERATIONAL_DAYS",
+        "PHARMAIDE_AUDIT_RETENTION_CLEANUP_DRY_RUN",
         "PHARMAIDE_INTERNAL_WORKER_AUTH",
         "PHARMAIDE_INTERNAL_WORKER_AUDIENCE",
         "PHARMAIDE_TASK_BACKEND",
@@ -80,6 +82,8 @@ def test_settings_defaults_match_env_example(monkeypatch: pytest.MonkeyPatch) ->
     assert settings.knowledge_ingestion_stale_minutes == 30
     assert settings.data_retention_closed_treatment_days == 365
     assert settings.data_retention_cleanup_dry_run is True
+    assert settings.audit_retention_operational_days == 365
+    assert settings.audit_retention_cleanup_dry_run is True
     assert settings.internal_worker_auth == "disabled"
     assert settings.internal_worker_audience is None
     assert settings.task_backend == "in_process"
@@ -127,6 +131,8 @@ def test_settings_reads_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PHARMAIDE_KNOWLEDGE_INGESTION_STALE_MINUTES", "7")
     monkeypatch.setenv("PHARMAIDE_DATA_RETENTION_CLOSED_TREATMENT_DAYS", "90")
     monkeypatch.setenv("PHARMAIDE_DATA_RETENTION_CLEANUP_DRY_RUN", "false")
+    monkeypatch.setenv("PHARMAIDE_AUDIT_RETENTION_OPERATIONAL_DAYS", "120")
+    monkeypatch.setenv("PHARMAIDE_AUDIT_RETENTION_CLEANUP_DRY_RUN", "false")
     monkeypatch.setenv("PHARMAIDE_INTERNAL_WORKER_AUTH", "oidc")
     monkeypatch.setenv("PHARMAIDE_INTERNAL_WORKER_AUDIENCE", "https://worker.test")
     monkeypatch.setenv("PHARMAIDE_TASK_BACKEND", "cloud_tasks")
@@ -182,6 +188,8 @@ def test_settings_reads_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.knowledge_ingestion_stale_minutes == 7
     assert settings.data_retention_closed_treatment_days == 90
     assert settings.data_retention_cleanup_dry_run is False
+    assert settings.audit_retention_operational_days == 120
+    assert settings.audit_retention_cleanup_dry_run is False
     assert settings.internal_worker_auth == "oidc"
     assert settings.internal_worker_audience == "https://worker.test"
     assert settings.task_backend == "cloud_tasks"

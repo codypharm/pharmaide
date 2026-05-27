@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api import internal as internal_api
 from app.config import Settings, get_settings
 from app.services import (
+    audit_retention,
     data_retention,
     knowledge_storage,
     message_delivery,
@@ -191,6 +192,60 @@ async def test_pubsub_tick_runs_knowledge_upload_file_cleanup(
             "scanned_document_count": 3,
             "removed_file_count": 2,
             "missing_file_count": 1,
+        },
+    }
+
+
+@pytest.mark.usefixtures("postgres_container")
+async def test_pubsub_tick_runs_operational_audit_retention(
+    app_client: AsyncClient,
+    test_app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        audit_retention_operational_days=120,
+        audit_retention_cleanup_dry_run=True,
+    )
+    test_app.dependency_overrides[get_settings] = lambda: settings
+
+    async def fake_cleanup_operational_audit_logs(
+        session: AsyncSession,
+        *,
+        retention_days: int,
+        dry_run: bool = True,
+        limit: int = 1000,
+    ) -> audit_retention.OperationalAuditRetentionResult:
+        assert session is not None
+        assert retention_days == 120
+        assert dry_run is True
+        assert limit == 1000
+        return audit_retention.OperationalAuditRetentionResult(
+            dry_run=dry_run,
+            retention_days=retention_days,
+            eligible_audit_log_count=4,
+            deleted_audit_log_count=0,
+        )
+
+    monkeypatch.setattr(
+        audit_retention,
+        "cleanup_operational_audit_logs",
+        fake_cleanup_operational_audit_logs,
+    )
+
+    response = await app_client.post(
+        "/internal/scheduler/pubsub",
+        json=_pubsub_message({"tick_type": "operational_audit_retention"}),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "tick_type": "operational_audit_retention",
+        "result": {
+            "dry_run": True,
+            "retention_days": 120,
+            "eligible_audit_log_count": 4,
+            "deleted_audit_log_count": 0,
         },
     }
 

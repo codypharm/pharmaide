@@ -27,9 +27,10 @@ Keep each item as a small, reviewable slice.
 - Data retention: archive-gated treatment/patient/conversation purge is
   implemented behind an internal dry-run-first endpoint and scheduler tick.
   Removed upload file cleanup is implemented behind an internal endpoint and
-  scheduler tick. Remaining work is production Cloud Scheduler configuration,
-  durable object-storage lifecycle cleanup, broader audit retention policy, and
-  final legal retention-window approval.
+  scheduler tick. Operational audit retention is implemented for low-risk
+  system audit rows only. Remaining work is production Cloud Scheduler
+  configuration, durable object-storage lifecycle cleanup, clinical audit
+  retention policy approval, and final legal retention-window approval.
 - Private safety gateway: deploy Llama Guard / AgentDoG behind backend-only provider adapters with fail-closed behavior.
 - Evaluation suite: run clinical, safety, retrieval, DDI, and patient-message regression cases before production release.
 

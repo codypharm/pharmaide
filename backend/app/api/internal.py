@@ -15,6 +15,7 @@ from app.config import Settings, get_settings
 from app.db.engine import get_session, get_session_factory
 from app.db.models import AuditLogEntry, KnowledgeDocument, TreatmentAnalysis
 from app.services import (
+    audit_retention,
     dailymed_cache,
     data_retention,
     internal_worker_auth,
@@ -130,6 +131,19 @@ class CleanupKnowledgeUploadFilesResponse(BaseModel):
     scanned_document_count: int
     removed_file_count: int
     missing_file_count: int
+
+
+class CleanupOperationalAuditLogsRequest(BaseModel):
+    dry_run: bool = True
+    retention_days: int | None = Field(default=None, ge=0, le=3650)
+    limit: int = Field(default=1000, ge=1, le=5000)
+
+
+class CleanupOperationalAuditLogsResponse(BaseModel):
+    dry_run: bool
+    retention_days: int
+    eligible_audit_log_count: int
+    deleted_audit_log_count: int
 
 
 class MessageDeliveryRunResponse(BaseModel):
@@ -304,6 +318,34 @@ async def cleanup_knowledge_upload_files(
 
 
 @router.post(
+    "/cleanup/operational-audit-logs",
+    response_model=CleanupOperationalAuditLogsResponse,
+)
+async def cleanup_operational_audit_logs(
+    session: SessionDep,
+    settings: SettingsDep,
+    body: CleanupOperationalAuditLogsRequest | None = None,
+) -> CleanupOperationalAuditLogsResponse:
+    request = body or CleanupOperationalAuditLogsRequest()
+    result = await audit_retention.cleanup_operational_audit_logs(
+        session,
+        retention_days=(
+            request.retention_days
+            if request.retention_days is not None
+            else settings.audit_retention_operational_days
+        ),
+        dry_run=request.dry_run,
+        limit=request.limit,
+    )
+    return CleanupOperationalAuditLogsResponse(
+        dry_run=result.dry_run,
+        retention_days=result.retention_days,
+        eligible_audit_log_count=result.eligible_audit_log_count,
+        deleted_audit_log_count=result.deleted_audit_log_count,
+    )
+
+
+@router.post(
     "/message-delivery/run-once",
     response_model=MessageDeliveryRunResponse,
 )
@@ -415,6 +457,21 @@ async def run_scheduler_pubsub_tick(
                 "scanned_document_count": result.scanned_document_count,
                 "removed_file_count": result.removed_file_count,
                 "missing_file_count": result.missing_file_count,
+            },
+        )
+    if tick_type == "operational_audit_retention":
+        result = await audit_retention.cleanup_operational_audit_logs(
+            session,
+            retention_days=settings.audit_retention_operational_days,
+            dry_run=settings.audit_retention_cleanup_dry_run,
+        )
+        return SchedulerTickResponse(
+            tick_type=tick_type,
+            result={
+                "dry_run": result.dry_run,
+                "retention_days": result.retention_days,
+                "eligible_audit_log_count": result.eligible_audit_log_count,
+                "deleted_audit_log_count": result.deleted_audit_log_count,
             },
         )
 

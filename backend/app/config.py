@@ -83,6 +83,9 @@ class Settings(BaseSettings):
     # Scheduled retention starts in dry-run mode so production can verify
     # eligibility and audit output before enabling destructive cleanup.
     data_retention_cleanup_dry_run: bool = True
+    # Operational audit retention excludes clinical/pharmacist decision logs.
+    audit_retention_operational_days: int = Field(default=365, ge=0, le=3650)
+    audit_retention_cleanup_dry_run: bool = True
 
     # Internal worker routes are open in local dev, but production should require
     # Google-issued OIDC identity tokens from Cloud Tasks/Scheduler invokers.

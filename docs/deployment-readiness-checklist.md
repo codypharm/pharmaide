@@ -121,6 +121,7 @@ Safety settings:
   - message delivery run
   - stale ingestion cleanup
   - removed knowledge upload file cleanup
+  - operational audit retention cleanup in dry-run mode before any apply run
   - closed-treatment retention cleanup in dry-run mode before any apply run
   - dead-letter audit recording
 - Confirm retry headers are audited without request bodies.
@@ -157,9 +158,10 @@ Safety settings:
   local-disk implementation.
 - Archive-gated treatment/patient/conversation purge exists behind an internal
   dry-run-first endpoint and scheduler tick. Removed knowledge upload file
-  cleanup also has an internal endpoint and scheduler tick. Remaining retention
-  work is configuring production Cloud Scheduler jobs, durable object-storage
-  lifecycle cleanup, and final legal retention-window approval.
+  cleanup and operational audit retention also have internal endpoints and
+  scheduler ticks. Remaining retention work is configuring production Cloud
+  Scheduler jobs, durable object-storage lifecycle cleanup, clinical audit
+  retention policy approval, and final legal retention-window approval.
 - Cloud Tasks code support exists, but queues, IAM/OIDC, scheduler ticks, and
   dead-letter operations still need real GCP deployment verification.
 - Private Llama Guard / AgentDoG HTTP adapters exist, but the gateway services
