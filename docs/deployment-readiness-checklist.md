@@ -206,6 +206,15 @@ uv run ruff check app tests
 uv run pytest
 ```
 
+Run after staging deploy:
+
+```bash
+cd backend
+uv run python scripts/deployment_smoke.py \
+  --backend-url https://<backend-cloud-run-url> \
+  --frontend-url https://<frontend-url>
+```
+
 Optional live checks:
 
 ```bash
