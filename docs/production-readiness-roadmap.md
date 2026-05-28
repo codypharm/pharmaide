@@ -16,10 +16,11 @@ Keep each item as a small, reviewable slice.
   of the phone-to-workspace mapping.
 - GCP deployment: backend Cloud Run container artifact, production environment
   variables, secrets, HTTPS-only browser-to-API path, and deployment runbooks.
-  Backend and frontend Dockerfiles exist, and a post-deploy smoke command checks
+  Backend and frontend Dockerfiles exist. A pre-deploy production preflight
+  command validates deployment posture, and a post-deploy smoke command checks
   liveness/readiness/frontend reachability. Remaining work is real Cloud Run
-  deployment execution, image scanning/signing policy, and HTTPS domain rollout. See
-  `docs/deployment-readiness-checklist.md`.
+  deployment execution, image scanning/signing policy, and HTTPS domain rollout.
+  See `docs/deployment-readiness-checklist.md`.
 - Cloud Tasks/Pub/Sub operations: deploy and verify the implemented queue
   foundation with real GCP queues, Cloud Scheduler/Pub/Sub ticks, IAM/OIDC
   invokers, dead-letter handling, and operational runbooks. See

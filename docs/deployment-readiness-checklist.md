@@ -205,6 +205,7 @@ cd backend
 uv run ruff check app tests
 uv run pytest
 uv run python scripts/evaluation_release_gate.py
+uv run python scripts/production_preflight.py
 ```
 
 Run after staging deploy:
