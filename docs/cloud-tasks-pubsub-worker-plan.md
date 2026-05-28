@@ -48,8 +48,9 @@ clinical data from the database by id.
 
 ## Worker Routes
 
-Keep the existing local/internal routes as the production HTTP targets, then add
-auth protection before deployment:
+The existing internal routes are the production HTTP targets and are protected
+by the internal worker auth dependency when
+`PHARMAIDE_INTERNAL_WORKER_AUTH=oidc`:
 
 - `POST /internal/treatments/{treatment_id}/run-due-monitoring`
 - `POST /internal/monitoring/run-due`
@@ -58,9 +59,6 @@ auth protection before deployment:
 - `POST /internal/cleanup/knowledge-upload-files`
 - `POST /internal/cleanup/operational-audit-logs`
 - `POST /internal/treatments/{treatment_id}/process-buffered-patient-turn`
-
-Add these production-only routes when the queue adapter lands:
-
 - `POST /internal/analyses/{analysis_id}/run`
 - `POST /internal/knowledge/documents/{document_id}/ingest`
 
@@ -96,8 +94,8 @@ Each worker must be safe to retry.
 
 ## Local Development
 
-Keep `task_runner.schedule(...)` as the default local adapter. Production should
-select a queue adapter from settings, for example:
+`task_runner.schedule(...)` remains the default local adapter. Production selects
+the Cloud Tasks adapter from settings:
 
 - `PHARMAIDE_TASK_BACKEND=in_process`
 - `PHARMAIDE_TASK_BACKEND=cloud_tasks`
@@ -106,8 +104,8 @@ select a queue adapter from settings, for example:
 - `PHARMAIDE_CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL=...@...iam.gserviceaccount.com`
 - `PHARMAIDE_CLOUD_TASKS_OIDC_AUDIENCE=https://...`
 
-The caller contract should stay small: schedule a named job plus ids. Avoid
-passing coroutine objects through the production adapter.
+The caller contract stays small: schedule a named job plus ids. Production
+Cloud Tasks scheduling rejects unnamed coroutine-only work.
 
 The Cloud Tasks backend enqueues metadata-only HTTP tasks for named jobs. It
 uses deterministic task names from idempotency keys, so retries and duplicate
@@ -132,3 +130,7 @@ The Cloud Tasks/Pub/Sub worker foundation is implemented:
 - Queue retry and dead-letter metadata are audited without storing clinical payloads.
 - Buffered patient-turn jobs map to the existing internal processor route with a
   queue-level delay for the debounce window.
+
+Remaining production work is operational: create the queues, grant IAM/OIDC
+invoker permissions, configure Cloud Scheduler/Pub/Sub ticks, verify dead-letter
+handling, and run the deployment smoke checks against staging.

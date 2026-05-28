@@ -1,9 +1,8 @@
-"""In-process background task runner.
+"""Background task runner.
 
 Routes use this module when work should continue after the HTTP response
-has returned. For Sprint 3 that means `asyncio.create_task`; in Sprint 5
-this module is the transport seam where Cloud Tasks can replace the local
-implementation while callers keep the same `schedule(coro_fn, *args)` shape.
+has returned. Local development uses `asyncio.create_task`; production can
+switch named jobs to Cloud Tasks while keeping the same scheduling boundary.
 """
 
 import asyncio
@@ -146,7 +145,7 @@ class InProcessBackgroundJobScheduler:
 
 @dataclass(frozen=True)
 class CloudTasksSchedulerConfig:
-    """Deployment metadata needed by the future Cloud Tasks client."""
+    """Deployment metadata needed by the Cloud Tasks client."""
 
     queue_path: str
     base_url: str
@@ -171,7 +170,7 @@ class CloudTasksBackgroundJobScheduler:
     ) -> asyncio.Task[T]:
         del coro_fn, args, user_id, max_concurrent_per_user, kwargs
         raise TaskBackendUnavailable(
-            "Cloud Tasks backend only supports named jobs and is not wired yet."
+            "Cloud Tasks backend only supports named jobs. Use schedule_job(...)."
         )
 
     def schedule_job[T](

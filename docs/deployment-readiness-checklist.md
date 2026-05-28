@@ -189,8 +189,9 @@ Safety settings:
   scheduler ticks. Remaining retention work is configuring production Cloud
   Scheduler jobs, durable object-storage lifecycle cleanup, clinical audit
   retention policy approval, and final legal retention-window approval.
-- Cloud Tasks code support exists, but queues, IAM/OIDC, scheduler ticks, and
-  dead-letter operations still need real GCP deployment verification.
+- Cloud Tasks enqueue support and internal worker routes exist. Remaining queue
+  work is provisioning queues, IAM/OIDC invokers, scheduler ticks, and
+  dead-letter operations in GCP.
 - Private Llama Guard / AgentDoG HTTP adapters exist, but the gateway services
   are not yet deployed.
 - Clinical, safety, retrieval, DDI, and patient-message evaluations still need

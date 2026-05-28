@@ -21,9 +21,10 @@ Keep each item as a small, reviewable slice.
   liveness/readiness/frontend reachability. Remaining work is real Cloud Run
   deployment execution, image scanning/signing policy, and HTTPS domain rollout.
   See `docs/deployment-readiness-checklist.md`.
-- Cloud Tasks/Pub/Sub operations: deploy and verify the implemented queue
-  foundation with real GCP queues, Cloud Scheduler/Pub/Sub ticks, IAM/OIDC
-  invokers, dead-letter handling, and operational runbooks. See
+- Cloud Tasks/Pub/Sub operations: Cloud Tasks enqueue support and internal
+  worker routes are implemented. Remaining work is deploying and verifying real
+  GCP queues, Cloud Scheduler/Pub/Sub ticks, IAM/OIDC invokers, dead-letter
+  handling, and operational runbooks. See
   `docs/cloud-tasks-pubsub-worker-plan.md`.
 - Knowledge source storage: uploaded source files are behind local and GCS
   storage adapters. Remaining work is provisioning the production bucket, IAM,
