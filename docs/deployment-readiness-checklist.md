@@ -204,6 +204,7 @@ Run before deploying a staging candidate:
 cd backend
 uv run ruff check app tests
 uv run pytest
+uv run python scripts/evaluation_release_gate.py
 ```
 
 Run after staging deploy:

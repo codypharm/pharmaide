@@ -247,6 +247,7 @@ runs do not call external AI services:
 
 ```bash
 cd backend
+uv run python scripts/evaluation_release_gate.py
 PHARMAIDE_RUN_LIVE_RAG_EVAL=1 uv run pytest tests/evaluations/test_live_rag_products_eval.py -q
 PHARMAIDE_RUN_LIVE_LLM=1 PHARMAIDE_OPENAI_API_KEY=... uv run pytest tests/test_analysis_graph.py -q
 ```
