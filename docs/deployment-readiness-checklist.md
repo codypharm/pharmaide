@@ -208,6 +208,7 @@ uv run pytest
 uv run python scripts/evaluation_release_gate.py
 uv run python scripts/production_preflight.py
 uv run python scripts/knowledge_storage_smoke.py
+uv run python scripts/safety_gateway_smoke.py
 ```
 
 Run after staging deploy:

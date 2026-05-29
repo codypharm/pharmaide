@@ -92,6 +92,19 @@ non-JSON responses, or schema-invalid responses must hold the draft for
 pharmacist review. The backend must not silently downgrade from `remote_http`
 to `model` because that would weaken the configured production safety boundary.
 
+## Smoke Check
+
+Run this after configuring `PHARMAIDE_SAFETY_PROVIDER=remote_http` and the
+private gateway URLs:
+
+```bash
+cd backend
+uv run python scripts/safety_gateway_smoke.py
+```
+
+The command sends synthetic non-patient text to both providers and validates
+the responses against the strict guard/referee Pydantic schemas.
+
 ## Future gRPC Path
 
 The current HTTP adapter is intentionally behind provider protocols. A future
