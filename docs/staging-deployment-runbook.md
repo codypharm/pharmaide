@@ -206,7 +206,28 @@ PHARMAIDE_CLOUD_TASKS_OIDC_AUDIENCE=<backend-cloud-run-url>
    - closed-treatment retention in dry-run mode first
    - removed upload file cleanup
    - operational audit retention in dry-run mode first
-6. Configure dead-letter handling and verify dead-letter audit events.
+6. Prepare and validate the retention approval manifest before disabling dry-run:
+
+```json
+{
+  "closed_treatment_retention_days": 365,
+  "operational_audit_retention_days": 365,
+  "gcs_lifecycle_retention_days": 365,
+  "clinical_audit_logs_retained": true,
+  "approved_by": {
+    "clinical": "Clinical Lead",
+    "legal": "Legal Approver",
+    "operations": "Operations Lead"
+  }
+}
+```
+
+```bash
+cd backend
+uv run python scripts/retention_approval_manifest.py <retention-manifest.json>
+```
+
+7. Configure dead-letter handling and verify dead-letter audit events.
 
 ## 8. Configure Runtime Secrets
 
@@ -247,6 +268,7 @@ uv run ruff check app tests
 uv run pytest
 uv run python scripts/evaluation_release_gate.py
 uv run python scripts/production_preflight.py
+uv run python scripts/retention_approval_manifest.py <retention-manifest.json>
 uv run python scripts/knowledge_storage_smoke.py
 uv run python scripts/safety_gateway_smoke.py
 ```

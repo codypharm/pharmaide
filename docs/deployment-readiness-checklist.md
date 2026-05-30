@@ -75,6 +75,8 @@ Knowledge-base settings:
 - `PHARMAIDE_KNOWLEDGE_GCS_PREFIX=kb_uploads`: object prefix inside the bucket.
 - `PHARMAIDE_DATA_RETENTION_CLOSED_TREATMENT_DAYS=365` or another reviewed
   archive-gated retention window.
+- Validate retention approvals before disabling dry-run cleanup:
+  `uv run python scripts/retention_approval_manifest.py <retention-manifest.json>`.
 
 WhatsApp settings:
 

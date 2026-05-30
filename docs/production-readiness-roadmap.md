@@ -37,9 +37,10 @@ Keep each item as a small, reviewable slice.
   implemented behind an internal dry-run-first endpoint and scheduler tick.
   Removed upload file cleanup is implemented behind an internal endpoint and
   scheduler tick. Operational audit retention is implemented for low-risk
-  system audit rows only. Remaining work is production Cloud Scheduler
-  configuration, production bucket lifecycle policy verification, clinical
-  audit retention policy approval, and final legal retention-window approval.
+  system audit rows only, and retention approval manifests can be validated
+  before apply mode. Remaining work is production Cloud Scheduler configuration,
+  production bucket lifecycle policy verification, and applying final approved
+  legal/clinical retention windows.
 - Private safety gateway: backend-only provider adapters and a safety gateway
   smoke command are implemented. Remaining work is deploying Llama Guard /
   AgentDoG services and running the smoke check against staging/production.
