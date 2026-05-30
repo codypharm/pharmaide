@@ -21,7 +21,8 @@ Keep each item as a small, reviewable slice.
   command validates deployment posture, and a post-deploy smoke command checks
   liveness/readiness/frontend reachability. Remaining work is real Cloud Run
   deployment execution, image scanning/signing policy, and HTTPS domain rollout.
-  See `docs/deployment-readiness-checklist.md`.
+  See `docs/staging-deployment-runbook.md` and
+  `docs/deployment-readiness-checklist.md`.
 - Cloud Tasks/Pub/Sub operations: Cloud Tasks enqueue support and internal
   worker routes are implemented. Remaining work is deploying and verifying real
   GCP queues, Cloud Scheduler/Pub/Sub ticks, IAM/OIDC invokers, dead-letter

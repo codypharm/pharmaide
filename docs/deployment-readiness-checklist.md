@@ -4,6 +4,7 @@ This is the pre-deployment checklist for moving PharmaAide from local
 development toward a Cloud Run staging environment. It is not a production
 approval checklist; Cloud Run rollout, durable storage, queue operations,
 provider deployments, and evaluations are still tracked as production blockers.
+Use `docs/staging-deployment-runbook.md` for the ordered staging rollout path.
 
 ## Deployment Targets
 
