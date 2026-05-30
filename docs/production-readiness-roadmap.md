@@ -7,8 +7,9 @@ Keep each item as a small, reviewable slice.
 
 - Auth and workspace readiness: GCIP login/session enforcement, `/auth/me`,
   workspace claims, and workspace-membership claim checks are implemented.
-  The route-level guard audit is covered by regression tests. Remaining work is
-  GCIP MFA policy setup and production user provisioning/custom claims.
+  The route-level guard audit is covered by regression tests, and custom-claims
+  manifests can be validated before provisioning. Remaining work is GCIP MFA
+  policy setup and applying production user provisioning/custom claims.
 - WhatsApp production readiness: Cloud API delivery, signed webhook handling,
   delivery callbacks, workspace-scoped inbound routing, and active-treatment
   routing are implemented locally. Remaining work is Meta app publishing,

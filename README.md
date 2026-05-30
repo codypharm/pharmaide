@@ -247,6 +247,7 @@ runs do not call external AI services:
 
 ```bash
 cd backend
+uv run python scripts/gcip_claims_manifest.py <claims-manifest.json>
 uv run python scripts/evaluation_release_gate.py
 uv run python scripts/production_preflight.py
 uv run python scripts/knowledge_storage_smoke.py

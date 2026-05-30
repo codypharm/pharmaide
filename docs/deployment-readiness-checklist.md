@@ -54,6 +54,8 @@ Required for staging:
   custom claim containing the workspace UUIDs this pharmacist may access.
 - `PHARMAIDE_GCIP_REQUIRE_WORKSPACE_MEMBERSHIP=true`: enable after membership
   claims are issued so verified users cannot access unassigned workspaces.
+- Validate production claim manifests before applying them:
+  `uv run python scripts/gcip_claims_manifest.py <claims-manifest.json>`.
 - `PHARMAIDE_LOG_MODE=json`: structured logs for Cloud Run.
 - `PHARMAIDE_DEBUG_ROUTES_ENABLED=false`: debug graph route must stay unmounted.
 - `PHARMAIDE_RXNORM_BASE_URL=https://rxnav.nlm.nih.gov/REST`.
