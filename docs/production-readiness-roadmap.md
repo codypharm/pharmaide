@@ -25,9 +25,10 @@ Keep each item as a small, reviewable slice.
   See `docs/staging-deployment-runbook.md` and
   `docs/deployment-readiness-checklist.md`.
 - Cloud Tasks/Pub/Sub operations: Cloud Tasks enqueue support and internal
-  worker routes are implemented. Remaining work is deploying and verifying real
-  GCP queues, Cloud Scheduler/Pub/Sub ticks, IAM/OIDC invokers, dead-letter
-  handling, and operational runbooks. See
+  worker routes are implemented, and Cloud Tasks/Scheduler rollout manifests can
+  be validated before provisioning. Remaining work is deploying and verifying
+  real GCP queues, Cloud Scheduler/Pub/Sub ticks, IAM/OIDC invokers, and
+  dead-letter handling in GCP. See
   `docs/cloud-tasks-pubsub-worker-plan.md`.
 - Knowledge source storage: uploaded source files are behind local and GCS
   storage adapters. A storage smoke command verifies write/read/delete against

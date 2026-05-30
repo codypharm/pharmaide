@@ -200,13 +200,45 @@ PHARMAIDE_CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL=<service-account-email>
 PHARMAIDE_CLOUD_TASKS_OIDC_AUDIENCE=<backend-cloud-run-url>
 ```
 
-5. Configure Cloud Scheduler/PubSub ticks for:
+5. Prepare and validate the Cloud Tasks/Scheduler manifest:
+
+```json
+{
+  "cloud_tasks": {
+    "queue_path": "projects/<project>/locations/<region>/queues/<queue>",
+    "base_url": "https://<backend-url>",
+    "service_account_email": "<service-account-email>",
+    "oidc_audience": "https://<backend-url>"
+  },
+  "scheduler": {
+    "pubsub_topic": "projects/<project>/topics/internal-scheduler",
+    "push_endpoint": "https://<backend-url>/internal/scheduler/pubsub",
+    "push_service_account_email": "<service-account-email>",
+    "push_oidc_audience": "https://<backend-url>",
+    "dead_letter_topic": "projects/<project>/topics/internal-dead-letter",
+    "ticks": [
+      {"tick_type": "due_monitoring", "schedule": "*/5 * * * *"},
+      {"tick_type": "message_delivery", "schedule": "*/2 * * * *"},
+      {"tick_type": "closed_treatment_retention", "schedule": "0 2 * * *"},
+      {"tick_type": "knowledge_upload_file_cleanup", "schedule": "0 3 * * *"},
+      {"tick_type": "operational_audit_retention", "schedule": "0 4 * * *"}
+    ]
+  }
+}
+```
+
+```bash
+cd backend
+uv run python scripts/cloud_tasks_scheduler_manifest.py <cloud-tasks-manifest.json>
+```
+
+6. Configure Cloud Scheduler/PubSub ticks for:
    - due monitoring
    - message delivery
    - closed-treatment retention in dry-run mode first
    - removed upload file cleanup
    - operational audit retention in dry-run mode first
-6. Prepare and validate the retention approval manifest before disabling dry-run:
+7. Prepare and validate the retention approval manifest before disabling dry-run:
 
 ```json
 {
@@ -227,7 +259,7 @@ cd backend
 uv run python scripts/retention_approval_manifest.py <retention-manifest.json>
 ```
 
-7. Configure dead-letter handling and verify dead-letter audit events.
+8. Configure dead-letter handling and verify dead-letter audit events.
 
 ## 8. Configure Runtime Secrets
 
@@ -269,6 +301,7 @@ uv run pytest
 uv run python scripts/evaluation_release_gate.py
 uv run python scripts/production_preflight.py
 uv run python scripts/retention_approval_manifest.py <retention-manifest.json>
+uv run python scripts/cloud_tasks_scheduler_manifest.py <cloud-tasks-manifest.json>
 uv run python scripts/knowledge_storage_smoke.py
 uv run python scripts/safety_gateway_smoke.py
 ```

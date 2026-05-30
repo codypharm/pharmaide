@@ -105,6 +105,8 @@ Internal worker and queue settings:
 - `PHARMAIDE_CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL`: Cloud Tasks invoker service
   account.
 - `PHARMAIDE_CLOUD_TASKS_OIDC_AUDIENCE`: usually the backend Cloud Run URL.
+- Validate Cloud Tasks/Scheduler rollout manifests before provisioning:
+  `uv run python scripts/cloud_tasks_scheduler_manifest.py <cloud-tasks-manifest.json>`.
 
 Safety settings:
 
@@ -147,6 +149,8 @@ Safety settings:
 - Grant the Cloud Tasks service account permission to invoke the backend Cloud
   Run service.
 - Configure OIDC tokens for internal route calls.
+- Validate the queue, scheduler tick, OIDC, and dead-letter manifest before
+  applying GCP resources.
 - Verify these internal flows:
   - analysis run
   - due monitoring run
@@ -214,6 +218,7 @@ uv run ruff check app tests
 uv run pytest
 uv run python scripts/evaluation_release_gate.py
 uv run python scripts/production_preflight.py
+uv run python scripts/cloud_tasks_scheduler_manifest.py <cloud-tasks-manifest.json>
 uv run python scripts/knowledge_storage_smoke.py
 uv run python scripts/safety_gateway_smoke.py
 ```

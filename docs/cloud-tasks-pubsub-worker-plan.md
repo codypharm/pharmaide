@@ -130,6 +130,9 @@ The Cloud Tasks/Pub/Sub worker foundation is implemented:
 - Queue retry and dead-letter metadata are audited without storing clinical payloads.
 - Buffered patient-turn jobs map to the existing internal processor route with a
   queue-level delay for the debounce window.
+- Cloud Tasks/Scheduler rollout manifests can be validated before operators
+  provision queues, Pub/Sub push subscriptions, scheduler ticks, OIDC audiences,
+  and dead-letter topics.
 
 Remaining production work is operational: create the queues, grant IAM/OIDC
 invoker permissions, configure Cloud Scheduler/Pub/Sub ticks, verify dead-letter
