@@ -142,7 +142,26 @@ gateway is being deployed, but production should target `remote_http`.
 2. Configure the staging phone number id.
 3. Configure webhook verify token and app secret.
 4. Subscribe to inbound message and delivery-status webhook events.
-5. Configure backend env:
+5. Prepare and validate the phone-to-workspace mapping manifest:
+
+```json
+{
+  "phone_numbers": [
+    {
+      "phone_number_id": "1234567890",
+      "display_phone_number": "+15551234567",
+      "workspace_id": "11111111-1111-4111-8111-111111111111"
+    }
+  ]
+}
+```
+
+```bash
+cd backend
+uv run python scripts/whatsapp_workspace_manifest.py <whatsapp-manifest.json>
+```
+
+6. Configure backend env:
 
 ```env
 PHARMAIDE_WHATSAPP_DELIVERY_PROVIDER=cloud_api
@@ -154,13 +173,13 @@ PHARMAIDE_WHATSAPP_WEBHOOK_APP_SECRET=<secret>
 PHARMAIDE_WHATSAPP_CLOUD_API_VERSION=v25.0
 ```
 
-6. Webhook URL:
+7. Webhook URL:
 
 ```text
 https://<backend-url>/webhooks/whatsapp
 ```
 
-7. Verify webhook subscription and one test inbound message after a treatment
+8. Verify webhook subscription and one test inbound message after a treatment
    cycle is active.
 
 ## 7. Configure Cloud Tasks And Scheduler

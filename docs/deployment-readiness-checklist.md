@@ -87,6 +87,8 @@ WhatsApp settings:
 - `PHARMAIDE_WHATSAPP_WORKSPACE_SCOPE_ID`: optional workspace UUID for this
   sender number; set it when one Meta phone number is assigned to one clinic so
   inbound messages route only inside that workspace.
+- Validate phone-to-workspace manifests before rollout:
+  `uv run python scripts/whatsapp_workspace_manifest.py <whatsapp-manifest.json>`.
 - `PHARMAIDE_WHATSAPP_CLOUD_API_VERSION=v25.0`.
 - `PHARMAIDE_WHATSAPP_CLOUD_API_BASE_URL=https://graph.facebook.com`.
 

@@ -12,9 +12,10 @@ Keep each item as a small, reviewable slice.
   policy setup and applying production user provisioning/custom claims.
 - WhatsApp production readiness: Cloud API delivery, signed webhook handling,
   delivery callbacks, workspace-scoped inbound routing, and active-treatment
-  routing are implemented locally. Remaining work is Meta app publishing,
-  production phone setup, webhook event subscriptions, and operational rollout
-  of the phone-to-workspace mapping.
+  routing are implemented locally. Phone-to-workspace rollout manifests can be
+  validated before applying provider settings. Remaining work is Meta app
+  publishing, production phone setup, webhook event subscriptions, and applying
+  the phone-to-workspace mapping.
 - GCP deployment: backend Cloud Run container artifact, production environment
   variables, secrets, HTTPS-only browser-to-API path, and deployment runbooks.
   Backend and frontend Dockerfiles exist. A pre-deploy production preflight
