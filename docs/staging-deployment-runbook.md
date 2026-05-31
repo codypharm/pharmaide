@@ -89,7 +89,31 @@ VITE_GCIP_PROJECT_ID=<project-id>
 2. Grant the backend runtime service account read/write/delete access to the
    bucket.
 3. Configure object lifecycle rules for the approved retention window.
-4. Configure backend env:
+4. Prepare and validate the storage manifest:
+
+```json
+{
+  "storage": {
+    "backend": "gcs",
+    "bucket_name": "pharmaide-kb-prod",
+    "prefix": "kb_uploads",
+    "max_upload_bytes": 26214400
+  },
+  "gcs": {
+    "runtime_service_account_email": "backend-runtime@<project>.iam.gserviceaccount.com",
+    "lifecycle_retention_days": 365,
+    "uniform_bucket_level_access": true,
+    "public_access_prevention": "enforced"
+  }
+}
+```
+
+```bash
+cd backend
+uv run python scripts/knowledge_storage_manifest.py <knowledge-storage-manifest.json>
+```
+
+5. Configure backend env:
 
 ```env
 PHARMAIDE_KNOWLEDGE_STORAGE_BACKEND=gcs
@@ -98,7 +122,7 @@ PHARMAIDE_KNOWLEDGE_GCS_PREFIX=kb_uploads
 PHARMAIDE_KNOWLEDGE_MAX_UPLOAD_BYTES=25MB
 ```
 
-5. After backend deploy, run:
+6. After backend deploy, run:
 
 ```bash
 cd backend
@@ -302,6 +326,7 @@ uv run python scripts/evaluation_release_gate.py
 uv run python scripts/production_preflight.py
 uv run python scripts/retention_approval_manifest.py <retention-manifest.json>
 uv run python scripts/cloud_tasks_scheduler_manifest.py <cloud-tasks-manifest.json>
+uv run python scripts/knowledge_storage_manifest.py <knowledge-storage-manifest.json>
 uv run python scripts/knowledge_storage_smoke.py
 uv run python scripts/safety_gateway_smoke.py
 ```

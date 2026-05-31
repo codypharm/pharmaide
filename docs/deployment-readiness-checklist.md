@@ -73,6 +73,9 @@ Knowledge-base settings:
   adapter.
 - `PHARMAIDE_KNOWLEDGE_GCS_BUCKET`: GCS bucket for uploaded source files.
 - `PHARMAIDE_KNOWLEDGE_GCS_PREFIX=kb_uploads`: object prefix inside the bucket.
+- Validate knowledge storage manifests before provisioning/applying bucket
+  settings:
+  `uv run python scripts/knowledge_storage_manifest.py <knowledge-storage-manifest.json>`.
 - `PHARMAIDE_DATA_RETENTION_CLOSED_TREATMENT_DAYS=365` or another reviewed
   archive-gated retention window.
 - Validate retention approvals before disabling dry-run cleanup:
@@ -219,6 +222,7 @@ uv run pytest
 uv run python scripts/evaluation_release_gate.py
 uv run python scripts/production_preflight.py
 uv run python scripts/cloud_tasks_scheduler_manifest.py <cloud-tasks-manifest.json>
+uv run python scripts/knowledge_storage_manifest.py <knowledge-storage-manifest.json>
 uv run python scripts/knowledge_storage_smoke.py
 uv run python scripts/safety_gateway_smoke.py
 ```

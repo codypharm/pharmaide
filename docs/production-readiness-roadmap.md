@@ -31,9 +31,10 @@ Keep each item as a small, reviewable slice.
   dead-letter handling in GCP. See
   `docs/cloud-tasks-pubsub-worker-plan.md`.
 - Knowledge source storage: uploaded source files are behind local and GCS
-  storage adapters. A storage smoke command verifies write/read/delete against
-  the configured adapter. Remaining work is provisioning the production bucket,
-  IAM, lifecycle rules, and running deployment verification.
+  storage adapters. Storage manifests can be validated before provisioning, and
+  a storage smoke command verifies write/read/delete against the configured
+  adapter. Remaining work is provisioning the production bucket, IAM, lifecycle
+  rules, and running deployment verification.
 - Data retention: archive-gated treatment/patient/conversation purge is
   implemented behind an internal dry-run-first endpoint and scheduler tick.
   Removed upload file cleanup is implemented behind an internal endpoint and
