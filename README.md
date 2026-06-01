@@ -253,6 +253,7 @@ uv run python scripts/cloud_tasks_scheduler_manifest.py <cloud-tasks-manifest.js
 uv run python scripts/knowledge_storage_manifest.py <knowledge-storage-manifest.json>
 uv run python scripts/evaluation_release_gate.py
 uv run python scripts/production_preflight.py
+uv run python scripts/deployment_manifest.py <deployment-manifest.json>
 uv run python scripts/knowledge_storage_smoke.py
 uv run python scripts/safety_gateway_manifest.py <safety-gateway-manifest.json>
 uv run python scripts/safety_gateway_smoke.py

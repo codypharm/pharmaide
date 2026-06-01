@@ -113,6 +113,33 @@ cd backend
 uv run python scripts/knowledge_storage_manifest.py <knowledge-storage-manifest.json>
 ```
 
+5. Configure backend env:
+
+```env
+PHARMAIDE_KNOWLEDGE_STORAGE_BACKEND=gcs
+PHARMAIDE_KNOWLEDGE_GCS_BUCKET=<bucket>
+PHARMAIDE_KNOWLEDGE_GCS_PREFIX=kb_uploads
+PHARMAIDE_KNOWLEDGE_MAX_UPLOAD_BYTES=25MB
+```
+
+6. After backend deploy, run:
+
+```bash
+cd backend
+uv run python scripts/knowledge_storage_smoke.py
+```
+
+## 5. Deploy Private Safety Gateway
+
+The main backend must not host Llama Guard or AgentDoG models directly.
+Deploy them as private services that implement the HTTP contracts in
+`docs/safety-provider-gateway.md`.
+
+1. Deploy the Llama Guard-style service.
+2. Deploy the AgentDoG/referee-style service.
+3. Restrict ingress so only the backend or private network can call them.
+4. Configure service authentication, for example a private bearer token or
+   service-to-service identity.
 5. Prepare and validate the safety gateway manifest:
 
 ```json
@@ -145,33 +172,6 @@ uv run python scripts/safety_gateway_manifest.py <safety-gateway-manifest.json>
 ```
 
 6. Configure backend env:
-
-```env
-PHARMAIDE_KNOWLEDGE_STORAGE_BACKEND=gcs
-PHARMAIDE_KNOWLEDGE_GCS_BUCKET=<bucket>
-PHARMAIDE_KNOWLEDGE_GCS_PREFIX=kb_uploads
-PHARMAIDE_KNOWLEDGE_MAX_UPLOAD_BYTES=25MB
-```
-
-6. After backend deploy, run:
-
-```bash
-cd backend
-uv run python scripts/knowledge_storage_smoke.py
-```
-
-## 5. Deploy Private Safety Gateway
-
-The main backend must not host Llama Guard or AgentDoG models directly.
-Deploy them as private services that implement the HTTP contracts in
-`docs/safety-provider-gateway.md`.
-
-1. Deploy the Llama Guard-style service.
-2. Deploy the AgentDoG/referee-style service.
-3. Restrict ingress so only the backend or private network can call them.
-4. Configure service authentication, for example a private bearer token or
-   service-to-service identity.
-5. Configure backend env:
 
 ```env
 PHARMAIDE_SAFETY_PROVIDER=remote_http
@@ -333,9 +333,53 @@ Do not commit secrets to `.env`, source code, Docker images, or docs.
 
 1. Build backend image from `backend/Dockerfile`.
 2. Build frontend image from `frontend/Dockerfile`.
-3. Deploy backend Cloud Run with production-shaped env and secrets.
-4. Deploy frontend with browser-safe `VITE_*` build args.
-5. Set backend CORS to the deployed frontend origin:
+3. Prepare and validate the deployment manifest:
+
+```json
+{
+  "environment": "staging",
+  "project_id": "<project>",
+  "region": "<region>",
+  "backend": {
+    "service_name": "pharmaide-api",
+    "image": "<backend-image>@sha256:<digest>",
+    "url": "https://<backend-url>",
+    "runtime_service_account_email": "backend-runtime@<project>.iam.gserviceaccount.com",
+    "min_instances": 0,
+    "max_instances": 10,
+    "secret_env": {
+      "PHARMAIDE_DATABASE_URL": "projects/<project>/secrets/pharmaide-database-url",
+      "PHARMAIDE_OPENAI_API_KEY": "projects/<project>/secrets/pharmaide-openai-api-key",
+      "PHARMAIDE_WHATSAPP_CLOUD_API_ACCESS_TOKEN": "projects/<project>/secrets/pharmaide-whatsapp-access-token",
+      "PHARMAIDE_WHATSAPP_WEBHOOK_VERIFY_TOKEN": "projects/<project>/secrets/pharmaide-whatsapp-verify-token",
+      "PHARMAIDE_WHATSAPP_WEBHOOK_APP_SECRET": "projects/<project>/secrets/pharmaide-whatsapp-app-secret"
+    }
+  },
+  "frontend": {
+    "service_name": "pharmaide-web",
+    "image": "<frontend-image>@sha256:<digest>",
+    "url": "https://<frontend-url>",
+    "build_env": {
+      "VITE_API_BASE_URL": "https://<backend-url>",
+      "VITE_AUTH_MODE": "gcip",
+      "VITE_GCIP_PROJECT_ID": "<project>"
+    }
+  },
+  "artifact_policy": {
+    "image_scanning_required": true,
+    "image_signing_required": true
+  }
+}
+```
+
+```bash
+cd backend
+uv run python scripts/deployment_manifest.py <deployment-manifest.json>
+```
+
+4. Deploy backend Cloud Run with production-shaped env and secrets.
+5. Deploy frontend with browser-safe `VITE_*` build args.
+6. Set backend CORS to the deployed frontend origin:
 
 ```env
 PHARMAIDE_CORS_ALLOWED_ORIGINS=https://<frontend-url>
@@ -343,7 +387,7 @@ PHARMAIDE_LOG_MODE=json
 PHARMAIDE_DEBUG_ROUTES_ENABLED=false
 ```
 
-6. Confirm direct frontend routes load through the SPA fallback.
+7. Confirm direct frontend routes load through the SPA fallback.
 
 ## 10. Run Release Gates
 
@@ -355,6 +399,7 @@ uv run ruff check app tests
 uv run pytest
 uv run python scripts/evaluation_release_gate.py
 uv run python scripts/production_preflight.py
+uv run python scripts/deployment_manifest.py <deployment-manifest.json>
 uv run python scripts/retention_approval_manifest.py <retention-manifest.json>
 uv run python scripts/cloud_tasks_scheduler_manifest.py <cloud-tasks-manifest.json>
 uv run python scripts/knowledge_storage_manifest.py <knowledge-storage-manifest.json>

@@ -19,10 +19,11 @@ Keep each item as a small, reviewable slice.
 - GCP deployment: backend Cloud Run container artifact, production environment
   variables, secrets, HTTPS-only browser-to-API path, and deployment runbooks.
   Backend and frontend Dockerfiles exist. A pre-deploy production preflight
-  command validates deployment posture, and a post-deploy smoke command checks
-  liveness/readiness/frontend reachability. Remaining work is real Cloud Run
-  deployment execution, image scanning/signing policy, and HTTPS domain rollout.
-  See `docs/staging-deployment-runbook.md` and
+  command validates deployment posture, a deployment manifest validates Cloud
+  Run rollout metadata, and a post-deploy smoke command checks liveness,
+  readiness, and frontend reachability. Remaining work is real Cloud Run
+  deployment execution, image scanning/signing enforcement, and HTTPS domain
+  rollout. See `docs/staging-deployment-runbook.md` and
   `docs/deployment-readiness-checklist.md`.
 - Cloud Tasks/Pub/Sub operations: Cloud Tasks enqueue support and internal
   worker routes are implemented, and Cloud Tasks/Scheduler rollout manifests can
