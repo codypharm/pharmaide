@@ -94,6 +94,13 @@ to `model` because that would weaken the configured production safety boundary.
 
 ## Smoke Check
 
+Validate the deployment manifest before wiring production env:
+
+```bash
+cd backend
+uv run python scripts/safety_gateway_manifest.py <safety-gateway-manifest.json>
+```
+
 Run this after configuring `PHARMAIDE_SAFETY_PROVIDER=remote_http` and the
 private gateway URLs:
 

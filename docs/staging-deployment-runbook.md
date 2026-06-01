@@ -113,7 +113,38 @@ cd backend
 uv run python scripts/knowledge_storage_manifest.py <knowledge-storage-manifest.json>
 ```
 
-5. Configure backend env:
+5. Prepare and validate the safety gateway manifest:
+
+```json
+{
+  "environment": "staging",
+  "provider": "remote_http",
+  "guard": {
+    "service": "llama_guard",
+    "url": "https://<private-guard-url>/v1/guard/check"
+  },
+  "referee": {
+    "service": "agentdog",
+    "url": "https://<private-referee-url>/v1/referee/review"
+  },
+  "auth": {
+    "mode": "bearer_token",
+    "secret_name": "projects/<project>/secrets/safety-provider-api-key"
+  },
+  "network": {
+    "ingress": "internal_only",
+    "backend_access": "service_identity"
+  },
+  "timeout_seconds": 10
+}
+```
+
+```bash
+cd backend
+uv run python scripts/safety_gateway_manifest.py <safety-gateway-manifest.json>
+```
+
+6. Configure backend env:
 
 ```env
 PHARMAIDE_KNOWLEDGE_STORAGE_BACKEND=gcs
@@ -150,7 +181,7 @@ PHARMAIDE_SAFETY_PROVIDER_API_KEY=<secret-if-used>
 PHARMAIDE_SAFETY_PROVIDER_TIMEOUT_SECONDS=10
 ```
 
-6. Run:
+7. Run:
 
 ```bash
 cd backend
@@ -328,6 +359,7 @@ uv run python scripts/retention_approval_manifest.py <retention-manifest.json>
 uv run python scripts/cloud_tasks_scheduler_manifest.py <cloud-tasks-manifest.json>
 uv run python scripts/knowledge_storage_manifest.py <knowledge-storage-manifest.json>
 uv run python scripts/knowledge_storage_smoke.py
+uv run python scripts/safety_gateway_manifest.py <safety-gateway-manifest.json>
 uv run python scripts/safety_gateway_smoke.py
 ```
 

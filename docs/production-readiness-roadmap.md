@@ -43,9 +43,10 @@ Keep each item as a small, reviewable slice.
   before apply mode. Remaining work is production Cloud Scheduler configuration,
   production bucket lifecycle policy verification, and applying final approved
   legal/clinical retention windows.
-- Private safety gateway: backend-only provider adapters and a safety gateway
-  smoke command are implemented. Remaining work is deploying Llama Guard /
-  AgentDoG services and running the smoke check against staging/production.
+- Private safety gateway: backend-only provider adapters, safety gateway
+  manifest validation, and a smoke command are implemented. Remaining work is
+  deploying Llama Guard / AgentDoG services and running the smoke check against
+  staging/production.
 - Evaluation suite: deterministic clinical, safety, retrieval, DDI, and
   patient-message regression cases are wrapped by
   `scripts/evaluation_release_gate.py`. Remaining work is running the gate on

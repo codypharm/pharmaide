@@ -119,6 +119,8 @@ Safety settings:
   - `PHARMAIDE_LLAMA_GUARD_URL`
   - `PHARMAIDE_AGENTDOG_URL`
   - optional `PHARMAIDE_SAFETY_PROVIDER_API_KEY`
+- Validate private safety gateway manifests before deployment:
+  `uv run python scripts/safety_gateway_manifest.py <safety-gateway-manifest.json>`.
 
 ## Frontend Environment
 
@@ -224,6 +226,7 @@ uv run python scripts/production_preflight.py
 uv run python scripts/cloud_tasks_scheduler_manifest.py <cloud-tasks-manifest.json>
 uv run python scripts/knowledge_storage_manifest.py <knowledge-storage-manifest.json>
 uv run python scripts/knowledge_storage_smoke.py
+uv run python scripts/safety_gateway_manifest.py <safety-gateway-manifest.json>
 uv run python scripts/safety_gateway_smoke.py
 ```
 
