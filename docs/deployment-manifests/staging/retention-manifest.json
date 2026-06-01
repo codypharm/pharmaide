@@ -1,0 +1,11 @@
+{
+  "closed_treatment_retention_days": 365,
+  "operational_audit_retention_days": 365,
+  "gcs_lifecycle_retention_days": 365,
+  "clinical_audit_logs_retained": true,
+  "approved_by": {
+    "clinical": "Clinical Lead",
+    "legal": "Legal Approver",
+    "operations": "Operations Lead"
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "environment": "staging",
+  "project_id": "pharmaide-staging",
+  "region": "europe-west2",
+  "backend": {
+    "service_name": "pharmaide-api",
+    "image": "europe-west2-docker.pkg.dev/pharmaide-staging/pharmaide/backend@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "url": "https://api.staging.pharmaide.example",
+    "runtime_service_account_email": "backend-runtime@pharmaide-staging.iam.gserviceaccount.com",
+    "min_instances": 0,
+    "max_instances": 10,
+    "secret_env": {
+      "PHARMAIDE_DATABASE_URL": "projects/pharmaide-staging/secrets/pharmaide-database-url",
+      "PHARMAIDE_OPENAI_API_KEY": "projects/pharmaide-staging/secrets/pharmaide-openai-api-key",
+      "PHARMAIDE_WHATSAPP_CLOUD_API_ACCESS_TOKEN": "projects/pharmaide-staging/secrets/pharmaide-whatsapp-access-token",
+      "PHARMAIDE_WHATSAPP_WEBHOOK_VERIFY_TOKEN": "projects/pharmaide-staging/secrets/pharmaide-whatsapp-verify-token",
+      "PHARMAIDE_WHATSAPP_WEBHOOK_APP_SECRET": "projects/pharmaide-staging/secrets/pharmaide-whatsapp-app-secret"
+    }
+  },
+  "frontend": {
+    "service_name": "pharmaide-web",
+    "image": "europe-west2-docker.pkg.dev/pharmaide-staging/pharmaide/frontend@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "url": "https://app.staging.pharmaide.example",
+    "build_env": {
+      "VITE_API_BASE_URL": "https://api.staging.pharmaide.example",
+      "VITE_AUTH_MODE": "gcip",
+      "VITE_GCIP_PROJECT_ID": "pharmaide-staging"
+    }
+  },
+  "artifact_policy": {
+    "image_scanning_required": true,
+    "image_signing_required": true
+  }
+}

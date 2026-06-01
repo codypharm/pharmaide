@@ -1,0 +1,14 @@
+{
+  "storage": {
+    "backend": "gcs",
+    "bucket_name": "pharmaide-staging-kb",
+    "prefix": "kb_uploads",
+    "max_upload_bytes": 26214400
+  },
+  "gcs": {
+    "runtime_service_account_email": "backend-runtime@pharmaide-staging.iam.gserviceaccount.com",
+    "lifecycle_retention_days": 365,
+    "uniform_bucket_level_access": true,
+    "public_access_prevention": "enforced"
+  }
+}

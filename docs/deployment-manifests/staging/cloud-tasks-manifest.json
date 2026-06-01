@@ -1,0 +1,37 @@
+{
+  "cloud_tasks": {
+    "queue_path": "projects/pharmaide-staging/locations/europe-west2/queues/internal",
+    "base_url": "https://api.staging.pharmaide.example",
+    "service_account_email": "tasks-invoker@pharmaide-staging.iam.gserviceaccount.com",
+    "oidc_audience": "https://api.staging.pharmaide.example"
+  },
+  "scheduler": {
+    "pubsub_topic": "projects/pharmaide-staging/topics/internal-scheduler",
+    "push_endpoint": "https://api.staging.pharmaide.example/internal/scheduler/pubsub",
+    "push_service_account_email": "tasks-invoker@pharmaide-staging.iam.gserviceaccount.com",
+    "push_oidc_audience": "https://api.staging.pharmaide.example",
+    "dead_letter_topic": "projects/pharmaide-staging/topics/internal-dead-letter",
+    "ticks": [
+      {
+        "tick_type": "due_monitoring",
+        "schedule": "*/5 * * * *"
+      },
+      {
+        "tick_type": "message_delivery",
+        "schedule": "*/2 * * * *"
+      },
+      {
+        "tick_type": "closed_treatment_retention",
+        "schedule": "0 2 * * *"
+      },
+      {
+        "tick_type": "knowledge_upload_file_cleanup",
+        "schedule": "0 3 * * *"
+      },
+      {
+        "tick_type": "operational_audit_retention",
+        "schedule": "0 4 * * *"
+      }
+    ]
+  }
+}

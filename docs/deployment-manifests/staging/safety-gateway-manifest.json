@@ -1,0 +1,21 @@
+{
+  "environment": "staging",
+  "provider": "remote_http",
+  "guard": {
+    "service": "llama_guard",
+    "url": "https://llama-guard.internal.staging.pharmaide.example/v1/guard/check"
+  },
+  "referee": {
+    "service": "agentdog",
+    "url": "https://agentdog.internal.staging.pharmaide.example/v1/referee/review"
+  },
+  "auth": {
+    "mode": "bearer_token",
+    "secret_name": "projects/pharmaide-staging/secrets/safety-provider-api-key"
+  },
+  "network": {
+    "ingress": "internal_only",
+    "backend_access": "service_identity"
+  },
+  "timeout_seconds": 10
+}
