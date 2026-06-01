@@ -8,6 +8,8 @@ leaked (that lands when the search-existing flow ships).
 import pytest
 from httpx import AsyncClient
 
+from app.services import task_runner
+
 VALID_BODY = {
     "patient": {
         "name": "Eleanor Vance",
@@ -30,7 +32,14 @@ VALID_BODY = {
 
 
 @pytest.mark.usefixtures("postgres_container")
-async def test_duplicate_mrn_returns_409(app_client: AsyncClient) -> None:
+async def test_duplicate_mrn_returns_409(
+    app_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The route schedules analysis after a successful create. This test only
+    # covers MRN collision handling, so running graph work would add unrelated
+    # async DB activity against the same transaction-scoped test connection.
+    monkeypatch.setattr(task_runner, "schedule", lambda *args, **kwargs: None)
+
     first = await app_client.post("/treatments", json=VALID_BODY)
     assert first.status_code == 201, first.text
 

@@ -23,8 +23,10 @@ async def test_internal_worker_audits_cloud_tasks_retry_metadata(
 ) -> None:
     async def fake_run_message_delivery_once(
         session: AsyncSession,
+        **kwargs: object,
     ) -> message_delivery.MessageDeliveryRunResult:
         assert session is not None
+        assert "provider" in kwargs
         return message_delivery.MessageDeliveryRunResult(
             processed_count=0,
             sent_count=0,

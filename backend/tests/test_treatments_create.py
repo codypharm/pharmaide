@@ -254,8 +254,15 @@ async def test_post_treatments_can_attach_to_existing_patient(
     assert second_payload["patient_id"] == patient_id
     assert second_payload["treatment_id"] != first.json()["treatment_id"]
 
-    patients = list((await db_session.execute(select(Patient))).scalars())
+    patients = list(
+        (
+            await db_session.execute(
+                select(Patient).where(Patient.mrn == "ATTACH-MRN-001")
+            )
+        ).scalars()
+    )
     assert len(patients) == 1
+    assert str(patients[0].id) == patient_id
 
     treatment = await db_session.get(Treatment, UUID(second_payload["treatment_id"]))
     assert treatment is not None

@@ -625,6 +625,7 @@ async def test_post_patient_reply_draft_generates_ready_conversation_turn(
     seen: dict[str, str] = {}
     _patch_generated_reply(monkeypatch)
     _patch_safety_decision(monkeypatch, treatment_id, status="send", seen=seen)
+    _patch_interaction_evidence_retriever(monkeypatch)
 
     response = await app_client.post(
         f"/treatments/{treatment_id}/patient-reply-drafts",
@@ -1225,6 +1226,18 @@ def _patch_generated_reply(
     monkeypatch.setattr(
         "app.api.treatments.draft_patient_reply_for_treatment",
         fake_draft_patient_reply_for_treatment,
+    )
+
+
+def _patch_interaction_evidence_retriever(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep reply-draft API tests deterministic even when local OpenAI env is set."""
+
+    async def fake_retriever(*args: object, **kwargs: object) -> list[object]:
+        return []
+
+    monkeypatch.setattr(
+        "app.api.treatments.build_patient_interaction_evidence_retriever",
+        lambda *args, **kwargs: fake_retriever,
     )
 
 

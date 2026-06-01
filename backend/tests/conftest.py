@@ -75,7 +75,11 @@ async def db_session(db_engine: object) -> AsyncIterator[AsyncSession]:
     assert isinstance(db_engine, AsyncEngine)
     async with db_engine.connect() as connection:
         transaction = await connection.begin()
-        session = AsyncSession(bind=connection, expire_on_commit=False)
+        session = AsyncSession(
+            bind=connection,
+            expire_on_commit=False,
+            join_transaction_mode="create_savepoint",
+        )
         try:
             yield session
         finally:
@@ -109,7 +113,11 @@ def test_app(db_session: AsyncSession) -> FastAPI:
         connection; it is still a separate AsyncSession from the request one.
         """
         assert db_session.bind is not None
-        return async_sessionmaker(db_session.bind, expire_on_commit=False)
+        return async_sessionmaker(
+            db_session.bind,
+            expire_on_commit=False,
+            join_transaction_mode="create_savepoint",
+        )
 
     app.dependency_overrides[get_session] = _override
     app.dependency_overrides[get_session_factory] = _factory_override
