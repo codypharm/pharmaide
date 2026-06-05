@@ -78,22 +78,56 @@ mind:
 
 ## Architecture
 
-```text
-React Dashboard
-    |
-    | HTTPS API calls with GCIP/Firebase identity
-    v
-FastAPI Backend
-    |
-    |-- Treatment and patient workflow services
-    |-- LangGraph analysis graph
-    |-- PydanticAI typed agents and validators
-    |-- Safety sandwich: input guard -> clinical referee -> output guard
-    |-- Knowledge retrieval over clinic uploads and DailyMed cache
-    |-- WhatsApp webhook and message delivery services
-    |-- Cloud Tasks/internal worker seams
-    v
-Postgres/Cockroach-compatible database with pgvector-compatible embeddings
+```mermaid
+flowchart LR
+  Pharmacist[Pharmacist Web App<br/>React + Vite] --> API[FastAPI Backend]
+
+  Patient[Patient on WhatsApp] --> Meta[Meta WhatsApp Cloud API]
+  Meta --> Webhook[Webhook<br/>/webhooks/whatsapp]
+  Webhook --> API
+
+  API --> Auth[Auth Layer<br/>Dev Header / GCIP]
+  API --> DB[(Postgres / CockroachDB<br/>relational data + vectors)]
+  API --> Files[Knowledge File Storage<br/>local or GCS]
+  API --> Tasks[Task Runner<br/>in-process or Cloud Tasks]
+
+  Tasks --> Workers[Internal Worker Routes]
+  Workers --> DB
+
+  API --> OpenAI[OpenAI + PydanticAI<br/>typed agents and embeddings]
+  API --> RxNorm[RxNorm / RxNav<br/>drug name grounding]
+  API --> DailyMed[DailyMed<br/>public label evidence cache]
+  API --> Safety[Safety Provider<br/>model fallback now<br/>remote Llama Guard + AgentDoG later]
+
+  DB --> Audit[Audit Trail<br/>metadata-only clinical and operational events]
+```
+
+PharmaAide is intentionally split into thin HTTP routes, workflow services,
+provider adapters, and typed agent modules. Routes translate requests,
+services own workflow state, providers isolate external systems, and all
+patient-facing AI decisions pass through validated Pydantic schemas.
+
+```mermaid
+flowchart TB
+  Routes[app/api<br/>HTTP boundary]
+  Auth[app/auth.py<br/>actor and workspace scope]
+  Services[app/services<br/>business workflows]
+  Agents[app/agents<br/>LLM, graph, safety nodes]
+  Providers[Provider adapters<br/>OpenAI, RxNorm, DailyMed,<br/>WhatsApp, Safety Gateway]
+  Models[app/db/models.py<br/>persistence schema]
+  Schemas[app/api/schemas.py<br/>request and response contracts]
+  Tests[tests + evaluations<br/>release gates]
+
+  Routes --> Auth
+  Routes --> Schemas
+  Routes --> Services
+  Services --> Models
+  Services --> Agents
+  Services --> Providers
+  Agents --> Providers
+  Tests --> Routes
+  Tests --> Services
+  Tests --> Agents
 ```
 
 Frontend:
@@ -116,6 +150,157 @@ Backend:
 - Meta WhatsApp Cloud API
 - Google Cloud Tasks adapter
 - Structlog request-scoped logging
+
+## Main Flow: Treatment Analysis
+
+Treatment analysis starts when a pharmacist creates or reruns a treatment
+analysis. The graph produces pharmacist-facing clinical reasoning, relative
+schedule previews, medication groundings, safety notes, and traceable audit
+events. Model-backed review is kept separate from licensed DDI truth so the app
+does not present speculative model output as provider-confirmed interactions.
+
+```mermaid
+sequenceDiagram
+  participant UI as Frontend
+  participant API as FastAPI /treatments
+  participant DB as Database
+  participant Task as Task Runner
+  participant Graph as Analysis Graph
+  participant Rx as RxNorm
+  participant DM as DailyMed
+  participant KB as Knowledge Retrieval
+  participant LLM as PydanticAI/OpenAI
+
+  UI->>API: POST /treatments or rerun analysis
+  API->>DB: create or supersede treatment analysis row
+  API->>DB: audit treatment creation or analysis request
+  API->>Task: schedule analysis worker
+  API-->>UI: analysis_id + pending status
+
+  Task->>Graph: run graph for treatment
+  Graph->>DB: load patient, treatment, medications, objective
+  Graph->>Rx: normalize medication names and RxCUIs
+  Graph->>DM: fetch/cache public drug label context
+  Graph->>KB: retrieve clinic knowledge and DailyMed snippets
+  Graph->>LLM: create typed clinical reasoning
+  Graph->>Graph: generate schedule from validated medication instructions
+  Graph->>DB: save completed/failed analysis result
+  Graph->>DB: audit outcome
+  UI->>API: GET /treatments/{id}/analysis
+  API-->>UI: summary, red flags, groundings, schedule preview
+```
+
+```mermaid
+flowchart LR
+  Pending[Pending analysis row]
+  Load[Load treatment state]
+  Ground[Ground medications<br/>RxNorm]
+  Interactions[Interaction boundary<br/>licensed provider later]
+  Daily[DailyMed context/cache]
+  Retrieve[Clinic KB retrieval<br/>plus reranking]
+  Schedule[Schedule grammar]
+  Review[Clinical safety review]
+  Summary[Typed summary output]
+  Save[Persist result + audit]
+
+  Pending --> Load --> Ground --> Interactions --> Daily --> Retrieve --> Schedule --> Review --> Summary --> Save
+```
+
+## Main Flow: WhatsApp Care Loop
+
+The WhatsApp flow keeps the pharmacist in control. Incoming patient messages are
+verified, deduplicated, routed to the active treatment for that workspace, and
+buffered before the system generates one conversational turn. Replies that are
+unsafe, uncertain, or outside the assistant boundary are held for pharmacist
+triage instead of being sent automatically.
+
+```mermaid
+sequenceDiagram
+  participant Patient as Patient WhatsApp
+  participant Meta as WhatsApp Cloud API
+  participant Webhook as /webhooks/whatsapp
+  participant Buffer as Message Buffer
+  participant Worker as Patient Message Worker
+  participant Reply as Reply Agent
+  participant Safety as Safety Sandwich
+  participant Triage as Pharmacist Triage
+  participant Delivery as Delivery Worker
+  participant DB as Database
+  participant UI as Surveillance/Triage UI
+
+  Patient->>Meta: send message
+  Meta->>Webhook: signed webhook event
+  Webhook->>Webhook: verify signature
+  Webhook->>DB: find active treatment by phone + workspace
+  Webhook->>DB: dedupe provider message id
+  Webhook->>Buffer: store inbound message
+  Webhook->>Worker: schedule buffered turn
+
+  Worker->>Buffer: aggregate recent unprocessed messages
+  Worker->>Reply: classify intent and draft response
+  Reply->>DB: load treatment context, schedule, updates, evidence
+  Reply->>Safety: input guard + clinical referee + output guard
+
+  alt safe to send
+    Safety-->>Worker: send
+    Worker->>DB: save queued outbound message
+    Delivery->>Meta: send WhatsApp message
+    Delivery->>DB: mark sent or failed
+  else needs pharmacist
+    Safety-->>Worker: hold_for_pharmacist
+    Worker->>DB: save held draft
+    Worker->>Triage: create triage item
+    UI->>Triage: pharmacist reviews
+    Triage->>DB: approve or reject held draft
+    Triage->>DB: queue approved draft for delivery
+    Delivery->>Meta: send queued message
+  end
+```
+
+```mermaid
+flowchart TB
+  Webhooks[webhooks.py<br/>Meta verification and event parsing]
+  Routing[whatsapp_webhook.py<br/>phone/workspace active-treatment routing]
+  Buffer[patient_message_buffer.py<br/>dedupe, store, debounce]
+  Worker[patient_message_worker.py<br/>process buffered turn]
+  Classifier[patient_reply_classifier.py<br/>intent classification]
+  Reply[patient_reply_service.py<br/>draft patient response]
+  Safety[patient_safety.py<br/>safety sandwich]
+  Triage[triage_items.py<br/>human review queue]
+  Delivery[message_delivery.py<br/>queued, sent, failed]
+  Audit[safety_audit + audit logs]
+
+  Webhooks --> Routing --> Buffer --> Worker
+  Worker --> Classifier --> Reply --> Safety
+  Safety -->|safe| Delivery
+  Safety -->|hold| Triage
+  Delivery --> Audit
+  Triage --> Audit
+```
+
+## Core Data Model
+
+The diagram below shows persisted tables. Course completion reports are computed
+from treatment, adherence, patient update, and triage rows rather than stored in
+a separate report table. Monitoring cycle state is represented on the treatment
+row through status, automation mode, and chat response mode.
+
+```mermaid
+flowchart LR
+  Patient[Patient] --> Treatment[Treatment]
+  Treatment --> Meds[Medications]
+  Treatment --> Analyses[Treatment Analyses]
+  Treatment --> Messages[Conversation Messages]
+  Treatment --> Triage[Triage Items]
+  Treatment --> Adherence[Adherence Events]
+  Treatment --> Checkins[Check-ins]
+  Treatment --> State[Treatment status<br/>automation mode<br/>chat response mode]
+
+  Knowledge[Knowledge Documents] --> Chunks[Knowledge Chunks + Embeddings]
+  Audit[Audit Logs] --> Patient
+  Audit --> Treatment
+  Audit --> Messages
+```
 
 ## Safety Model
 
