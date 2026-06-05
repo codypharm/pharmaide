@@ -6,9 +6,37 @@ GEMINI.md
 AGENTS.md
 skills-lock.json
 .agents
-node_modules
-dist
-.vite
-.env
 SPRINT_4_CARRYOVER.md
+
+# Secrets and local environment files. Keep examples tracked.
+.env
+.env.*
+!.env.example
+!backend/.env.example
+!frontend/.env.example
+
+# Dependencies and virtual environments.
+node_modules
+.venv
+backend/.venv
+
+# Build, cache, and test artifacts.
+dist
+frontend/dist
+.vite
+coverage
+.pytest_cache
+.ruff_cache
+__pycache__
+*.py[cod]
+
+# Local runtime state.
+*.db
+*.sqlite
+*.sqlite3
+pharmaide.db
+backend/pharmaide.db
 backend/data/kb_uploads/*
+
+# OS/editor noise.
+.DS_Store

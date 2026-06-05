@@ -8,6 +8,15 @@ patient replies, pharmacist triage, knowledge-grounded evidence, and audit trail
 The product is designed around a simple rule: the AI can assist, but the
 pharmacist stays in control.
 
+## Project Status
+
+PharmaAide is an open-source build-in-public project for exploring
+pharmacist-controlled AI medication adherence workflows. It is not a medical
+device, not a replacement for professional judgement, and not intended for
+unsupervised clinical use. Real clinical deployment requires appropriate
+validation, security review, privacy controls, local regulatory review, and
+approved medication-interaction data sources.
+
 ## What It Does
 
 PharmaAide supports a pharmacist workflow from treatment intake through active
@@ -342,6 +351,10 @@ uploads remain workspace-scoped.
 
 ## Local Development
 
+### Quickstart
+
+Clone the repository, then run the backend and frontend in two terminals.
+
 ### Prerequisites
 
 - Python 3.13
@@ -349,7 +362,7 @@ uploads remain workspace-scoped.
 - Node.js
 - Docker
 
-### Backend
+### 1. Start the Backend
 
 ```bash
 cd backend
@@ -359,6 +372,20 @@ uv sync
 uv run alembic upgrade head
 uv run uvicorn app.main:app --reload --port 8000
 ```
+
+For a no-cloud local demo, keep these backend defaults in `backend/.env`:
+
+```env
+PHARMAIDE_AUTH_MODE=disabled
+PHARMAIDE_CORS_ALLOWED_ORIGINS=http://localhost:5173
+PHARMAIDE_WHATSAPP_DELIVERY_PROVIDER=placeholder
+PHARMAIDE_TASK_BACKEND=in_process
+PHARMAIDE_KNOWLEDGE_STORAGE_BACKEND=local
+PHARMAIDE_SAFETY_PROVIDER=model
+```
+
+`PHARMAIDE_OPENAI_API_KEY` is optional for booting the app, but required for
+real AI analysis, extraction, embeddings, and model-backed safety checks.
 
 The backend runs at:
 
@@ -373,7 +400,7 @@ curl http://127.0.0.1:8000/health
 curl http://127.0.0.1:8000/health/ready
 ```
 
-### Frontend
+### 2. Start the Frontend
 
 ```bash
 cd frontend
@@ -382,11 +409,40 @@ npm install
 npm run dev
 ```
 
+For local development, keep these frontend defaults in `frontend/.env`:
+
+```env
+VITE_API_BASE_URL=http://localhost:8000
+VITE_AUTH_MODE=disabled
+```
+
 The frontend usually runs at:
 
 ```text
 http://localhost:5173
 ```
+
+Open that URL in your browser. With auth disabled, the backend uses the local
+development actor scaffold instead of GCIP/Firebase login.
+
+### 3. Optional WhatsApp Webhook Demo
+
+Local WhatsApp webhook testing needs a public tunnel such as ngrok:
+
+```bash
+ngrok http 8000
+```
+
+Set Meta's webhook callback URL to:
+
+```text
+https://<ngrok-domain>/webhooks/whatsapp
+```
+
+Then set the matching local webhook env values in `backend/.env`. Real WhatsApp
+Cloud API sends require Meta credentials; keep
+`PHARMAIDE_WHATSAPP_DELIVERY_PROVIDER=placeholder` if you only want local UI and
+workflow testing without sending real messages.
 
 ## Important Environment Variables
 
@@ -462,7 +518,10 @@ PHARMAIDE_RUN_LIVE_LLM=1 PHARMAIDE_OPENAI_API_KEY=... uv run pytest tests/test_a
 ## Key Docs
 
 - `docs/safety-provider-gateway.md`
-- `ui-guide/clinical_command/DESIGN.md`
+- `docs/staging-deployment-runbook.md`
+- `docs/deployment-readiness-checklist.md`
+- `CONTRIBUTING.md`
+- `SECURITY.md`
 
 ## Compliance Posture
 
@@ -477,4 +536,4 @@ PharmaAide is designed for HIPAA-adjacent, safety-first clinical operations.
 
 ## License
 
-No license has been declared yet.
+PharmaAide is licensed under the Apache License 2.0. See `LICENSE`.
